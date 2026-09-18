@@ -13,7 +13,8 @@ pub struct EnvFrame {
 pub enum Expr {
     Val(Value), Var(String), Unary(Token, Box<Expr>),
     Binary(Box<Expr>, Token, Box<Expr>), Try(Box<Expr>), Call(String, Vec<Expr>), CallValue(Box<Expr>, Vec<Expr>),
-    Array(Vec<Expr>), Field(Box<Expr>, String), Closure(Vec<String>, Vec<Stmt>),
+    Array(Vec<Expr>), Map(Vec<(Expr, Expr)>), Set(Vec<Expr>), Index(Box<Expr>, Box<Expr>),
+    Field(Box<Expr>, String), Closure(Vec<String>, Vec<Stmt>),
     StructInit(String, Vec<(String, Expr)>),
     EnumInit(String, String, Option<Box<Expr>>),
 }
