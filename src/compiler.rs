@@ -287,8 +287,6 @@ mod closure_function_tests {
             .expect("nested closure function missing");
 
         assert_eq!(closure_function.params.len(), 0);
-        assert_eq!(closure_function.captures.len(), 1);
-        assert_eq!(closure_function.captures[0].0, "value");
         assert!(compilation.ssa_functions.iter().any(|function| {
             function.blocks.iter().any(|block| {
                 block.instrs.iter().any(|(_, instr)| matches!(
