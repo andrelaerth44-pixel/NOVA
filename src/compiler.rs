@@ -129,3 +129,44 @@ mod tests {
         ));
     }
 }
+
+
+
+    #[test]
+    fn lower_option_result_and_try_as_ssa_instructions() {
+        let source = r#"
+            fn maybe(flag: bool) -> Option<i64> {
+                if flag {
+                    return Some(42)
+                }
+                return None
+            }
+
+            fn compute(flag: bool) -> Option<i64> {
+                value = maybe(flag)?
+                return Some(value + 8)
+            }
+
+            fn parse(flag: bool) -> Result<string, string> {
+                if flag {
+                    return Ok("NOVA")
+                }
+                return Err("failed")
+            }
+
+            print compute(true)
+            print parse(false)?
+        "#;
+
+        let compilation = compile_source(source).expect("Option/Result source should compile");
+        let all = compilation
+            .ssa_functions
+            .iter()
+            .flat_map(|f| f.blocks.iter())
+            .flat_map(|b| b.instrs.iter());
+
+        assert!(all.clone().any(|(_, instr)| matches!(instr, crate::ir::SsaInstr::EnumInit { name, variant, .. } if name == "Option" && variant == "Some")));
+        assert!(all.clone().any(|(_, instr)| matches!(instr, crate::ir::SsaInstr::EnumInit { name, variant, .. } if name == "Result" && variant == "Err")));
+        assert!(all.clone().any(|(_, instr)| matches!(instr, crate::ir::SsaInstr::EnumTest { variant, .. } if variant == "Some")));
+        assert!(all.clone().any(|(_, instr)| matches!(instr, crate::ir::SsaInstr::Try { .. })));
+    }
