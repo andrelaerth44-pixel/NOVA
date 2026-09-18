@@ -121,6 +121,7 @@ jobs:
         run: |
           cargo run --release -- check examples/stdlib.nova
           cargo run --release -- run examples/stdlib.nova > /tmp/stdlib.out
+          cat /tmp/stdlib.out
           grep -Fxq "main.nova" /tmp/stdlib.out
           grep -Fxq "nova" /tmp/stdlib.out
           grep -Fxq "main" /tmp/stdlib.out
