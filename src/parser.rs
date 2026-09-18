@@ -1,4 +1,4 @@
-use crate::{Expr, Stmt, Token, Value};
+use crate::{Expr, Stmt, Token, Value, Pattern};
 
 pub struct Parser { t: Vec<Token>, p: usize }
 impl Parser {
@@ -63,13 +63,27 @@ impl Parser {
             Token::While=>{self.take();let c=self.expr()?;Ok(Stmt::While(c,self.block()?))},
             Token::For=>{self.take();let n=match self.take(){Token::Ident(x)=>x,_=>return Err("expected loop variable".into())};if !self.eat(&Token::In){return Err("expected in".into())}let it=self.expr()?;Ok(Stmt::For(n,it,self.block()?))},
             Token::Import=>{self.take();match self.take(){Token::Str(x)=>Ok(Stmt::Import(x)),_=>Err("import expects a string path".into())}},
-            Token::Match=>{self.take();let value=self.expr()?;if !self.eat(&Token::LBrace){return Err("expected { after match".into())}let mut arms=vec![];let mut otherwise=vec![];while *self.peek()!=Token::RBrace&&*self.peek()!=Token::Eof{if let Token::Ident(n)=self.peek(){if n=="else"{self.take();otherwise=self.block()?;self.eat(&Token::Comma);continue}}let pat=self.expr()?;if !self.eat(&Token::LBrace){return Err("expected { in match arm".into())}let mut body=vec![];while *self.peek()!=Token::RBrace&&*self.peek()!=Token::Eof{body.push(self.stmt()?);self.eat(&Token::Semi);}if !self.eat(&Token::RBrace){return Err("expected } in match arm".into())}arms.push((pat,body));self.eat(&Token::Comma);}if !self.eat(&Token::RBrace){return Err("expected } after match".into())}Ok(Stmt::Match(value,arms,otherwise))},
+            Token::Match=>{self.take();let value=self.expr()?;if !self.eat(&Token::LBrace){return Err("expected { after match".into())}let mut arms=vec![];let mut otherwise=vec![];while *self.peek()!=Token::RBrace&&*self.peek()!=Token::Eof{if let Token::Ident(n)=self.peek(){if n=="else"{self.take();otherwise=self.block()?;self.eat(&Token::Comma);continue}}let pat_expr=self.expr()?;let pat=Self::pattern_from_expr(pat_expr)?;if !self.eat(&Token::LBrace){return Err("expected { in match arm".into())}let mut body=vec![];while *self.peek()!=Token::RBrace&&*self.peek()!=Token::Eof{body.push(self.stmt()?);self.eat(&Token::Semi);}if !self.eat(&Token::RBrace){return Err("expected } in match arm".into())}arms.push((pat,body));self.eat(&Token::Comma);}if !self.eat(&Token::RBrace){return Err("expected } after match".into())}Ok(Stmt::Match(value,arms,otherwise))},
             Token::Fn=>{self.take();let n=match self.take(){Token::Ident(x)=>x,_=>return Err("expected function name".into())};if !self.eat(&Token::LParen){return Err("expected (".into())}let mut a=vec![];if !self.eat(&Token::RParen){loop{let pn=match self.take(){Token::Ident(x)=>x,_=>return Err("expected parameter".into())};let pt=if self.eat(&Token::Colon){self.type_name()?}else{crate::types::Type::Any};a.push((pn,pt));if self.eat(&Token::RParen){break}if !self.eat(&Token::Comma){return Err("expected ,".into())}}}let ret=if self.eat(&Token::Arrow){self.type_name()?}else{crate::types::Type::Any};Ok(Stmt::Fn(n,a,ret,self.block()?))},
             Token::Ident(n)=>{
                 let name=n.clone(); if self.p+1<self.t.len() && self.t[self.p+1]==Token::Eq {self.take();self.take();return Ok(Stmt::Assign(name,self.expr()?));}
                 Ok(Stmt::Expr(self.expr()?))
             },
             _=>Ok(Stmt::Expr(self.expr()?))
+        }
+    }
+    fn pattern_from_expr(e: Expr)->Result<Pattern,String>{
+        match e {
+            Expr::Var(n) if n=="_" => Ok(Pattern::Wildcard),
+            Expr::Var(n) => Ok(Pattern::Enum{variant:n,binding:None}),
+            Expr::Call(n,args) if n=="Some"||n=="Ok"||n=="Err" => {
+                if args.len()!=1 { return Err(format!("{} pattern expects one binding",n)); }
+                let binding=match &args[0]{Expr::Var(x) if x!="_"=>Some(x.clone()),Expr::Var(x) if x=="_"=>None,_=>return Err("enum pattern payload must be a binding or _".into())};
+                Ok(Pattern::Enum{variant:n,binding})
+            }
+            Expr::Call(n,args) if args.is_empty() => Ok(Pattern::Enum{variant:n,binding:None}),
+            Expr::Field(_,variant) => Ok(Pattern::Enum{variant,binding:None}),
+            x => Ok(Pattern::Literal(x)),
         }
     }
     fn expr(&mut self)->Result<Expr,String>{self.or()}
