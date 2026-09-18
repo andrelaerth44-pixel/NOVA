@@ -162,7 +162,7 @@ impl Vm {
                     let value = self.eval(value_expr)?;
                     map.insert(key, value);
                 }
-                Ok(Value::Map(map))
+                Ok(Value::Map(std::rc::Rc::new(std::cell::RefCell::new(map))))
             }
             Expr::Set(values) => {
                 let mut set = std::collections::HashSet::new();
@@ -171,7 +171,7 @@ impl Vm {
                         .ok_or_else(|| "set values must be number, string, bool or null".to_string())?;
                     set.insert(key);
                 }
-                Ok(Value::Set(set))
+                Ok(Value::Set(std::rc::Rc::new(std::cell::RefCell::new(set))))
             }
             Expr::Index(base, index) => {
                 let base = self.eval(base)?;
@@ -184,7 +184,7 @@ impl Vm {
                     }
                     Value::Map(map) => {
                         let key = to_map_key(&index).ok_or_else(|| "map key must be number, string, bool or null".to_string())?;
-                        Ok(map.get(&key).cloned().unwrap_or(Value::Null))
+                        Ok(map.borrow().get(&key).cloned().unwrap_or(Value::Null))
                     }
                     _ => Err("indexing requires an array or map".into()),
                 }
@@ -322,19 +322,19 @@ impl Vm {
                     let key_value = self.eval(&a[1])?;
                     let key = to_map_key(&key_value).ok_or_else(|| "map key must be number, string, bool or null".to_string())?;
                     match map_value {
-                        Value::Map(mut map) => {
+                        Value::Map(map) => {
                             if n == "map_get" {
-                                return Ok(map.get(&key).cloned().unwrap_or(Value::Null));
+                                return Ok(map.borrow().get(&key).cloned().unwrap_or(Value::Null));
                             }
                             if n == "map_has" {
-                                return Ok(Value::Bool(map.contains_key(&key)));
+                                return Ok(Value::Bool(map.borrow().contains_key(&key)));
                             }
                             if n == "map_remove" {
-                                map.remove(&key);
+                                map.borrow_mut().remove(&key);
                                 return Ok(Value::Null);
                             }
                             let value = self.eval(&a[2])?;
-                            map.insert(key, value);
+                            map.borrow_mut().insert(key, value);
                             return Ok(Value::Null);
                         }
                         _ => return Err("map_* expects a Map value".into()),
@@ -346,10 +346,10 @@ impl Vm {
                     let item_value = self.eval(&a[1])?;
                     let item = to_map_key(&item_value).ok_or_else(|| "set values must be number, string, bool or null".to_string())?;
                     match set_value {
-                        Value::Set(mut set) => {
-                            if n == "set_add" { set.insert(item); return Ok(Value::Null); }
-                            if n == "set_has" { return Ok(Value::Bool(set.contains(&item))); }
-                            set.remove(&item);
+                        Value::Set(set) => {
+                            if n == "set_add" { set.borrow_mut().insert(item); return Ok(Value::Null); }
+                            if n == "set_has" { return Ok(Value::Bool(set.borrow().contains(&item))); }
+                            set.borrow_mut().remove(&item);
                             return Ok(Value::Null);
                         }
                         _ => return Err("set_* expects a Set value".into()),
