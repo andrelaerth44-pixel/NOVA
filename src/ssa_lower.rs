@@ -3,204 +3,112 @@ use crate::ir::{IrType, SsaBlock, SsaFunction, SsaInstr, SsaValue, Terminator, V
 use std::collections::HashMap;
 
 
-fn collect_referenced_expr_vars(
+fn collect_expr_vars(
     expr: &Expr,
-    referenced: &mut std::collections::BTreeSet<String>,
+    bound: &mut std::collections::HashSet<String>,
+    used: &mut std::collections::BTreeSet<String>,
 ) {
     match expr {
         Expr::Val(_) => {}
         Expr::Var(name) => {
-            referenced.insert(name.clone());
+            if !bound.contains(name) { used.insert(name.clone()); }
         }
-        Expr::Unary(_, inner) | Expr::Try(inner) => {
-            collect_referenced_expr_vars(inner, referenced);
-        }
+        Expr::Unary(_, inner) | Expr::Try(inner) => collect_expr_vars(inner, bound, used),
         Expr::Binary(left, _, right) => {
-            collect_referenced_expr_vars(left, referenced);
-            collect_referenced_expr_vars(right, referenced);
+            collect_expr_vars(left, bound, used);
+            collect_expr_vars(right, bound, used);
         }
         Expr::Call(_, args) | Expr::Array(args) | Expr::Set(args) => {
-            for arg in args {
-                collect_referenced_expr_vars(arg, referenced);
-            }
+            for arg in args { collect_expr_vars(arg, bound, used); }
         }
         Expr::CallValue(callee, args) => {
-            collect_referenced_expr_vars(callee, referenced);
-            for arg in args {
-                collect_referenced_expr_vars(arg, referenced);
-            }
+            collect_expr_vars(callee, bound, used);
+            for arg in args { collect_expr_vars(arg, bound, used); }
         }
         Expr::Map(entries) => {
             for (key, value) in entries {
-                collect_referenced_expr_vars(key, referenced);
-                collect_referenced_expr_vars(value, referenced);
+                collect_expr_vars(key, bound, used);
+                collect_expr_vars(value, bound, used);
             }
         }
         Expr::Index(base, index) => {
-            collect_referenced_expr_vars(base, referenced);
-            collect_referenced_expr_vars(index, referenced);
+            collect_expr_vars(base, bound, used);
+            collect_expr_vars(index, bound, used);
         }
-        Expr::Field(base, _) => collect_referenced_expr_vars(base, referenced),
+        Expr::Field(base, _) => collect_expr_vars(base, bound, used),
         Expr::StructInit(_, fields) => {
-            for (_, value) in fields {
-                collect_referenced_expr_vars(value, referenced);
-            }
+            for (_, value) in fields { collect_expr_vars(value, bound, used); }
         }
         Expr::EnumInit(_, _, payload) => {
-            if let Some(value) = payload {
-                collect_referenced_expr_vars(value, referenced);
-            }
-        }
-        Expr::Closure(_, body) => {
-            collect_referenced_stmt_vars(body, referenced);
-        }
-    }
-}
-
-fn collect_referenced_stmt_vars(
-    stmts: &[Stmt],
-    referenced: &mut std::collections::BTreeSet<String>,
-) {
-    for stmt in stmts {
-        match stmt {
-            Stmt::Expr(expr) | Stmt::Print(expr) | Stmt::Return(expr) => {
-                collect_referenced_expr_vars(expr, referenced);
-            }
-            Stmt::Let(name, _, expr) => {
-                referenced.insert(name.clone());
-                collect_referenced_expr_vars(expr, referenced);
-            }
-            Stmt::Assign(name, expr) => {
-                referenced.insert(name.clone());
-                collect_referenced_expr_vars(expr, referenced);
-            }
-            Stmt::If(condition, then_body, else_body) => {
-                collect_referenced_expr_vars(condition, referenced);
-                collect_referenced_stmt_vars(then_body, referenced);
-                collect_referenced_stmt_vars(else_body, referenced);
-            }
-            Stmt::While(condition, body) => {
-                collect_referenced_expr_vars(condition, referenced);
-                collect_referenced_stmt_vars(body, referenced);
-            }
-            Stmt::For(name, iterable, body) => {
-                referenced.insert(name.clone());
-                collect_referenced_expr_vars(iterable, referenced);
-                collect_referenced_stmt_vars(body, referenced);
-            }
-            Stmt::Match(subject, arms, otherwise) => {
-                collect_referenced_expr_vars(subject, referenced);
-                for (pattern, body) in arms {
-                    if let Pattern::Enum { binding: Some(name), .. } = pattern {
-                        referenced.insert(name.clone());
-                    }
-                    collect_referenced_stmt_vars(body, referenced);
-                }
-                collect_referenced_stmt_vars(otherwise, referenced);
-            }
-            Stmt::Fn(_, _, _, _, _)
-            | Stmt::Import(_)
-            | Stmt::StructDecl(_, _)
-            | Stmt::EnumDecl(_, _) => {}
-        }
-    }
-}
-
-fn collect_declared_stmt_vars(stmts: &[Stmt], declared: &mut std::collections::HashSet<String>) {
-    for stmt in stmts {
-        match stmt {
-            Stmt::Let(name, _, body) => {
-                declared.insert(name.clone());
-                collect_declared_expr_vars(body, declared);
-            }
-            Stmt::For(name, iterable, body) => {
-                declared.insert(name.clone());
-                collect_declared_expr_vars(iterable, declared);
-                collect_declared_stmt_vars(body, declared);
-            }
-            Stmt::If(condition, then_body, else_body) => {
-                collect_declared_expr_vars(condition, declared);
-                collect_declared_stmt_vars(then_body, declared);
-                collect_declared_stmt_vars(else_body, declared);
-            }
-            Stmt::While(condition, body) => {
-                collect_declared_expr_vars(condition, declared);
-                collect_declared_stmt_vars(body, declared);
-            }
-            Stmt::Match(subject, arms, otherwise) => {
-                collect_declared_expr_vars(subject, declared);
-                for (pattern, body) in arms {
-                    if let Pattern::Enum { binding: Some(name), .. } = pattern {
-                        declared.insert(name.clone());
-                    }
-                    collect_declared_stmt_vars(body, declared);
-                }
-                collect_declared_stmt_vars(otherwise, declared);
-            }
-            Stmt::Expr(expr) | Stmt::Print(expr) | Stmt::Return(expr) => {
-                collect_declared_expr_vars(expr, declared);
-            }
-            Stmt::Assign(_, expr) => collect_declared_expr_vars(expr, declared),
-            Stmt::Fn(_, _, _, _, _)
-            | Stmt::Import(_)
-            | Stmt::StructDecl(_, _)
-            | Stmt::EnumDecl(_, _) => {}
-        }
-    }
-}
-
-fn collect_declared_expr_vars(
-    expr: &Expr,
-    declared: &mut std::collections::HashSet<String>,
-) {
-    match expr {
-        Expr::Val(_) | Expr::Var(_) => {}
-        Expr::Unary(_, inner) | Expr::Try(inner) => {
-            collect_declared_expr_vars(inner, declared);
-        }
-        Expr::Binary(left, _, right) => {
-            collect_declared_expr_vars(left, declared);
-            collect_declared_expr_vars(right, declared);
-        }
-        Expr::Call(_, args) | Expr::Array(args) | Expr::Set(args) => {
-            for arg in args {
-                collect_declared_expr_vars(arg, declared);
-            }
-        }
-        Expr::CallValue(callee, args) => {
-            collect_declared_expr_vars(callee, declared);
-            for arg in args {
-                collect_declared_expr_vars(arg, declared);
-            }
-        }
-        Expr::Map(entries) => {
-            for (key, value) in entries {
-                collect_declared_expr_vars(key, declared);
-                collect_declared_expr_vars(value, declared);
-            }
-        }
-        Expr::Index(base, index) => {
-            collect_declared_expr_vars(base, declared);
-            collect_declared_expr_vars(index, declared);
-        }
-        Expr::Field(base, _) => collect_declared_expr_vars(base, declared),
-        Expr::StructInit(_, fields) => {
-            for (_, value) in fields {
-                collect_declared_expr_vars(value, declared);
-            }
-        }
-        Expr::EnumInit(_, _, payload) => {
-            if let Some(value) = payload {
-                collect_declared_expr_vars(value, declared);
-            }
+            if let Some(value) = payload { collect_expr_vars(value, bound, used); }
         }
         Expr::Closure(params, body) => {
-            for param in params {
-                declared.insert(param.clone());
-            }
-            collect_declared_stmt_vars(body, declared);
+            let mut nested_bound = bound.clone();
+            for param in params { nested_bound.insert(param.clone()); }
+            collect_stmt_vars(body, &mut nested_bound, used);
         }
     }
+}
+
+fn collect_stmt_vars(
+    stmts: &[Stmt],
+    bound: &mut std::collections::HashSet<String>,
+    used: &mut std::collections::BTreeSet<String>,
+) {
+    for stmt in stmts {
+        match stmt {
+            Stmt::Expr(expr) | Stmt::Print(expr) | Stmt::Return(expr) => {
+                collect_expr_vars(expr, bound, used);
+            }
+            Stmt::Let(name, _, expr) => {
+                collect_expr_vars(expr, bound, used);
+                bound.insert(name.clone());
+            }
+            Stmt::Assign(name, expr) => {
+                if !bound.contains(name) { used.insert(name.clone()); }
+                collect_expr_vars(expr, bound, used);
+            }
+            Stmt::If(condition, then_body, else_body) => {
+                collect_expr_vars(condition, bound, used);
+                let mut then_bound = bound.clone();
+                collect_stmt_vars(then_body, &mut then_bound, used);
+                let mut else_bound = bound.clone();
+                collect_stmt_vars(else_body, &mut else_bound, used);
+            }
+            Stmt::While(condition, body) => {
+                collect_expr_vars(condition, bound, used);
+                let mut loop_bound = bound.clone();
+                collect_stmt_vars(body, &mut loop_bound, used);
+            }
+            Stmt::For(name, iterable, body) => {
+                collect_expr_vars(iterable, bound, used);
+                let mut for_bound = bound.clone();
+                for_bound.insert(name.clone());
+                collect_stmt_vars(body, &mut for_bound, used);
+            }
+            Stmt::Match(subject, arms, otherwise) => {
+                collect_expr_vars(subject, bound, used);
+                for (pattern, body) in arms {
+                    let mut arm_bound = bound.clone();
+                    if let Pattern::Enum { binding: Some(name), .. } = pattern {
+                        arm_bound.insert(name.clone());
+                    }
+                    collect_stmt_vars(body, &mut arm_bound, used);
+                }
+                let mut else_bound = bound.clone();
+                collect_stmt_vars(otherwise, &mut else_bound, used);
+            }
+            Stmt::Fn(_, _, _, _, _) | Stmt::Import(_) | Stmt::StructDecl(_, _) | Stmt::EnumDecl(_, _) => {}
+        }
+    }
+}
+
+#[derive(Clone)]
+struct ClosureSpec {
+    function: String,
+    params: Vec<String>,
+    body: Vec<Stmt>,
+    captures: Vec<String>,
 }
 
 struct Builder {
@@ -318,22 +226,11 @@ impl Builder {
                 self.emit(SsaInstr::StructInit { name: name.clone(), fields })
             }
             Expr::Closure(args, body) => {
-                let outer = self
-                    .vars
-                    .iter()
-                    .flat_map(|scope| scope.keys().cloned())
-                    .collect::<std::collections::HashSet<_>>();
-                let mut referenced = std::collections::BTreeSet::new();
-                collect_referenced_stmt_vars(body, &mut referenced);
-                let mut declared = std::collections::HashSet::new();
-                for arg in args {
-                    declared.insert(arg.clone());
-                }
-                collect_declared_stmt_vars(body, &mut declared);
-                let capture_names = referenced
-                    .into_iter()
-                    .filter(|name| outer.contains(name) && !declared.contains(name))
-                    .collect::<Vec<_>>();
+                let mut bound = std::collections::HashSet::new();
+                for arg in args { bound.insert(arg.clone()); }
+                let mut used = std::collections::BTreeSet::new();
+                collect_stmt_vars(body, &mut bound, &mut used);
+                let capture_names = used.into_iter().collect::<Vec<_>>();
                 let captures = capture_names
                     .iter()
                     .filter_map(|name| self.lookup(name).map(|value| (name.clone(), value)))
