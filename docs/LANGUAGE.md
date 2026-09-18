@@ -25,3 +25,20 @@ Planned acceleration targets: CUDA, Vulkan compute and Metal.
 The compiler must report unsupported targets honestly; no backend is advertised before it actually compiles for that target.
 
 Standard library layers are planned around core, collections, filesystem, paths, processes, time, networking, HTTP, JSON, crypto, databases, UI, graphics, audio, video, AI and native integration.
+
+
+## Explicit types
+
+NOVA supports optional explicit annotations while retaining concise syntax:
+
+```nova
+let age: i64 = 18
+let name: string = "NOVA"
+let values: i64[] = [1, 2, 3]
+
+fn add(a: i64, b: i64) -> i64 {
+    return a + b
+}
+```
+
+Supported primitive names currently include `i32`, `i64`, `f32`, `f64`, `bool`, `string`, `void`, and `any`. Array types use `T[]`.
