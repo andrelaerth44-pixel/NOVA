@@ -185,3 +185,39 @@ mod tests {
         assert!(all.clone().any(|(_, instr)| matches!(instr, crate::ir::SsaInstr::EnumTest { variant, .. } if variant == "Some")));
         assert!(all.clone().any(|(_, instr)| matches!(instr, crate::ir::SsaInstr::Try { .. })));
     }
+
+
+#[cfg(test)]
+mod closure_ssa_tests {
+    use super::*;
+
+    #[test]
+    fn closure_capture_becomes_explicit_ssa_operand() {
+        let source = r#"
+            fn make_counter() {
+                value = 0
+                return fn() {
+                    value = value + 1
+                    return value
+                }
+            }
+
+            counter = make_counter()
+            print counter()
+        "#;
+
+        let compilation = compile_source(source).expect("closure source should compile");
+        let closure = compilation.ssa_functions[1]
+            .blocks
+            .iter()
+            .flat_map(|block| block.instrs.iter())
+            .find_map(|(_, instr)| match instr {
+                crate::ir::SsaInstr::Closure { captures, .. } => Some(captures),
+                _ => None,
+            })
+            .expect("closure instruction missing");
+
+        assert_eq!(closure.len(), 1);
+        assert_eq!(closure[0].0, "value");
+    }
+}
