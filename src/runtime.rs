@@ -1,4 +1,4 @@
-use crate::{Expr, Stmt, Token, Value, Pattern, Parser, lex};
+use crate::{Expr, Stmt, Token, Value, Pattern, Parser, lex, EnvFrame, EnvRef};
 use std::{collections::HashMap, fs};
 
 #[derive(Clone, Debug)]
@@ -26,7 +26,7 @@ impl std::error::Error for RuntimeError {}
 struct Function { pub args: Vec<String>, pub body: Vec<Stmt> }
 
 pub struct Vm {
-    vars: HashMap<String, Value>,
+    env: EnvRef,
     fns: HashMap<String, Function>,
     modules: HashMap<String, bool>,
     module_stack: Vec<std::path::PathBuf>,
@@ -34,7 +34,57 @@ pub struct Vm {
 
 impl Vm {
     pub fn new() -> Self {
-        Self { vars: HashMap::new(), fns: HashMap::new(), modules: HashMap::new(), module_stack: Vec::new() }
+        Self {
+            env: std::rc::Rc::new(std::cell::RefCell::new(EnvFrame { values: HashMap::new(), parent: None })),
+            fns: HashMap::new(),
+            modules: HashMap::new(),
+            module_stack: Vec::new(),
+        }
+    }
+
+    fn lookup(&self, name: &str) -> Option<Value> {
+        let mut current = Some(self.env.clone());
+        while let Some(env) = current {
+            let (value, parent) = {
+                let frame = env.borrow();
+                (frame.values.get(name).cloned(), frame.parent.clone())
+            };
+            if value.is_some() { return value; }
+            current = parent;
+        }
+        None
+    }
+
+    fn define(&mut self, name: String, value: Value) {
+        self.env.borrow_mut().values.insert(name, value);
+    }
+
+    fn assign_in(env: &EnvRef, name: &str, value: Value) -> bool {
+        let parent = {
+            let mut frame = env.borrow_mut();
+            if frame.values.contains_key(name) {
+                frame.values.insert(name.to_string(), value);
+                return true;
+            }
+            frame.parent.clone()
+        };
+        parent.map(|p| Self::assign_in(&p, name, value)).unwrap_or(false)
+    }
+
+    fn assign(&mut self, name: String, value: Value) {
+        if !Self::assign_in(&self.env, &name, value.clone()) {
+            self.define(name, value);
+        }
+    }
+
+    fn enter_scope(&mut self) -> EnvRef {
+        let parent = self.env.clone();
+        self.env = std::rc::Rc::new(std::cell::RefCell::new(EnvFrame { values: HashMap::new(), parent: Some(parent.clone()) }));
+        parent
+    }
+
+    fn leave_scope(&mut self, parent: EnvRef) {
+        self.env = parent;
     }
 
     pub fn exec_program(&mut self, program: &[Stmt]) -> Result<(), String> {
@@ -68,7 +118,7 @@ impl Vm {
             Expr::Closure(args, body) => Ok(Value::Closure {
                 args: args.clone(),
                 body: body.clone(),
-                env: std::rc::Rc::new(std::cell::RefCell::new(self.vars.clone())),
+                env: self.env.clone(),
             }),
             Expr::CallValue(callee, a) => {
                 let v = self.eval(callee)?;
@@ -78,18 +128,14 @@ impl Vm {
                         if args.len() != vals.len() {
                             return Err(format!("closure expects {} arguments", args.len()).into());
                         }
-                        let old = self.vars.clone();
-                        self.vars = env.borrow().clone();
-                        for (k, v) in args.iter().zip(vals) { self.vars.insert(k.clone(), v); }
+                        let old_env = self.env.clone();
+                        self.env = std::rc::Rc::new(std::cell::RefCell::new(EnvFrame {
+                            values: HashMap::new(),
+                            parent: Some(env.clone()),
+                        }));
+                        for (k, v) in args.iter().zip(vals) { self.define(k.clone(), v); }
                         let result = self.exec(&body);
-                        let captured = env.borrow().keys().cloned().collect::<Vec<_>>();
-                        {
-                            let mut e = env.borrow_mut();
-                            for k in captured {
-                                if let Some(v) = self.vars.get(&k).cloned() { e.insert(k, v); }
-                            }
-                        }
-                        self.vars = old;
+                        self.env = old_env;
                         match result {
                             Ok(Some(v)) => Ok(v),
                             Ok(None) => Ok(Value::Null),
@@ -106,7 +152,7 @@ impl Vm {
                     _ => Err("field access requires struct".into()),
                 }
             }
-            Expr::Var(n) => self.vars.get(n).cloned().ok_or_else(|| format!("undefined variable {}", n).into()),
+            Expr::Var(n) => self.lookup(n).ok_or_else(|| format!("undefined variable {}", n).into()),
             Expr::Array(a) => Ok(Value::Array(a.iter().map(|x| self.eval(x)).collect::<Result<_, _>>()?)),
             Expr::Unary(op, x) => {
                 let v = self.eval(x)?;
@@ -233,11 +279,15 @@ impl Vm {
 
                 let f = self.fns.get(n).cloned().ok_or_else(|| format!("undefined function {}", n))?;
                 if f.args.len() != a.len() { return Err(format!("{} expects {} arguments", n, f.args.len()).into()); }
-                let old = self.vars.clone();
+                let caller_env = self.env.clone();
                 let vals = a.iter().map(|e| self.eval(e)).collect::<Result<Vec<_>, _>>()?;
-                for (i, k) in f.args.iter().enumerate() { self.vars.insert(k.clone(), vals[i].clone()); }
+                self.env = std::rc::Rc::new(std::cell::RefCell::new(EnvFrame {
+                    values: HashMap::new(),
+                    parent: Some(caller_env.clone()),
+                }));
+                for (i, k) in f.args.iter().enumerate() { self.define(k.clone(), vals[i].clone()); }
                 let result = self.exec(&f.body);
-                self.vars = old;
+                self.env = caller_env;
                 match result {
                     Ok(Some(v)) => Ok(v),
                     Ok(None) => Ok(Value::Null),
@@ -294,7 +344,7 @@ impl Vm {
                 Stmt::Expr(e) => { self.eval(e)?; }
                 Stmt::Let(n, _, e) | Stmt::Assign(n, e) => {
                     let v = self.eval(e)?;
-                    self.vars.insert(n.clone(), v);
+                    self.assign(n.clone(), v);
                 }
                 Stmt::Print(e) => println!("{}", self.eval(e)?),
                 Stmt::Return(e) => return Ok(Some(self.eval(e)?)),
@@ -313,7 +363,7 @@ impl Vm {
                     match v {
                         Value::Array(xs) => {
                             for x in xs {
-                                self.vars.insert(n.clone(), x);
+                                self.define(n.clone(), x);
                                 if let Some(v) = self.exec(b)? { return Ok(Some(v)); }
                             }
                         }
@@ -327,7 +377,7 @@ impl Vm {
                         let mut binding = None;
                         if Self::matches_pattern(pattern, &v, &mut binding) {
                             if let Pattern::Enum { binding: Some(name), .. } = pattern {
-                                if let Some(value) = binding.take() { self.vars.insert(name.clone(), value); }
+                                if let Some(value) = binding.take() { self.define(name.clone(), value); }
                             }
                             if let Some(r) = self.exec(body)? { return Ok(Some(r)); }
                             done = true;
