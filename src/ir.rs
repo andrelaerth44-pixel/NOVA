@@ -67,7 +67,7 @@ impl IrBuilder {
     pub fn lower_stmt(&mut self, s: &crate::Stmt) {
         match s {
             crate::Stmt::Expr(e) => { self.lower_expr(e); self.module.push(Instr::Pop); }
-            crate::Stmt::Let(n,e) | crate::Stmt::Assign(n,e) => {
+            crate::Stmt::Let(n,_,e) | crate::Stmt::Assign(n,e) => {
                 self.lower_expr(e); self.module.push(Instr::Store(n.clone()));
             }
             crate::Stmt::Print(e) => {
@@ -112,7 +112,7 @@ impl IrBuilder {
                 }
                 for x in otherwise { self.lower_stmt(x); }
             }
-            crate::Stmt::Fn(n,args,body) => {
+            crate::Stmt::Fn(n,args,_,body) => {
                 let mut f=Function{name:n.clone(),params:args.clone(),code:Vec::new()};
                 let mut b=IrBuilder{module:Module::default()};
                 for x in body { b.lower_stmt(x); }
