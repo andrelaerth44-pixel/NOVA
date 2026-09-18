@@ -20,7 +20,7 @@ fn v(id: ValueId) -> String {
 }
 
 fn c_string(value: &str) -> String {
-    let mut out = String::from(""");
+    let mut out = String::from("\"");
     for ch in value.chars() {
         match ch {
             '\\' => out.push_str("\\\\"),
