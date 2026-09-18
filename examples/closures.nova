@@ -1,0 +1,17 @@
+fn make_adder(x) {
+    return fn(y) {
+        return x + y
+    }
+}
+
+add10 = make_adder(10)
+print add10(32)
+
+counter = 0
+next = fn() {
+    counter = counter + 1
+    return counter
+}
+
+print next()
+print next()
