@@ -1,5 +1,7 @@
 # NOVA standard runtime surface
 
+This document tracks the runtime standard-library surface implemented in NOVA 1.7.
+
 This document lists only runtime functions that are implemented in the current NOVA 1.5 prototype.
 
 ## Core
@@ -8,6 +10,10 @@ This document lists only runtime functions that are implemented in the current N
 - `str(value)` — converts a value to text.
 - `len(value)` — returns the length of a string or array.
 - `range(start, end)` — creates an integer sequence represented as a NOVA array.
+- `iter(value)` — creates a first-class iterator from an array, string or iterator.
+- `next(iterator)` — returns `Some(value)` and advances, or `None` when exhausted.
+- `has_next(iterator)` — reports whether an iterator still has values.
+- `collect(iterator)` — consumes the remaining values into an array.
 - `abs(number)` — absolute value.
 - `sqrt(number)` — square root; rejects negative inputs.
 
