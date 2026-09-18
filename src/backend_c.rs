@@ -47,6 +47,7 @@ fn emit_code(code: &[Instr], current_fn: Option<&Function>) -> Result<String, St
             Instr::ConstNull => c.push_str("  stack[sp++] = 0;
 "),
             Instr::ConstString(_) => return Err("native C backend does not support strings yet".into()),
+            Instr::StructInit { .. } | Instr::FieldGet { .. } => return Err("native C backend: struct code generation is not implemented yet".into()),
             Instr::Load(n) => c.push_str(&format!("  stack[sp++] = {};
 ", c_ident(n))),
             Instr::Store(n) => c.push_str(&format!("  {} = stack[--sp];
