@@ -15,13 +15,31 @@ impl Parser {
                 "f32"=>Ok(crate::types::Type::F32),"f64"=>Ok(crate::types::Type::F64),
                 "bool"=>Ok(crate::types::Type::Bool),"string"=>Ok(crate::types::Type::String),
                 "void"=>Ok(crate::types::Type::Void),"any"=>Ok(crate::types::Type::Any),
-                _=>Err(format!("unknown type {}",n))
+                _=>Ok(crate::types::Type::Struct(n))
             },
             Token::LBracket=>{let t=self.type_name()?;if !self.eat(&Token::RBracket){return Err("expected ] in array type".into())}Ok(crate::types::Type::Array(Box::new(t)))},
             t=>Err(format!("expected type, got {:?}",t))
         }
     }
     fn stmt(&mut self)->Result<Stmt,String>{
+        if let Token::Ident(word) = self.peek() {
+            if word == "struct" {
+                self.take();
+                let name = match self.take() { Token::Ident(x)=>x, _=>return Err("expected struct name".into()) };
+                if !self.eat(&Token::LBrace) { return Err("expected { after struct name".into()); }
+                let mut fields = Vec::new();
+                while *self.peek()!=Token::RBrace && *self.peek()!=Token::Eof {
+                    let field = match self.take() { Token::Ident(x)=>x, _=>return Err("expected struct field name".into()) };
+                    if !self.eat(&Token::Colon) { return Err("expected : after struct field".into()); }
+                    let ty = self.type_name()?;
+                    fields.push((field, ty));
+                    self.eat(&Token::Comma);
+                    self.eat(&Token::Semi);
+                }
+                if !self.eat(&Token::RBrace) { return Err("expected } after struct".into()); }
+                return Ok(Stmt::StructDecl(name, fields));
+            }
+        }
         match self.peek() {
             Token::Let=>{self.take();let n=match self.take(){Token::Ident(x)=>x,_=>return Err("expected identifier".into())};let ty=if self.eat(&Token::Colon){Some(self.type_name()?)}else{None};if !self.eat(&Token::Eq){return Err("expected =".into())}Ok(Stmt::Let(n,ty,self.expr()?))},
             Token::Print=>{self.take();Ok(Stmt::Print(self.expr()?))},
@@ -49,7 +67,22 @@ impl Parser {
     fn unary(&mut self)->Result<Expr,String>{if self.eat(&Token::Minus){Ok(Expr::Unary(Token::Minus,Box::new(self.unary()?)))}else if self.eat(&Token::Bang){Ok(Expr::Unary(Token::Bang,Box::new(self.unary()?)))}else{self.primary()}}
     fn primary(&mut self)->Result<Expr,String>{
         let x=match self.take(){Token::Num(x)=>Expr::Val(Value::Num(x)),Token::Str(x)=>Expr::Val(Value::Str(x)),Token::True=>Expr::Val(Value::Bool(true)),Token::False=>Expr::Val(Value::Bool(false)),
-            Token::Ident(n)=>{if self.eat(&Token::LParen){let mut a=vec![];if !self.eat(&Token::RParen){loop{a.push(self.expr()?);if self.eat(&Token::RParen){break}if !self.eat(&Token::Comma){return Err("expected ,".into())}}}Expr::Call(n,a)}else{Expr::Var(n)}},
+            Token::Ident(n)=>{
+                if self.eat(&Token::LParen){
+                    let mut a=vec![];if !self.eat(&Token::RParen){loop{a.push(self.expr()?);if self.eat(&Token::RParen){break}if !self.eat(&Token::Comma){return Err("expected ,".into())}}}
+                    Expr::Call(n,a)
+                } else if self.eat(&Token::LBrace) {
+                    let mut fields=vec![];
+                    if !self.eat(&Token::RBrace){loop{
+                        let field=match self.take(){Token::Ident(x)=>x,_=>return Err("expected field name".into())};
+                        if !self.eat(&Token::Colon){return Err("expected : in struct literal".into())}
+                        fields.push((field,self.expr()?));
+                        if self.eat(&Token::RBrace){break}
+                        if !self.eat(&Token::Comma){return Err("expected , in struct literal".into())}
+                    }}
+                    Expr::StructInit(n,fields)
+                } else {Expr::Var(n)}
+            },
             Token::LBracket=>{let mut a=vec![];if !self.eat(&Token::RBracket){loop{a.push(self.expr()?);if self.eat(&Token::RBracket){break}if !self.eat(&Token::Comma){return Err("expected ,".into())}}}Expr::Array(a)},
             Token::LParen=>{let x=self.expr()?;if !self.eat(&Token::RParen){return Err("expected )".into())}x},
             t=>return Err(format!("unexpected token {:?}",t))};Ok(x)
