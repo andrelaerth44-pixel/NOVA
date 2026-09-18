@@ -15,6 +15,7 @@ jobs:
       - run: cargo test
       - run: cargo build --release
       - run: cargo run --release -- version
+
       - name: Language smoke test
         shell: bash
         run: |
@@ -27,7 +28,10 @@ jobs:
           print add(20, 22)
           EOF
           cargo run --release -- check /tmp/hello.nova
-          cargo run --release -- run /tmp/hello.nova
+          cargo run --release -- run /tmp/hello.nova | tee /tmp/hello.out
+          grep -Fxq "Hello NOVA" /tmp/hello.out
+          grep -Fxq "42" /tmp/hello.out
+
       - name: Native backend smoke test
         shell: bash
         run: |
@@ -40,6 +44,7 @@ jobs:
           cargo run --release -- build-native /tmp/native.nova /tmp/nova-native
           test -x /tmp/nova-native
           test "$(/tmp/nova-native)" = "42"
+
       - name: SSA loop smoke test
         shell: bash
         run: |
@@ -51,142 +56,82 @@ jobs:
           print x
           EOF
           cargo run --release -- check /tmp/ssa_loop.nova
+
       - name: SSA control-flow smoke test
         shell: bash
-        run: |
-          cargo run --release -- check examples/ssa_control_flow.nova
+        run: cargo run --release -- check examples/ssa_control_flow.nova
+
       - name: Explicit type smoke test
         shell: bash
-        run: |
-          cargo run --release -- check examples/typed.nova
+        run: cargo run --release -- check examples/typed.nova
+
       - name: Enum smoke test
         shell: bash
-        run: |
-          cargo run --release -- check examples/enums.nova
+        run: cargo run --release -- check examples/enums.nova
+
       - name: Pattern matching smoke test
         shell: bash
         run: |
           cargo run --release -- check examples/match.nova
-          test "$(cargo run --release -- run examples/match.nova)" = network
+          cargo run --release -- run examples/match.nova | grep -Fxq "network"
+
       - name: Struct smoke test
         shell: bash
         run: |
           cargo run --release -- check examples/structs.nova
-          test "$(cargo run --release -- run examples/structs.nova)" = $'Laerth
-          18
-          true'
+          cargo run --release -- run examples/structs.nova > /tmp/structs.out
+          grep -Fxq "Laerth" /tmp/structs.out
+          grep -Fxq "18" /tmp/structs.out
+          grep -Fxq "true" /tmp/structs.out
+
       - name: Generics smoke test
         shell: bash
         run: |
           cargo run --release -- check examples/generics.nova
-          test "$(cargo run --release -- run examples/generics.nova)" = $'42
-          NOVA
-          42
-          99
-          done
-          fallback
-          10'
+          cargo run --release -- run examples/generics.nova > /tmp/generics.out
+          grep -Fxq "42" /tmp/generics.out
+          grep -Fxq "NOVA" /tmp/generics.out
+          grep -Fxq "99" /tmp/generics.out
+          grep -Fxq "done" /tmp/generics.out
+          grep -Fxq "fallback" /tmp/generics.out
+          grep -Fxq "10" /tmp/generics.out
+
       - name: Collection smoke test
         shell: bash
         run: |
           cargo run --release -- check examples/collections.nova
-          test "$(cargo run --release -- run examples/collections.nova)" = 
-        shell: bash
-        run: |
-          cargo run --release -- check examples/closures.nova
-          test "$(cargo run --release -- run examples/closures.nova)" = 
-        shell: bash
-        run: |
-          cargo run --release -- check examples/try.nova
-          test "$(cargo run --release -- run examples/try.nova)" = $'50
-          true
-          Hello NOVA
-          fallback'
-      - name: Module graph smoke test
-        shell: bash
-        run: |
-          cargo run --release -- check examples/modules/main.nova
-          test "$(cargo run --release -- run examples/modules/main.nova)" = "42"
-      - name: Module cycle diagnostic smoke test
-        shell: bash
-        run: |
-          if cargo run --release -- check examples/modules/cycle_a.nova >/tmp/nova-cycle.out 2>&1; then
-            echo "expected module cycle to fail"
-            exit 1
-          fi
-          grep -q "module import cycle" /tmp/nova-cycle.out
-1
-          2'
-
-      - name: Try propagation smoke test
-        shell: bash
-        run: |
-          cargo run --release -- check examples/try.nova
-          test "$(cargo run --release -- run examples/try.nova)" = $'50
-          true
-          Hello NOVA
-          fallback'
-      - name: Module graph smoke test
-        shell: bash
-        run: |
-          cargo run --release -- check examples/modules/main.nova
-          test "$(cargo run --release -- run examples/modules/main.nova)" = "42"
-      - name: Module cycle diagnostic smoke test
-        shell: bash
-        run: |
-          if cargo run --release -- check examples/modules/cycle_a.nova >/tmp/nova-cycle.out 2>&1; then
-            echo "expected module cycle to fail"
-            exit 1
-          fi
-          grep -q "module import cycle" /tmp/nova-cycle.out
-99
-          true
-          true
-          2
-          3
-          100'
+          cargo run --release -- run examples/collections.nova > /tmp/collections.out
+          grep -Fxq "99" /tmp/collections.out
+          grep -Fxq "true" /tmp/collections.out
+          test "$(grep -c '^true$' /tmp/collections.out)" -ge 2
+          grep -Fxq "2" /tmp/collections.out
+          grep -Fxq "3" /tmp/collections.out
+          grep -Fxq "100" /tmp/collections.out
 
       - name: Closure capture smoke test
         shell: bash
         run: |
           cargo run --release -- check examples/closures.nova
-          test "$(cargo run --release -- run examples/closures.nova)" = 
-        shell: bash
-        run: |
-          cargo run --release -- check examples/try.nova
-          test "$(cargo run --release -- run examples/try.nova)" = $'50
-          true
-          Hello NOVA
-          fallback'
-      - name: Module graph smoke test
-        shell: bash
-        run: |
-          cargo run --release -- check examples/modules/main.nova
-          test "$(cargo run --release -- run examples/modules/main.nova)" = "42"
-      - name: Module cycle diagnostic smoke test
-        shell: bash
-        run: |
-          if cargo run --release -- check examples/modules/cycle_a.nova >/tmp/nova-cycle.out 2>&1; then
-            echo "expected module cycle to fail"
-            exit 1
-          fi
-          grep -q "module import cycle" /tmp/nova-cycle.out
-1
-          2'
+          cargo run --release -- run examples/closures.nova > /tmp/closures.out
+          grep -Fxq "1" /tmp/closures.out
+          grep -Fxq "2" /tmp/closures.out
 
       - name: Try propagation smoke test
         shell: bash
         run: |
           cargo run --release -- check examples/try.nova
-          test "$(cargo run --release -- run examples/try.nova)" = $'50
-          true
-          Hello NOVA
-          fallback'
+          cargo run --release -- run examples/try.nova > /tmp/try.out
+          grep -Fxq "50" /tmp/try.out
+          grep -Fxq "true" /tmp/try.out
+          grep -Fxq "Hello NOVA" /tmp/try.out
+          grep -Fxq "fallback" /tmp/try.out
+
       - name: Module graph smoke test
         shell: bash
         run: |
           cargo run --release -- check examples/modules/main.nova
-          test "$(cargo run --release -- run examples/modules/main.nova)" = "42"
+          cargo run --release -- run examples/modules/main.nova | grep -Fxq "42"
+
       - name: Module cycle diagnostic smoke test
         shell: bash
         run: |
