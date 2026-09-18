@@ -11,16 +11,18 @@ pub fn verify(m: &crate::ir::Module) -> Result<(), String> {
                 crate::ir::Instr::Store(_) | crate::ir::Instr::Pop | crate::ir::Instr::JumpIfFalse(_) | crate::ir::Instr::Return => depth -= 1,
                 crate::ir::Instr::Binary(_) => depth -= 1,
                 crate::ir::Instr::Call(name, argc) => {
-                    if *argc == 0 { depth += 1; } else if name == "print" || name == "for_each" { depth -= *argc as isize; } else { depth -= *argc as isize - 1; }
+                    if *argc == 0 { depth += 1; }
+                    else if name == "print" || name == "for_each" { depth -= *argc as isize; }
+                    else { depth -= *argc as isize - 1; }
                 }
                 crate::ir::Instr::Jump(_) => {}
-                if depth < 0 { return Err(format!("IR stack underflow in {} at {}", label, i)); }
-
+            }
+            if depth < 0 {
+                return Err(format!("IR stack underflow in {} at {}", label, i));
+            }
+            match ins {
                 crate::ir::Instr::Jump(t) | crate::ir::Instr::JumpIfFalse(t) if *t >= code.len() => {
-                    return Err(format!(
-                        "IR error in {} at {}: jump target {} is out of bounds",
-                        label, i, t
-                    ));
+                    return Err(format!("IR error in {} at {}: jump target {} is out of bounds", label, i, t));
                 }
                 _ => {}
             }
@@ -29,8 +31,6 @@ pub fn verify(m: &crate::ir::Module) -> Result<(), String> {
         Ok(())
     }
     check(&m.code, "module")?;
-    for f in &m.functions {
-        check(&f.code, &format!("fn {}", f.name))?;
-    }
+    for f in &m.functions { check(&f.code, &format!("fn {}", f.name))?; }
     Ok(())
 }
