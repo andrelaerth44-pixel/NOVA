@@ -46,6 +46,8 @@ pub fn lex(src: &str) -> Result<Vec<Token>, String> {
             ']' => { out.push(Token::RBracket); i+=1; }
             ',' => { out.push(Token::Comma); i+=1; }
             ';' => { out.push(Token::Semi); i+=1; }
+            ':' => { out.push(Token::Colon); i+=1; }
+            '-' if i+1<c.len() && c[i+1]=='>' => { out.push(Token::Arrow); i+=2; }
             '.' => { out.push(Token::Dot); i+=1; }
             '!' => { if i+1<c.len() && c[i+1]=='=' {out.push(Token::Ne);i+=2} else {out.push(Token::Bang);i+=1} }
             '=' => { if i+1<c.len() && c[i+1]=='=' {out.push(Token::EqEq);i+=2} else {out.push(Token::Eq);i+=1} }
