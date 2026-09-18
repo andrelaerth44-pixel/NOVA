@@ -4,7 +4,6 @@ enum Status {
     Failed(string)
 }
 
-state = Ready
 result = Some(42)
 ok = Ok("done")
 
