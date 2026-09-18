@@ -336,7 +336,7 @@ impl Builder {
                         })
                     }
                     _ => {
-                        let values = args.iter().map(|x| self.expr(x)).collect();
+                        let values: Vec<ValueId> = args.iter().map(|x| self.expr(x)).collect();
                         if let Some(enum_name) = self.enum_variants.get(name) {
                             self.emit(SsaInstr::EnumInit {
                                 name: enum_name.clone(),
