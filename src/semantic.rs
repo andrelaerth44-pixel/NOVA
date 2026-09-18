@@ -279,8 +279,8 @@ impl Checker {
                 if let Some((enum_name, payload_type)) = self.enums.iter().find_map(|(enum_name, variants)| {
                     variants.get(name).map(|payload| (enum_name.clone(), payload.clone()))
                 }) {
-                    if args.len() != usize::from(payload_type.is_some()) {
-                        self.error(format!("{} expects {} arguments, got {}", name, usize::from(payload_type.is_some()), args.len()));
+                    if args.len() != if payload_type.is_some() { 1 } else { 0 } {
+                        self.error(format!("{} expects {} arguments, got {}", name, if payload_type.is_some() { 1 } else { 0 }, args.len()));
                     }
                     if let (Some(expected), Some(arg)) = (payload_type, args.first()) {
                         let got = self.infer(arg);
