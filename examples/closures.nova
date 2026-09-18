@@ -1,17 +1,11 @@
-fn make_adder(x) {
-    return fn(y) {
-        return x + y
+fn make_counter() {
+    value = 0
+    return fn() {
+        value = value + 1
+        return value
     }
 }
 
-add10 = make_adder(10)
-print add10(32)
-
-counter = 0
-next = fn() {
-    counter = counter + 1
-    return counter
-}
-
-print next()
-print next()
+counter = make_counter()
+print counter()
+print counter()
