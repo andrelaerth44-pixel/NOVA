@@ -130,7 +130,7 @@ jobs:
           true
           NOVA
           42
-          {"name":"NOVA","value":42}
+          {"name":"NOVA","value":42.0}
           true
           EOF
           diff -u /tmp/stdlib.expected /tmp/stdlib.out
