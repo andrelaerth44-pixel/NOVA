@@ -18,6 +18,7 @@ mod ssa_lower;
 mod module_loader;
 mod package;
 mod compiler;
+mod abi;
 
 pub use token::Token;
 pub use ast::{Expr, Stmt, Value, Pattern, MapKey, EnvFrame, EnvRef, to_map_key};
