@@ -1,3 +1,4 @@
+use crate::Token;
 #[derive(Clone, Debug)]
 pub enum Expr {
     Val(Value), Var(String), Unary(Token, Box<Expr>),
