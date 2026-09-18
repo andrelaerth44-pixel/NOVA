@@ -1,4 +1,4 @@
-use crate::{Expr, Stmt, Value, Token};
+use crate::{Expr, Stmt, Value, Token, Pattern};
 use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
@@ -38,6 +38,8 @@ impl Checker {
             Value::Str(_) => crate::types::Type::String,
             Value::Bool(_) => crate::types::Type::Bool,
             Value::Null => crate::types::Type::Null,
+            Value::Struct { name, .. } => crate::types::Type::Struct(name.clone()),
+            Value::Enum { name, .. } => crate::types::Type::Enum(name.clone()),
             Value::Array(xs) => {
                 if xs.is_empty() { return crate::types::Type::Array(Box::new(crate::types::Type::Any)); }
                 let first = self.value_type(&xs[0]);
@@ -195,6 +197,22 @@ impl Checker {
         }
     }
 
+    fn check_pattern(&mut self, pattern: &Pattern, subject: &crate::types::Type, covered: &mut std::collections::HashSet<String>, wildcard: &mut bool) {
+        match pattern {
+            Pattern::Wildcard => *wildcard = true,
+            Pattern::Literal(expr) => { let t=self.infer(expr); if !subject.compatible(&t) { self.error(format!("match pattern expects {}, got {}", subject.name(), t.name())); } }
+            Pattern::Enum { variant, .. } => match subject {
+                crate::types::Type::Enum(name) => {
+                    if let Some(vars)=self.enums.get(name) {
+                        if !vars.contains_key(variant) { self.error(format!("unknown variant {}.{}",name,variant)); }
+                        else { covered.insert(variant.clone()); }
+                    }
+                }
+                _ => self.error(format!("enum pattern {} requires enum subject, got {}",variant,subject.name())),
+            }
+        }
+    }
+
     fn check_stmt(&mut self, stmt: &Stmt, expected_return: Option<&crate::types::Type>) {
         match stmt {
             Stmt::Expr(e) | Stmt::Print(e) => { self.infer(e); }
@@ -259,16 +277,33 @@ impl Checker {
                 self.pop_scope();
             }
             Stmt::Match(value, arms, otherwise) => {
-                self.infer(value);
+                let subject = self.infer(value);
+                let mut covered = std::collections::HashSet::new();
+                let mut wildcard = false;
                 for (pattern, body) in arms {
-                    self.infer(pattern);
+                    self.check_pattern(pattern, &subject, &mut covered, &mut wildcard);
                     self.push_scope();
+                    if let Pattern::Enum { variant, binding: Some(name) } = pattern {
+                        if let crate::types::Type::Enum(enum_name) = &subject {
+                            if let Some(Some(payload)) = self.enums.get(enum_name).and_then(|m| m.get(variant)).cloned() {
+                                self.define(name.clone(), payload);
+                            } else { self.define(name.clone(), crate::types::Type::Any); }
+                        } else { self.define(name.clone(), crate::types::Type::Any); }
+                    }
                     for s in body { self.check_stmt(s, expected_return); }
                     self.pop_scope();
                 }
                 self.push_scope();
                 for s in otherwise { self.check_stmt(s, expected_return); }
                 self.pop_scope();
+                if otherwise.is_empty() && !wildcard {
+                    if let crate::types::Type::Enum(enum_name) = &subject {
+                        if let Some(vars) = self.enums.get(enum_name) {
+                            let missing: Vec<_> = vars.keys().filter(|v| !covered.contains(*v)).cloned().collect();
+                            if !missing.is_empty() { self.error(format!("non-exhaustive match on {}: missing {}", enum_name, missing.join(", "))); }
+                        }
+                    }
+                }
             }
             Stmt::Import(_) => {}
             Stmt::StructDecl(_, _) => {},
