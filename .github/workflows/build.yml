@@ -174,7 +174,10 @@ jobs:
           grep -Fq 'Call { name: "index"' /tmp/native_collections.ssa
           cargo run --release -- build-native-ssa /tmp/native_collections.nova /tmp/nova-collections-native
           test -x /tmp/nova-collections-native
-          test "$(/tmp/nova-collections-native)" =         shell: bash
+          test "$( /tmp/nova-collections-native )" = $'20\n42\n2'
+
+      - name: Native enum smoke test
+        shell: bash
         run: |
           cat > /tmp/native_enum.nova <<'EOF'
           enum Status {
