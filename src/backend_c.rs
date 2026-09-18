@@ -54,7 +54,7 @@ fn emit_code(code: &[Instr], current_fn: Option<&Function>) -> Result<String, St
             Instr::Unary { op, .. } => {
                 let expr = match op.as_str() {
                     "Minus" => "-a",
-                    "Not" => "(a==0)",
+                    "Bang" => "(a==0)",
                     other => return Err(format!("native C backend does not support unary {}", other)),
                 };
                 c.push_str(&format!("  {{ double a=stack[--sp]; stack[sp++] = {}; }}
