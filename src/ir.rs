@@ -209,6 +209,25 @@ impl IrBuilder {
                 self.push(Instr::Call { name: "array".into(), argc: xs.len(), result: IrType::Any });
                 IrType::Any
             }
+            crate::Expr::Map(entries) => {
+                for (key, value) in entries {
+                    self.lower_expr(key);
+                    self.lower_expr(value);
+                }
+                self.push(Instr::Call { name: "map".into(), argc: entries.len() * 2, result: IrType::Any });
+                IrType::Any
+            }
+            crate::Expr::Set(values) => {
+                for value in values { self.lower_expr(value); }
+                self.push(Instr::Call { name: "set".into(), argc: values.len(), result: IrType::Any });
+                IrType::Any
+            }
+            crate::Expr::Index(base, index) => {
+                self.lower_expr(base);
+                self.lower_expr(index);
+                self.push(Instr::Call { name: "index".into(), argc: 2, result: IrType::Any });
+                IrType::Any
+            }
             crate::Expr::Unary(op, x) => {
                 let ty = self.lower_expr(x);
                 self.push(Instr::Unary { op: format!("{:?}", op), ty: ty.clone() });
