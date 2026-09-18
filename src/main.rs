@@ -8,7 +8,7 @@ enum Token {
     LParen, RParen, LBrace, RBrace, LBracket, RBracket,
     Comma, Semi, Dot, Bang, And, Or,
     If, Else, While, Fn, Return, True, False, Let,
-    Print, Eof,
+    Print, In, For, Eof,
 }
 
 fn lex(src: &str) -> Result<Vec<Token>, String> {
@@ -40,7 +40,7 @@ fn lex(src: &str) -> Result<Vec<Token>, String> {
                 out.push(match w {
                     "if"=>Token::If, "else"=>Token::Else, "while"=>Token::While,
                     "fn"=>Token::Fn, "return"=>Token::Return, "true"=>Token::True,
-                    "false"=>Token::False, "let"=>Token::Let, "print"=>Token::Print,
+                    "false"=>Token::False, "let"=>Token::Let, "print"=>Token::Print, "in"=>Token::In, "for"=>Token::For,
                     "and"=>Token::And, "or"=>Token::Or, _=>Token::Ident(w.into())
                 });
             }
@@ -77,7 +77,7 @@ enum Expr {
 #[derive(Clone, Debug)]
 enum Stmt {
     Expr(Expr), Let(String, Expr), Assign(String, Expr), Print(Expr),
-    If(Expr, Vec<Stmt>, Vec<Stmt>), While(Expr, Vec<Stmt>),
+    If(Expr, Vec<Stmt>, Vec<Stmt>), While(Expr, Vec<Stmt>), For(String, Expr, Vec<Stmt>),
     Fn(String, Vec<String>, Vec<Stmt>), Return(Expr),
 }
 #[derive(Clone, Debug)]
@@ -109,6 +109,7 @@ impl Parser {
             Token::Return=>{self.take();Ok(Stmt::Return(self.expr()?))},
             Token::If=>{self.take();let c=self.expr()?;let a=self.block()?;let b=if self.eat(&Token::Else){self.block()?}else{vec![]};Ok(Stmt::If(c,a,b))},
             Token::While=>{self.take();let c=self.expr()?;Ok(Stmt::While(c,self.block()?))},
+            Token::For=>{self.take();let n=match self.take(){Token::Ident(x)=>x,_=>return Err("expected loop variable".into())};if !self.eat(&Token::In){return Err("expected in".into())}let it=self.expr()?;Ok(Stmt::For(n,it,self.block()?))},
             Token::Fn=>{self.take();let n=match self.take(){Token::Ident(x)=>x,_=>return Err("expected function name".into())};if !self.eat(&Token::LParen){return Err("expected (".into())}let mut a=vec![];if !self.eat(&Token::RParen){loop{a.push(match self.take(){Token::Ident(x)=>x,_=>return Err("expected parameter".into())});if self.eat(&Token::RParen){break}if !self.eat(&Token::Comma){return Err("expected ,".into())}}}Ok(Stmt::Fn(n,a,self.block()?))},
             Token::Ident(n)=>{
                 let name=n.clone(); if self.p+1<self.t.len() && self.t[self.p+1]==Token::Eq {self.take();self.take();return Ok(Stmt::Assign(name,self.expr()?));}
@@ -148,6 +149,7 @@ impl Vm {
             Expr::Call(n,a)=>{
                 if n=="range" {let x=self.eval(&a[0])?;let y=self.eval(&a[1])?;let (x,y)=(num(x)? as i64,num(y)? as i64);return Ok(Value::Array((x..y).map(|n|Value::Num(n as f64)).collect()));}
                 if n=="str" {return Ok(Value::Str(self.eval(&a[0])?.to_string()));}
+                if n=="len" {let v=self.eval(&a[0])?;return Ok(Value::Num(match v{Value::Str(x)=>x.chars().count() as f64,Value::Array(x)=>x.len() as f64,_=>return Err("len expects string or array".into())}));}
                 let f=self.fns.get(n).cloned().ok_or_else(||format!("undefined function {}",n))?;
                 if f.args.len()!=a.len(){return Err(format!("{} expects {} arguments",n,f.args.len()))}
                 let old=self.vars.clone();for(i,k)in f.args.iter().enumerate(){self.vars.insert(k.clone(),self.eval(&a[i])?);}
@@ -170,6 +172,7 @@ impl Vm {
             Stmt::Print(e)=>println!("{}",self.eval(e)?), Stmt::Return(e)=>return Ok(Some(self.eval(e)?)),
             Stmt::If(c,a,b)=>{if self.eval(c)?.truth(){if let Some(v)=self.exec(a)?{return Ok(Some(v))}}else if let Some(v)=self.exec(b)?{return Ok(Some(v))}},
             Stmt::While(c,b)=>{while self.eval(c)?.truth(){if let Some(v)=self.exec(b)?{return Ok(Some(v))}}},
+            Stmt::For(n,it,b)=>{let v=self.eval(it)?;match v{Value::Array(xs)=>{for x in xs{self.vars.insert(n.clone(),x);if let Some(v)=self.exec(b)?{return Ok(Some(v))}}},_=>return Err("for expects an array or range".into())}},
             Stmt::Fn(n,a,b)=>{self.fns.insert(n.clone(),Function{args:a.clone(),body:b.clone()});}
         }}Ok(None)
     }
