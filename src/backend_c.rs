@@ -74,7 +74,9 @@ fn emit_code(code: &[Instr], current_fn: Option<&Function>) -> Result<String, St
             Instr::Call { name, .. } if name == "try" => return Err("native C backend: Option/Result try propagation is currently VM/SSA only".into()),
             Instr::Call { name, argc: 1, .. } if name == "print" => c.push_str(r#"  printf("%.15g\n", stack[--sp]);\n"#),
             Instr::Call { name, argc, result } => {
-                if name == "array" || name == "for_each" { return Err(format!("native C backend does not support builtin {}", name)); }
+                if matches!(name.as_str(), "array" | "map" | "set" | "index" | "for_each" | "map_get" | "map_has" | "map_set" | "map_remove" | "set_add" | "set_has" | "set_remove") {
+                    return Err(format!("native C backend does not support builtin {}", name));
+                }
                 let args: Vec<String> = (0..*argc).map(|i| format!("stack[sp-{}]", argc-i)).collect();
                 c.push_str(&format!("  {{ double r = {}({}); sp -= {}; ", c_ident(name), args.join(", "), argc));
                 if !matches!(result, crate::ir::IrType::Null) { c.push_str("stack[sp++] = r; "); }
