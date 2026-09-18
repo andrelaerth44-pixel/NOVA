@@ -119,7 +119,16 @@ impl Parser {
                 Ok(Stmt::Fn(n,generics,a,ret,self.block()?))
             },
             Token::Ident(n)=>{
-                let name=n.clone(); if self.p+1<self.t.len() && self.t[self.p+1]==Token::Eq {self.take();self.take();return Ok(Stmt::Assign(name,self.expr()?));}
+                let name=n.clone();
+                if self.eat(&Token::Colon) {
+                    let ty=self.type_name()?;
+                    if !self.eat(&Token::Eq){return Err("expected =".into())}
+                    return Ok(Stmt::Let(name,Some(ty),self.expr()?));
+                }
+                if self.p<self.t.len() && self.t[self.p]==Token::Eq {
+                    self.take();
+                    return Ok(Stmt::Assign(name,self.expr()?));
+                }
                 Ok(Stmt::Expr(self.expr()?))
             },
             _=>Ok(Stmt::Expr(self.expr()?))
