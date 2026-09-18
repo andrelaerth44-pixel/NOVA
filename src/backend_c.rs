@@ -14,6 +14,7 @@ fn emit_code(code: &[Instr], current_fn: Option<&Function>) -> Result<String, St
     for ins in code {
         match ins {
             Instr::ConstNumber(_) | Instr::ConstBool(_) | Instr::ConstNull | Instr::Load(_) => stack += 1,
+            Instr::StructInit { .. } | Instr::FieldGet { .. } => return Err("native C backend: struct code generation is not implemented yet".into()),
             Instr::ConstString(_) => return Err("native C backend currently supports numeric/bool IR only".into()),
             Instr::Store(_) | Instr::Pop => { if stack == 0 { return Err("IR stack underflow".into()); } stack -= 1; }
             Instr::Unary { .. } => {}
