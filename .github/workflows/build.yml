@@ -116,6 +116,19 @@ jobs:
           grep -Fxq "1" /tmp/closures.out
           grep -Fxq "2" /tmp/closures.out
 
+      - name: Iterator smoke test
+        shell: bash
+        run: |
+          cargo run --release -- check examples/iterators.nova
+          cargo run --release -- run examples/iterators.nova > /tmp/iterators.out
+          grep -Fxq "true" /tmp/iterators.out
+          grep -Fxq "1" /tmp/iterators.out
+          grep -Fxq "2" /tmp/iterators.out
+          grep -Fxq "1" /tmp/iterators.out
+          grep -Fxq "2" /tmp/iterators.out
+          grep -Fxq "18" /tmp/iterators.out
+          grep -Fxq "N" /tmp/iterators.out
+
       - name: Try propagation smoke test
         shell: bash
         run: |
