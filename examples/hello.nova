@@ -4,9 +4,20 @@ fn add(a, b) {
 
 values = [1, 2, 3, 4]
 total = 0
+
 for x in values {
     total = total + x
 }
+
 print "sum=" + str(total)
 print len(values)
 print add(20, 22)
+
+match total {
+    10 {
+        print "ten"
+    }
+    else {
+        print "other"
+    }
+}
