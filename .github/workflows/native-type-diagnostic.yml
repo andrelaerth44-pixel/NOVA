@@ -39,7 +39,7 @@ jobs:
               Failed(string)
           }
 
-          status = Status.Failed("oops")
+          status = Failed("oops")
           match status {
               Failed(message) {
                   print message
