@@ -1,0 +1,7 @@
+fn add(a, b) {
+    return a + b
+}
+
+name = "NOVA"
+print "Hello " + name
+print add(20, 22)
