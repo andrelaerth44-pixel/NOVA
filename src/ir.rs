@@ -6,6 +6,7 @@ pub enum IrType {
     Null,
     Any,
     Struct(String),
+    Enum(String),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -173,6 +174,7 @@ impl IrBuilder {
             crate::Value::Bool(_) => IrType::Bool,
             crate::Value::Array(_) => IrType::Any,
             crate::Value::Struct { name, .. } => IrType::Struct(name.clone()),
+            crate::Value::Enum { name, .. } => IrType::Enum(name.clone()),
             crate::Value::Null => IrType::Null,
         }
     }
@@ -188,6 +190,7 @@ impl IrBuilder {
                     crate::Value::Null => self.push(Instr::ConstNull),
                     crate::Value::Array(_) => self.push(Instr::Call { name: "array".into(), argc: 0, result: IrType::Any }),
                     crate::Value::Struct { name, fields } => self.push(Instr::StructInit { name: name.clone(), fields: fields.keys().cloned().collect() }),
+                    crate::Value::Enum { name, variant, .. } => self.push(Instr::Call { name: format!("{}.{}", name, variant), argc: 0, result: IrType::Enum(name.clone()) }),
                 }
                 ty
             }
@@ -213,6 +216,7 @@ impl IrBuilder {
                 self.push(Instr::Binary { op: name, ty: ty.clone() });
                 ty
             }
+            crate::Expr::EnumInit(name, variant, value) => { if let Some(v)=value { self.lower_expr(v); } self.push(Instr::Call { name: format!("{}.{}",name,variant), argc: value.is_some() as usize, result: IrType::Enum(name.clone()) }); IrType::Enum(name.clone()) }
             crate::Expr::Field(base, field) => {
                 let ty = self.lower_expr(base);
                 self.push(Instr::FieldGet { field: field.clone(), ty: ty.clone() });
@@ -287,7 +291,7 @@ impl IrBuilder {
                 }
                 for x in otherwise { self.lower_stmt(x); }
             }
-            crate::Stmt::StructDecl(_, _) => {}
+            crate::Stmt::StructDecl(_, _) | crate::Stmt::EnumDecl(_, _) => {}
             crate::Stmt::Fn(n,args,ret,body) => {
                 let params=args.iter().map(|(name,t)| (name.clone(), match t {
                     crate::types::Type::Bool=>IrType::Bool,
