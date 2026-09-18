@@ -191,7 +191,6 @@ pub fn lower_function(name: &str, args: &[(String, crate::types::Type)], ret: &c
     let mut params = Vec::new();
     for (arg, ty) in args {
         let id = b.fresh();
-        b.blocks[0].params.push(id);
         b.bind(arg.clone(), id);
         params.push((arg.clone(), type_to_ir(ty), id));
     }
