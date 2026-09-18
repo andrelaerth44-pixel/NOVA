@@ -211,8 +211,8 @@ impl Vm {
             }
             Expr::Call(n, a) => {
                 if let Some((enum_name, payload)) = self.enums.iter().find_map(|(enum_name, variants)| variants.get(n).map(|p| (enum_name.clone(), p.clone()))) {
-                    if a.len() != usize::from(payload.is_some()) {
-                        return Err(format!("{} expects {} arguments", n, usize::from(payload.is_some())).into());
+                    if a.len() != if payload.is_some() { 1 } else { 0 } {
+                        return Err(format!("{} expects {} arguments", n, if payload.is_some() { 1 } else { 0 }).into());
                     }
                     let value = if payload.is_some() { Some(Box::new(self.eval(&a[0])?)) } else { None };
                     return Ok(Value::Enum { name: enum_name, variant: n.clone(), value });
