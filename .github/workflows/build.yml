@@ -49,8 +49,10 @@ jobs:
         shell: bash
         run: |
           cargo run --release -- ssa examples/ssa.nova > /tmp/ssa.out
-          grep -q '^fn <main>' /tmp/ssa.out
-          grep -q 'Phi' /tmp/ssa.out
+          test -s /tmp/ssa.out
+          cat /tmp/ssa.out
+          grep -Fq 'fn <main>' /tmp/ssa.out
+          grep -Fq 'Phi' /tmp/ssa.out
           cargo run --release -- check examples/ssa.nova
 
       - name: SSA loop smoke test
