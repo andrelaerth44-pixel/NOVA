@@ -1,7 +1,7 @@
 #[derive(Clone, Debug)]
 pub enum Expr {
     Val(Value), Var(String), Unary(Token, Box<Expr>),
-    Binary(Box<Expr>, Token, Box<Expr>), Call(String, Vec<Expr>), CallValue(Box<Expr>, Vec<Expr>),
+    Binary(Box<Expr>, Token, Box<Expr>), Try(Box<Expr>), Call(String, Vec<Expr>), CallValue(Box<Expr>, Vec<Expr>),
     Array(Vec<Expr>), Field(Box<Expr>, String), Closure(Vec<String>, Vec<Stmt>),
     StructInit(String, Vec<(String, Expr)>),
     EnumInit(String, String, Option<Box<Expr>>),
