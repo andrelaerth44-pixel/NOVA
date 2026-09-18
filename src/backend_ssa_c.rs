@@ -427,11 +427,6 @@ typedef struct NovaEnv NovaEnv;
 typedef struct NovaStruct NovaStruct;
 typedef struct NovaEnum NovaEnum;
 
-typedef struct {
-  const char* name;
-  NovaValue value;
-} NovaField;
-
 struct NovaValue {
   NovaTag tag;
   double number;
