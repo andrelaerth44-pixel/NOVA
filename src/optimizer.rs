@@ -68,7 +68,7 @@ fn optimize_block(code: Vec<Instr>) -> Vec<Instr> {
 
 pub fn validate_ssa(functions: &[SsaFunction]) -> Result<(), String> {
     for function in functions {
-        function.validate()?;
+        function.verify_operands()?;
     }
     Ok(())
 }
