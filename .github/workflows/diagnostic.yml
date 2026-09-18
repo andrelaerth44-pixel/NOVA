@@ -11,27 +11,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Capture workflow preflight
+      - name: Reproduce format sequence
         shell: bash
         run: |
           set +e
-          cargo fmt -- --check > /tmp/fmt.log 2>&1; a=$?
-          cargo test > /tmp/test.log 2>&1; b=$?
-          cargo build --release > /tmp/build.log 2>&1; c=$?
-          cargo run --release -- version > /tmp/version.log 2>&1; d=$?
+          cargo fmt > /tmp/fmt-run.log 2>&1; a=$?
+          cargo fmt -- --check > /tmp/fmt-check.log 2>&1; b=$?
+          cargo test > /tmp/test.log 2>&1; c=$?
           {
-            echo "fmt=$a test=$b build=$c version=$d"
-            echo "===== fmt ====="
-            cat /tmp/fmt.log
-            echo "===== test tail ====="
+            echo "cargo_fmt=$a cargo_fmt_check=$b cargo_test=$c"
+            echo "===== cargo fmt ====="
+            cat /tmp/fmt-run.log
+            echo "===== cargo fmt check ====="
+            cat /tmp/fmt-check.log
+            echo "===== cargo test tail ====="
             tail -n 40 /tmp/test.log
-            echo "===== build tail ====="
-            tail -n 30 /tmp/build.log
-            echo "===== version ====="
-            cat /tmp/version.log
           } > /tmp/diagnostic.log
       - name: Upload diagnostic
         uses: actions/upload-artifact@v4
         with:
-          name: nova-preflight
+          name: nova-format-sequence
           path: /tmp/diagnostic.log
