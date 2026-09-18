@@ -10,12 +10,27 @@ impl Parser {
     pub fn program(&mut self)->Result<Vec<Stmt>,String>{let mut v=vec![];while *self.peek()!=Token::Eof{v.push(self.stmt()?);self.eat(&Token::Semi);}Ok(v)}
     fn type_name(&mut self)->Result<crate::types::Type,String>{
         match self.take(){
-            Token::Ident(n)=>match n.as_str(){
-                "i32"=>Ok(crate::types::Type::I32),"i64"=>Ok(crate::types::Type::I64),
-                "f32"=>Ok(crate::types::Type::F32),"f64"=>Ok(crate::types::Type::F64),
-                "bool"=>Ok(crate::types::Type::Bool),"string"=>Ok(crate::types::Type::String),
-                "void"=>Ok(crate::types::Type::Void),"any"=>Ok(crate::types::Type::Any),
-                _=>Ok(crate::types::Type::Struct(n))
+            Token::Ident(n)=>{
+                let base=match n.as_str(){
+                    "i32"=>crate::types::Type::I32,"i64"=>crate::types::Type::I64,
+                    "f32"=>crate::types::Type::F32,"f64"=>crate::types::Type::F64,
+                    "bool"=>crate::types::Type::Bool,"string"=>crate::types::Type::String,
+                    "void"=>crate::types::Type::Void,"any"=>crate::types::Type::Any,
+                    _=>crate::types::Type::Struct(n.clone())
+                };
+                if self.eat(&Token::Lt){
+                    let mut args=Vec::new();
+                    if !self.eat(&Token::Gt){
+                        loop{
+                            args.push(self.type_name()?);
+                            if self.eat(&Token::Gt){break}
+                            if !self.eat(&Token::Comma){return Err("expected , in generic type".into())}
+                        }
+                    }
+                    let name=match base { crate::types::Type::Struct(x)=>x, _=>base.name() };
+                    return Ok(crate::types::Type::Generic(name,args));
+                }
+                Ok(base)
             },
             Token::LBracket=>{let t=self.type_name()?;if !self.eat(&Token::RBracket){return Err("expected ] in array type".into())}Ok(crate::types::Type::Array(Box::new(t)))},
             t=>Err(format!("expected type, got {:?}",t))
