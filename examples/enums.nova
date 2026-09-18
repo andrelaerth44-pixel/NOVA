@@ -8,8 +8,11 @@ result = Some(42)
 ok = Ok("done")
 
 match result {
-    Some(42) {
-        print "some"
+    Some(value) {
+        print value
+    },
+    None {
+        print "none"
     },
     else {
         print "other"
