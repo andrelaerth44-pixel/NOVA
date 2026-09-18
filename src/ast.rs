@@ -13,7 +13,8 @@ pub enum Stmt {
 #[derive(Clone, Debug)]
 pub enum Value { Num(f64), Str(String), Bool(bool), Array(Vec<Value>), Null }
 impl Value {
-    fn equals(&self, other:&Value)->bool { match (self, other) { (Value::Num(a),Value::Num(b))=>a==b,(Value::Str(a),Value::Str(b))=>a==b,(Value::Bool(a),Value::Bool(b))=>a==b,(Value::Null,Value::Null)=>true,(Value::Array(a),Value::Array(b))=>a.len()==b.len()&&a.iter().zip(b).all(|(x,y)|x.equals(y)), _=>false } }\n    fn truth(&self)->bool { match self { Value::Bool(x)=>*x, Value::Num(x)=>*x!=0.0, Value::Str(x)=>!x.is_empty(), Value::Array(x)=>!x.is_empty(), Value::Null=>false } }
+    fn equals(&self, other:&Value)->bool { match (self, other) { (Value::Num(a),Value::Num(b))=>a==b,(Value::Str(a),Value::Str(b))=>a==b,(Value::Bool(a),Value::Bool(b))=>a==b,(Value::Null,Value::Null)=>true,(Value::Array(a),Value::Array(b))=>a.len()==b.len()&&a.iter().zip(b).all(|(x,y)|x.equals(y)), _=>false } }
+    fn truth(&self)->bool { match self { Value::Bool(x)=>*x, Value::Num(x)=>*x!=0.0, Value::Str(x)=>!x.is_empty(), Value::Array(x)=>!x.is_empty(), Value::Null=>false } }
 }
 impl std::fmt::Display for Value {
     fn fmt(&self,f:&mut std::fmt::Formatter<'_>)->std::fmt::Result {
