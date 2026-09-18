@@ -3,6 +3,14 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub type EnvRef = Rc<RefCell<EnvFrame>>;
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum MapKey {
+    Number(u64),
+    String(String),
+    Bool(bool),
+    Null,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct EnvFrame {
     pub values: HashMap<String, Value>,
@@ -36,6 +44,7 @@ pub enum Pattern {
 #[derive(Clone, Debug)]
 pub enum Value {
     Num(f64), Str(String), Bool(bool), Array(Vec<Value>),
+    Map(HashMap<MapKey, Value>), Set(std::collections::HashSet<MapKey>),
     Struct { name: String, fields: std::collections::HashMap<String, Value> },
     Enum { name: String, variant: String, value: Option<Box<Value>> },
     Closure { args: Vec<String>, body: Vec<Stmt>, env: EnvRef },
@@ -49,6 +58,10 @@ impl Value {
             (Value::Bool(a),Value::Bool(b))=>a==b,
             (Value::Null,Value::Null)=>true,
             (Value::Array(a),Value::Array(b))=>a.len()==b.len()&&a.iter().zip(b).all(|(x,y)|x.equals(y)),
+            (Value::Map(a),Value::Map(b)) => {
+                a.len()==b.len() && a.iter().all(|(k,v)| b.get(k).is_some_and(|x| v.equals(x)))
+            },
+            (Value::Set(a),Value::Set(b)) => a == b,
             (Value::Struct{name:an,fields:af},Value::Struct{name:bn,fields:bf})=>an==bn&&af.len()==bf.len()&&af.iter().all(|(k,v)|bf.get(k).is_some_and(|x|v.equals(x))),
             (Value::Enum{name:an,variant:av,value:ax},Value::Enum{name:bn,variant:bv,value:bx})=>an==bn&&av==bv&&match (ax,bx){(None,None)=>true,(Some(a),Some(b))=>a.equals(b),_=>false},
             (Value::Closure{..},Value::Closure{..})=>false,
@@ -58,7 +71,7 @@ impl Value {
     pub fn truth(&self)->bool {
         match self {
             Value::Bool(x)=>*x, Value::Num(x)=>*x!=0.0, Value::Str(x)=>!x.is_empty(),
-            Value::Array(x)=>!x.is_empty(), Value::Struct{..}=>true, Value::Enum{..}=>true, Value::Closure{..}=>true, Value::Null=>false
+            Value::Array(x)=>!x.is_empty(), Value::Map(x)=>!x.is_empty(), Value::Set(x)=>!x.is_empty(), Value::Struct{..}=>true, Value::Enum{..}=>true, Value::Closure{..}=>true, Value::Null=>false
         }
     }
 }
@@ -73,5 +86,24 @@ impl std::fmt::Display for Value {
             Value::Closure{..}=>write!(f,"<closure>"),
             Value::Null=>write!(f,"null")
         }
+    }
+}
+
+pub fn to_map_key(value: &Value) -> Option<MapKey> {
+    match value {
+        Value::Num(x) => Some(MapKey::Number(x.to_bits())),
+        Value::Str(x) => Some(MapKey::String(x.clone())),
+        Value::Bool(x) => Some(MapKey::Bool(*x)),
+        Value::Null => Some(MapKey::Null),
+        _ => None,
+    }
+}
+
+fn display_map_key(key: &MapKey) -> String {
+    match key {
+        MapKey::Number(bits) => f64::from_bits(*bits).to_string(),
+        MapKey::String(value) => format!(""{}"", value),
+        MapKey::Bool(value) => value.to_string(),
+        MapKey::Null => "null".into(),
     }
 }
