@@ -226,16 +226,27 @@ impl Checker {
     fn check_block(&mut self, body: &[Stmt], expected_return: Option<types::Type>) {
         for s in body {
             match s {
-                Stmt::Let(n, explicit, e) | Stmt::Assign(n, e) => {
+                Stmt::Let(n, explicit, e) => {
                     let t = self.infer(e);
                     if let Some(expected) = explicit {
                         if !expected.compatible(&t) { self.error(format!("type annotation for {} expects {}, got {}", n, expected.name(), t.name())); }
+                        self.define(n.clone(), expected.clone());
+                    } else {
+                        self.define(n.clone(), t);
                     }
-                    if matches!(s, Stmt::Assign(_, _)) && !self.contains(n) { self.error(format!("assignment to undefined variable {}", n)); }
-                    if let Some(old) = self.lookup(n) {
-                        if !old.compatible(&t) { self.error(format!("cannot assign {} to {} (expected {})", t.name(), n, old.name())); }
+                }
+                Stmt::Assign(n, e) => {
+                    let t = self.infer(e);
+                    let old = match self.lookup(n) {
+                        Some(t) => t,
+                        None => {
+                            self.error(format!("assignment to undefined variable {}", n));
+                            types::Type::Unknown
+                        }
+                    };
+                    if !old.compatible(&t) {
+                        self.error(format!("cannot assign {} to {} (expected {})", t.name(), n, old.name()));
                     }
-                    self.define(n.clone(), t);
                 }
                 Stmt::Print(e) | Stmt::Expr(e) => { self.infer(e); }
                 Stmt::Return(e) => {
