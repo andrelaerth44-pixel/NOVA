@@ -63,7 +63,7 @@ impl Vm {
             Stmt::For(n,it,b)=>{let v=self.eval(it)?;match v{Value::Array(xs)=>{for x in xs{self.vars.insert(n.clone(),x);if let Some(v)=self.exec(b)?{return Ok(Some(v))}}},_=>return Err("for expects an array or range".into())}},
             Stmt::Match(value,arms,otherwise)=>{let v=self.eval(value)?;let mut done=false;for (pat,body) in arms{if self.eval(pat)?.to_string()==v.to_string(){if let Some(r)=self.exec(body)?{return Ok(Some(r))}done=true;break}}if !done{if let Some(r)=self.exec(otherwise)?{return Ok(Some(r))}}},
             Stmt::Import(path)=>{ let resolved={let p=std::path::Path::new(path);if p.is_absolute(){p.to_path_buf()}else if let Some(base)=self.module_stack.last(){base.join(p)}else{p.to_path_buf()}}; let key=resolved.to_string_lossy().to_string(); if !self.modules.contains_key(&key){let src=fs::read_to_string(&resolved).map_err(|e|format!("cannot import {}: {}",resolved.display(),e))?;let toks=lex(&src)?;let mut p=Parser::new(toks);let program=p.program()?;self.modules.insert(key.clone(),true);let parent=resolved.parent().map(|x|x.to_path_buf()).unwrap_or_else(||std::path::PathBuf::from("."));self.module_stack.push(parent);let r=self.exec(&program);self.module_stack.pop();r?;}},
-            Stmt::Fn(n,a,b)=>{self.fns.insert(n.clone(),Function{args:a.clone(),body:b.clone()});}
+            Stmt::Fn(n,a,_,b)=>{self.fns.insert(n.clone(),Function{args:a.iter().map(|x|x.0.clone()).collect(),body:b.clone()});}
         }}Ok(None)
     }
 }
@@ -225,6 +225,9 @@ impl Checker {
             match s {
                 Stmt::Let(n, e) | Stmt::Assign(n, e) => {
                     let t = self.infer(e);
+                    if let Some(expected) = explicit {
+                        if !expected.compatible(&t) { self.error(format!("type annotation for {} expects {}, got {}", n, expected.name(), t.name())); }
+                    }
                     if matches!(s, Stmt::Assign(_, _)) && !self.contains(n) { self.error(format!("assignment to undefined variable {}", n)); }
                     if let Some(old) = self.lookup(n) {
                         if !old.compatible(&t) { self.error(format!("cannot assign {} to {} (expected {})", t.name(), n, old.name())); }
@@ -281,11 +284,11 @@ impl Checker {
                     self.check_block(otherwise, expected_return.clone());
                 }
                 Stmt::Import(_) => {}
-                Stmt::Fn(n, args, body) => {
+                Stmt::Fn(n, args, ret, body) => {
                     if self.fns.contains_key(n) { self.error(format!("duplicate function {}", n)); continue; }
-                    self.fns.insert(n.clone(), StaticFn { args: args.iter().map(|_| types::Type::Any).collect(), ret: types::Type::Any });
+                    self.fns.insert(n.clone(), StaticFn { args: args.iter().map(|x| x.1.clone()).collect(), ret: ret.clone() });
                     self.push_scope();
-                    for a in args { self.define(a.clone(), types::Type::Any); }
+                    for (a, t) in args { self.define(a.clone(), t.clone()); }
                     self.check_block(body, Some(types::Type::Any));
                     self.pop_scope();
                 }
