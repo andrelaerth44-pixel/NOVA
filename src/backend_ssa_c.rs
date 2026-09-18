@@ -432,6 +432,20 @@ typedef struct {
   NovaValue value;
 } NovaField;
 
+struct NovaValue {
+  NovaTag tag;
+  double number;
+  const char* string;
+  NovaClosure* closure;
+  NovaStruct* structure;
+  NovaEnum* enumeration;
+};
+
+typedef struct {
+  const char* name;
+  NovaValue value;
+} NovaField;
+
 struct NovaStruct {
   char* name;
   size_t len;
@@ -444,15 +458,6 @@ struct NovaEnum {
   NovaValue payload;
 };
 
-struct NovaValue {
-  NovaTag tag;
-  double number;
-  const char* string;
-  NovaClosure* closure;
-  NovaStruct* structure;
-  NovaEnum* enumeration;
-};
-
 struct NovaEnv {
   size_t len;
   NovaValue slots[32];
@@ -462,6 +467,14 @@ struct NovaClosure {
   NovaEnv* env;
   NovaValue (*invoke)(NovaEnv*, NovaValue*, size_t);
 };
+
+static char* nova_dup(const char* value) {
+  size_t len = strlen(value) + 1;
+  char* out = (char*)malloc(len);
+  if (!out) return NULL;
+  memcpy(out, value, len);
+  return out;
+}
 
 static NovaValue nova_null(void) {
   NovaValue v = { NOVA_NULL, 0, NULL, NULL, NULL, NULL };
@@ -491,8 +504,8 @@ static NovaValue nova_struct_value(NovaStruct* x) {
 static NovaValue nova_enum_value(const char* name, const char* variant, NovaValue payload) {
   NovaEnum* e = (NovaEnum*)calloc(1, sizeof(NovaEnum));
   if (!e) return nova_null();
-  e->name = strdup(name);
-  e->variant = strdup(variant);
+  e->name = nova_dup(name);
+  e->variant = nova_dup(variant);
   e->payload = payload;
   NovaValue v = { NOVA_ENUM, 0, NULL, NULL, NULL, e };
   return v;
@@ -536,7 +549,7 @@ static int nova_equal(NovaValue a, NovaValue b) {
 static NovaStruct* nova_make_empty_struct(const char* name) {
   NovaStruct* s = (NovaStruct*)calloc(1, sizeof(NovaStruct));
   if (!s) return NULL;
-  s->name = strdup(name);
+  s->name = nova_dup(name);
   return s;
 }
 
