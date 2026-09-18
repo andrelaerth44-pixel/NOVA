@@ -226,9 +226,13 @@ impl Builder {
                 })
             },
             Expr::CallValue(callee, args) => {
-                let mut values=vec![self.expr(callee)];
-                values.extend(args.iter().map(|x| self.expr(x)));
-                self.emit(SsaInstr::Call { name: "call_value".into(), args: values, result: IrType::Any })
+                let callee = self.expr(callee);
+                let values = args.iter().map(|x| self.expr(x)).collect();
+                self.emit(SsaInstr::CallIndirect {
+                    callee,
+                    args: values,
+                    result: IrType::Any,
+                })
             }
             Expr::Try(inner) => {
                 let value = self.expr(inner);
