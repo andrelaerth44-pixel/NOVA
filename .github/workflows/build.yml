@@ -1,0 +1,26 @@
+name: NOVA build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - run: cargo run --release -- version
+      - name: Language smoke test
+        shell: bash
+        run: |
+          cat > /tmp/hello.nova <<'EOF'
+          fn add(a, b) {
+              return a + b
+          }
+          name = "NOVA"
+          print "Hello " + name
+          print add(20, 22)
+          EOF
+          cargo run --release -- run /tmp/hello.nova
