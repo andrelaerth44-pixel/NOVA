@@ -24,6 +24,8 @@ impl Parser {
     fn stmt(&mut self)->Result<Stmt,String>{
         if let Token::Ident(word) = self.peek() {
             if word == "struct" {
+                // struct handled below
+
                 self.take();
                 let name = match self.take() { Token::Ident(x)=>x, _=>return Err("expected struct name".into()) };
                 if !self.eat(&Token::LBrace) { return Err("expected { after struct name".into()); }
@@ -38,6 +40,19 @@ impl Parser {
                 }
                 if !self.eat(&Token::RBrace) { return Err("expected } after struct".into()); }
                 return Ok(Stmt::StructDecl(name, fields));
+            }
+            if word == "enum" {
+                self.take();
+                let name = match self.take() { Token::Ident(x)=>x, _=>return Err("expected enum name".into()) };
+                if !self.eat(&Token::LBrace) { return Err("expected { after enum name".into()); }
+                let mut variants = Vec::new();
+                while *self.peek()!=Token::RBrace && *self.peek()!=Token::Eof {
+                    let variant = match self.take() { Token::Ident(x)=>x, _=>return Err("expected enum variant name".into()) };
+                    let payload = if self.eat(&Token::LParen) { let t=self.type_name()?; if !self.eat(&Token::RParen){return Err("expected ) after enum payload".into())} Some(t) } else { None };
+                    variants.push((variant,payload)); self.eat(&Token::Comma); self.eat(&Token::Semi);
+                }
+                if !self.eat(&Token::RBrace) { return Err("expected } after enum".into()); }
+                return Ok(Stmt::EnumDecl(name, variants));
             }
         }
         match self.peek() {
