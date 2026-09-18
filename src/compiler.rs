@@ -258,3 +258,45 @@ mod call_abi_tests {
         }));
     }
 }
+
+
+#[cfg(test)]
+mod closure_function_tests {
+    use super::*;
+
+    #[test]
+    fn nested_closure_is_materialized_as_named_ssa_function() {
+        let source = r#"
+            fn make_counter() {
+                value = 0
+                return fn() {
+                    value = value + 1
+                    return value
+                }
+            }
+
+            counter = make_counter()
+            print counter()
+        "#;
+
+        let compilation = compile_source(source).expect("closure source should compile");
+        let closure_function = compilation
+            .ssa_functions
+            .iter()
+            .find(|function| function.name == "make_counter__closure0")
+            .expect("nested closure function missing");
+
+        assert_eq!(closure_function.params.len(), 1);
+        assert_eq!(closure_function.params[0].0, "value");
+        assert!(compilation.ssa_functions.iter().any(|function| {
+            function.blocks.iter().any(|block| {
+                block.instrs.iter().any(|(_, instr)| matches!(
+                    instr,
+                    crate::ir::SsaInstr::Closure { function, captures, .. }
+                        if function == "make_counter__closure0"
+                            && captures.iter().any(|(name, _)| name == "value")
+                ))
+            })
+        }));
+    }
+}
