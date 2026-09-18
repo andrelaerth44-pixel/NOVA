@@ -38,6 +38,7 @@ impl Builder {
             Value::Str(x) => SsaValue::String(x.clone()),
             Value::Bool(x) => SsaValue::Bool(*x),
             Value::Null => SsaValue::Null,
+            Value::Struct { name, .. } => SsaValue::Struct { name: name.clone() },
             Value::Array(_) => SsaValue::Null,
         };
         self.emit(SsaInstr::Const(sv))
@@ -67,6 +68,14 @@ impl Builder {
                     _ => IrType::Any,
                 };
                 self.emit(SsaInstr::Binary { op: format!("{:?}", op), left, right, ty })
+            }
+            Expr::Field(base, field) => {
+                let base = self.expr(base);
+                self.emit(SsaInstr::FieldGet { base, field: field.clone(), ty: IrType::Any })
+            }
+            Expr::StructInit(name, fields) => {
+                let fields = fields.iter().map(|(field, value)| (field.clone(), self.expr(value))).collect();
+                self.emit(SsaInstr::StructInit { name: name.clone(), fields })
             }
             Expr::Call(name, args) => {
                 let values = args.iter().map(|x| self.expr(x)).collect();
@@ -226,7 +235,7 @@ impl Builder {
                 if self.blocks[self.current].terminator.is_none() { self.blocks[self.current].terminator = Some(Terminator::Jump(exit)); }
                 self.set_current(exit);
             }
-            Stmt::Import(_) | Stmt::Fn(..) => {}
+            Stmt::Import(_) | Stmt::StructDecl(_, _) | Stmt::Fn(..) => {}
         }
     }
 }
@@ -253,6 +262,7 @@ fn type_to_ir(t: &crate::types::Type) -> IrType {
         crate::types::Type::Bool => IrType::Bool,
         crate::types::Type::String => IrType::String,
         crate::types::Type::Null | crate::types::Type::Void => IrType::Null,
+        crate::types::Type::Struct(name) => IrType::Struct(name.clone()),
         _ => IrType::Any,
     }
 }
