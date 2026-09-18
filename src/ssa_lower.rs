@@ -39,6 +39,7 @@ impl Builder {
             Value::Bool(x) => SsaValue::Bool(*x),
             Value::Null => SsaValue::Null,
             Value::Struct { name, .. } => SsaValue::Struct { name: name.clone() },
+            Value::Enum { name, .. } => SsaValue::Struct { name: name.clone() },
             Value::Array(_) => SsaValue::Null,
         };
         self.emit(SsaInstr::Const(sv))
@@ -69,6 +70,7 @@ impl Builder {
                 };
                 self.emit(SsaInstr::Binary { op: format!("{:?}", op), left, right, ty })
             }
+            Expr::EnumInit(name, variant, value) => { let args = value.as_ref().map(|v| vec![self.expr(v)]).unwrap_or_default(); self.emit(SsaInstr::Call { name: format!("{}.{}",name,variant), args, result: IrType::Enum(name.clone()) }) }
             Expr::Field(base, field) => {
                 let base = self.expr(base);
                 self.emit(SsaInstr::FieldGet { base, field: field.clone(), ty: IrType::Any })
@@ -235,7 +237,7 @@ impl Builder {
                 if self.blocks[self.current].terminator.is_none() { self.blocks[self.current].terminator = Some(Terminator::Jump(exit)); }
                 self.set_current(exit);
             }
-            Stmt::Import(_) | Stmt::StructDecl(_, _) | Stmt::Fn(..) => {}
+            Stmt::Import(_) | Stmt::StructDecl(_, _) | Stmt::EnumDecl(_, _) | Stmt::Fn(..) => {}
         }
     }
 }
