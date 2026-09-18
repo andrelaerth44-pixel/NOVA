@@ -10,7 +10,7 @@ pub enum Expr {
 pub enum Stmt {
     Expr(Expr), Let(String, Option<crate::types::Type>, Expr), Assign(String, Expr), Print(Expr),
     If(Expr, Vec<Stmt>, Vec<Stmt>), While(Expr, Vec<Stmt>), For(String, Expr, Vec<Stmt>), Import(String), Match(Expr, Vec<(Pattern, Vec<Stmt>)>, Vec<Stmt>),
-    Fn(String, Vec<(String, crate::types::Type)>, crate::types::Type, Vec<Stmt>), Return(Expr),
+    Fn(String, Vec<String>, Vec<(String, crate::types::Type)>, crate::types::Type, Vec<Stmt>), Return(Expr),
     StructDecl(String, Vec<(String, crate::types::Type)>),
     EnumDecl(String, Vec<(String, Option<crate::types::Type>)>),
 }
