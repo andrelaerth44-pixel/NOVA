@@ -138,18 +138,53 @@ impl Builder {
                 let header = self.new_block();
                 let loop_body = self.new_block();
                 let exit = self.new_block();
+                let incoming = self.vars.last().cloned().unwrap_or_default();
+
                 self.blocks[preheader].terminator = Some(Terminator::Jump(header));
                 self.set_current(header);
+
+                let mut phis = Vec::<(String, ValueId)>::new();
+                for (name, value) in incoming.iter() {
+                    let phi = self.fresh();
+                    self.blocks[header].instrs.push((phi, SsaInstr::Phi {
+                        incomings: vec![(preheader, *value), (loop_body, *value)],
+                        ty: IrType::Any,
+                    }));
+                    self.bind(name.clone(), phi);
+                    phis.push((name.clone(), phi));
+                }
+
                 let condition = self.expr(cond);
-                self.blocks[header].terminator = Some(Terminator::Branch { condition, then_block: loop_body, else_block: exit });
-                let before = self.vars.last().cloned().unwrap_or_default();
+                self.blocks[header].terminator = Some(Terminator::Branch {
+                    condition,
+                    then_block: loop_body,
+                    else_block: exit,
+                });
+
                 self.set_current(loop_body);
                 self.push_scope();
                 self.stmt_list(body);
-                if self.blocks[self.current].terminator.is_none() { self.blocks[self.current].terminator = Some(Terminator::Jump(header)); }
+                let body_vars = self.vars.last().cloned().unwrap_or_default();
+                if self.blocks[self.current].terminator.is_none() {
+                    self.blocks[self.current].terminator = Some(Terminator::Jump(header));
+                }
+                let backedge = self.current;
                 self.pop_scope();
+
+                for (name, phi) in phis {
+                    let initial = incoming.get(&name).copied().unwrap();
+                    let value = body_vars.get(&name).copied().unwrap_or(initial);
+                    if let Some((_, instr)) = self.blocks[header].instrs.iter_mut().find(|(id, _)| *id == phi) {
+                        if let SsaInstr::Phi { incomings, .. } = instr {
+                            if let Some(slot) = incomings.iter_mut().find(|(pred, _)| *pred == loop_body) {
+                                *slot = (backedge, value);
+                            }
+                        }
+                    }
+                }
+
                 self.set_current(exit);
-                self.vars.last_mut().unwrap().clone_from(&before);
+                self.vars.last_mut().unwrap().clone_from(&incoming);
             }
             Stmt::For(name, iterable, body) => {
                 let iterable_v = self.expr(iterable);
