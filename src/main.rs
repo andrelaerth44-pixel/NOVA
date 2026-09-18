@@ -21,6 +21,7 @@ pub use lexer::lex;
 pub use parser::Parser;
 
 use std::{env, fs};
+use runtime::Vm;
 
 fn main(){
     let a:Vec<String>=env::args().collect();
