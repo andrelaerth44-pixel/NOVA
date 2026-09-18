@@ -8,9 +8,22 @@ impl Parser {
     fn eat(&mut self,x:&Token)->bool{if self.peek()==x{self.p+=1;true}else{false}}
     fn block(&mut self)->Result<Vec<Stmt>,String>{if !self.eat(&Token::LBrace){return Err("expected {".into())}let mut v=vec![];while *self.peek()!=Token::RBrace&&*self.peek()!=Token::Eof{v.push(self.stmt()?);self.eat(&Token::Semi);}if !self.eat(&Token::RBrace){return Err("expected }".into())}Ok(v)}
     pub fn program(&mut self)->Result<Vec<Stmt>,String>{let mut v=vec![];while *self.peek()!=Token::Eof{v.push(self.stmt()?);self.eat(&Token::Semi);}Ok(v)}
+    fn type_name(&mut self)->Result<crate::types::Type,String>{
+        match self.take(){
+            Token::Ident(n)=>match n.as_str(){
+                "i32"=>Ok(crate::types::Type::I32),"i64"=>Ok(crate::types::Type::I64),
+                "f32"=>Ok(crate::types::Type::F32),"f64"=>Ok(crate::types::Type::F64),
+                "bool"=>Ok(crate::types::Type::Bool),"string"=>Ok(crate::types::Type::String),
+                "void"=>Ok(crate::types::Type::Void),"any"=>Ok(crate::types::Type::Any),
+                _=>Err(format!("unknown type {}",n))
+            },
+            Token::LBracket=>{let t=self.type_name()?;if !self.eat(&Token::RBracket){return Err("expected ] in array type".into())}Ok(crate::types::Type::Array(Box::new(t)))},
+            t=>Err(format!("expected type, got {:?}",t))
+        }
+    }
     fn stmt(&mut self)->Result<Stmt,String>{
         match self.peek() {
-            Token::Let=>{self.take();let n=match self.take(){Token::Ident(x)=>x,_=>return Err("expected identifier".into())};if !self.eat(&Token::Eq){return Err("expected =".into())}Ok(Stmt::Let(n,self.expr()?))},
+            Token::Let=>{self.take();let n=match self.take(){Token::Ident(x)=>x,_=>return Err("expected identifier".into())};let ty=if self.eat(&Token::Colon){Some(self.type_name()?)}else{None};if !self.eat(&Token::Eq){return Err("expected =".into())}Ok(Stmt::Let(n,ty,self.expr()?))},
             Token::Print=>{self.take();Ok(Stmt::Print(self.expr()?))},
             Token::Return=>{self.take();Ok(Stmt::Return(self.expr()?))},
             Token::If=>{self.take();let c=self.expr()?;let a=self.block()?;let b=if self.eat(&Token::Else){self.block()?}else{vec![]};Ok(Stmt::If(c,a,b))},
@@ -18,7 +31,7 @@ impl Parser {
             Token::For=>{self.take();let n=match self.take(){Token::Ident(x)=>x,_=>return Err("expected loop variable".into())};if !self.eat(&Token::In){return Err("expected in".into())}let it=self.expr()?;Ok(Stmt::For(n,it,self.block()?))},
             Token::Import=>{self.take();match self.take(){Token::Str(x)=>Ok(Stmt::Import(x)),_=>Err("import expects a string path".into())}},
             Token::Match=>{self.take();let value=self.expr()?;if !self.eat(&Token::LBrace){return Err("expected { after match".into())}let mut arms=vec![];let mut otherwise=vec![];while *self.peek()!=Token::RBrace&&*self.peek()!=Token::Eof{if let Token::Ident(n)=self.peek(){if n=="else"{self.take();otherwise=self.block()?;self.eat(&Token::Comma);continue}}let pat=self.expr()?;if !self.eat(&Token::LBrace){return Err("expected { in match arm".into())}let mut body=vec![];while *self.peek()!=Token::RBrace&&*self.peek()!=Token::Eof{body.push(self.stmt()?);self.eat(&Token::Semi);}if !self.eat(&Token::RBrace){return Err("expected } in match arm".into())}arms.push((pat,body));self.eat(&Token::Comma);}if !self.eat(&Token::RBrace){return Err("expected } after match".into())}Ok(Stmt::Match(value,arms,otherwise))},
-            Token::Fn=>{self.take();let n=match self.take(){Token::Ident(x)=>x,_=>return Err("expected function name".into())};if !self.eat(&Token::LParen){return Err("expected (".into())}let mut a=vec![];if !self.eat(&Token::RParen){loop{a.push(match self.take(){Token::Ident(x)=>x,_=>return Err("expected parameter".into())});if self.eat(&Token::RParen){break}if !self.eat(&Token::Comma){return Err("expected ,".into())}}}Ok(Stmt::Fn(n,a,self.block()?))},
+            Token::Fn=>{self.take();let n=match self.take(){Token::Ident(x)=>x,_=>return Err("expected function name".into())};if !self.eat(&Token::LParen){return Err("expected (".into())}let mut a=vec![];if !self.eat(&Token::RParen){loop{let pn=match self.take(){Token::Ident(x)=>x,_=>return Err("expected parameter".into())};let pt=if self.eat(&Token::Colon){self.type_name()?}else{crate::types::Type::Any};a.push((pn,pt));if self.eat(&Token::RParen){break}if !self.eat(&Token::Comma){return Err("expected ,".into())}}}let ret=if self.eat(&Token::Arrow){self.type_name()?}else{crate::types::Type::Any};Ok(Stmt::Fn(n,a,ret,self.block()?))},
             Token::Ident(n)=>{
                 let name=n.clone(); if self.p+1<self.t.len() && self.t[self.p+1]==Token::Eq {self.take();self.take();return Ok(Stmt::Assign(name,self.expr()?));}
                 Ok(Stmt::Expr(self.expr()?))
