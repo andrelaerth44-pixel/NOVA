@@ -342,7 +342,11 @@ impl Vm {
         for x in s {
             match x {
                 Stmt::Expr(e) => { self.eval(e)?; }
-                Stmt::Let(n, _, e) | Stmt::Assign(n, e) => {
+                Stmt::Let(n, _, e) => {
+                    let v = self.eval(e)?;
+                    self.define(n.clone(), v);
+                }
+                Stmt::Assign(n, e) => {
                     let v = self.eval(e)?;
                     self.assign(n.clone(), v);
                 }
