@@ -11,12 +11,13 @@ pub struct Checker {
     scopes: Vec<HashMap<String, crate::types::Type>>,
     fns: HashMap<String, StaticFn>,
     structs: HashMap<String, HashMap<String, crate::types::Type>>,
+    enums: HashMap<String, HashMap<String, Option<crate::types::Type>>>,
     errors: Vec<String>,
 }
 
 impl Checker {
     pub fn new() -> Self {
-        Self { scopes: vec![HashMap::new()], fns: HashMap::new(), structs: HashMap::new(), errors: Vec::new() }
+        Self { scopes: vec![HashMap::new()], fns: HashMap::new(), structs: HashMap::new(), enums: HashMap::new(), errors: Vec::new() }
     }
 
     fn error(&mut self, msg: impl Into<String>) { self.errors.push(msg.into()); }
@@ -58,6 +59,13 @@ impl Checker {
                 self.error(format!("undefined variable {}", n));
                 crate::types::Type::Unknown
             }),
+            Expr::EnumInit(name, variant, value) => {
+                match self.enums.get(name).and_then(|m|m.get(variant)).cloned() {
+                    Some(expected) => { if let (Some(want), Some(expr)) = (expected, value) { let got=self.infer(expr); if !want.compatible(&got){self.error(format!("enum {}.{} expects {}, got {}",name,variant,want.name(),got.name()));} } }
+                    None => self.error(format!("unknown enum variant {}.{}",name,variant)),
+                }
+                crate::types::Type::Enum(name.clone())
+            }
             Expr::StructInit(name, fields) => {
                 let schema = match self.structs.get(name).cloned() { Some(x)=>x, None=>{ self.error(format!("undefined struct {}",name)); return crate::types::Type::Unknown; } };
                 if fields.len() != schema.len() { self.error(format!("struct {} expects {} fields, got {}", name, schema.len(), fields.len())); }
@@ -150,6 +158,9 @@ impl Checker {
                     }
                     return f.ret;
                 }
+
+                if name=="None" { return crate::types::Type::Enum("Option".into()); }
+                if name=="Some" || name=="Ok" || name=="Err" { if args.len()!=1 { self.error(format!("{} expects 1 argument",name)); } else { self.infer(&args[0]); } return crate::types::Type::Enum(if name=="Some" {"Option"} else {"Result"}.into()); }
 
                 let builtin = match name.as_str() {
                     "range" => Some((vec![crate::types::Type::Number], crate::types::Type::Array(Box::new(crate::types::Type::Number)))),
@@ -260,7 +271,8 @@ impl Checker {
                 self.pop_scope();
             }
             Stmt::Import(_) => {}
-            Stmt::StructDecl(_, _) => {}
+            Stmt::StructDecl(_, _) => {},
+            Stmt::EnumDecl(_, _) => {}
             Stmt::Fn(_, args, ret, body) => {
                 self.push_scope();
                 for (name, ty) in args { self.define(name.clone(), ty.clone()); }
@@ -271,7 +283,12 @@ impl Checker {
     }
 
     pub fn check(&mut self, program: &[Stmt]) -> Result<(), Vec<String>> {
+        self.enums.entry("Option".into()).or_insert_with(|| [("None".into(),None),("Some".into(),Some(crate::types::Type::Any))].into_iter().collect());
+        self.enums.entry("Result".into()).or_insert_with(|| [("Ok".into(),Some(crate::types::Type::Any)),("Err".into(),Some(crate::types::Type::Any))].into_iter().collect());
         for stmt in program {
+            if let Stmt::EnumDecl(name, variants) = stmt {
+                if self.enums.contains_key(name) { self.error(format!("duplicate enum {}", name)); } else { self.enums.insert(name.clone(), variants.iter().cloned().collect()); }
+            }
             if let Stmt::StructDecl(name, fields) = stmt {
                 if self.structs.contains_key(name) { self.error(format!("duplicate struct {}", name)); }
                 else { self.structs.insert(name.clone(), fields.iter().cloned().collect()); }
