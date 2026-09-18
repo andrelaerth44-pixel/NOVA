@@ -498,10 +498,11 @@ fn lower_function_tree_with_captures(
     let mut b = Builder::new(name);
     let mut params = Vec::new();
 
+    let mut capture_params = Vec::new();
     for capture in captures {
         let id = b.fresh();
         b.bind(capture.clone(), id);
-        params.push((capture.clone(), IrType::Any, id));
+        capture_params.push((capture.clone(), IrType::Any, id));
     }
 
     for (arg, ty) in args {
@@ -523,6 +524,7 @@ fn lower_function_tree_with_captures(
     let function = SsaFunction {
         name: name.into(),
         params,
+        captures: capture_params,
         return_type: type_to_ir(ret),
         blocks: b.blocks,
     };
