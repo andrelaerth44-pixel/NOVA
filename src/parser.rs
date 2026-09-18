@@ -129,9 +129,15 @@ impl Parser {
             },
             t=>return Err(format!("unexpected token {:?}",t))};
         let mut x = x;
-        while self.eat(&Token::Dot) {
-            let field = match self.take() { Token::Ident(n)=>n, _=>return Err("expected field name after .".into()) };
-            x = Expr::Field(Box::new(x), field);
+        loop {
+            if self.eat(&Token::Dot) {
+                let field = match self.take() { Token::Ident(n)=>n, _=>return Err("expected field name after .".into()) };
+                x = Expr::Field(Box::new(x), field);
+            } else if self.eat(&Token::LParen) {
+                let mut args=vec![];
+                if !self.eat(&Token::RParen) { loop { args.push(self.expr()?); if self.eat(&Token::RParen){break} if !self.eat(&Token::Comma){return Err("expected , in call".into())} } }
+                x = match x { Expr::Var(n)=>Expr::Call(n,args), other=>Expr::CallValue(Box::new(other),args) };
+            } else { break; }
         }
         Ok(x)
     }
