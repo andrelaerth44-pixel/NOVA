@@ -178,7 +178,9 @@ impl Checker {
                     crate::types::Type::Generic(name,args) if name=="Option" && args.len()==1 => {
                         if let Some(expected)=self.current_return.clone() {
                             match expected {
-                                crate::types::Type::Generic(en,ea) if en=="Option" && ea.len()==1 => {},
+                                crate::types::Type::Generic(en,ea) if en=="Option" && ea.len()==1 => {
+                                    if !ea[0].compatible(&args[0]) { self.error(format!("try Option payload mismatch: expected {}, got {}",ea[0].name(),args[0].name())); }
+                                }
                                 crate::types::Type::Any | crate::types::Type::Unknown => {},
                                 other => self.error(format!("try on Option requires function return Option<T>, got {}",other.name())),
                             }
