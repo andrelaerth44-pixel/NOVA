@@ -103,7 +103,7 @@ pub fn to_map_key(value: &Value) -> Option<MapKey> {
 fn display_map_key(key: &MapKey) -> String {
     match key {
         MapKey::Number(bits) => f64::from_bits(*bits).to_string(),
-        MapKey::String(value) => format!(""{}"", value),
+        MapKey::String(value) => format!("\"{}\"", value),
         MapKey::Bool(value) => value.to_string(),
         MapKey::Null => "null".into(),
     }
