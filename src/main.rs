@@ -200,3 +200,17 @@ fn main(){
     if a[1]!="run"{eprintln!("unknown command {}",a[1]);std::process::exit(2)}
     if let Err(e)=Vm::new().exec(&program){eprintln!("runtime error: {}",e);std::process::exit(1)}
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn run(src:&str)->Result<Vm,String>{let tokens=lex(src)?;let mut p=Parser::new(tokens);let program=p.program()?;let mut vm=Vm::new();vm.exec(&program)?;Ok(vm)}
+    #[test] fn arithmetic(){let vm=run("let x = 2 + 3 * 4").unwrap();assert_eq!(vm.vars.get("x").unwrap().to_string(),"14");}
+    #[test] fn functions(){let vm=run("fn add(a,b) { return a+b } let x = add(20,22)").unwrap();assert_eq!(vm.vars.get("x").unwrap().to_string(),"42");}
+    #[test] fn arrays(){let vm=run("let xs = [1,2,3,4]").unwrap();assert_eq!(vm.vars.get("xs").unwrap().to_string(),"[1, 2, 3, 4]");}
+    #[test] fn match_exec(){let vm=run("let x = 2 match x { 1 { let y = 10 } 2 { let y = 20 } else { let y = 30 } }").unwrap();assert_eq!(vm.vars.get("y").unwrap().to_string(),"20");}
+    #[test] fn divide_zero(){assert!(run("let x = 10 / 0").is_err());}
+    #[test] fn builtin_arity(){assert!(run("let x = len([1])").is_ok());assert!(run("let x = len([1],[2])").is_err());}
+    #[test] fn short_circuit(){let vm=run("let x = false and (1 / 0)").unwrap();assert_eq!(vm.vars.get("x").unwrap().to_string(),"false");}
+}
