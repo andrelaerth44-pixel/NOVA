@@ -158,6 +158,34 @@ jobs:
           grep -Fxq "Hello NOVA" /tmp/try.out
           grep -Fxq "fallback" /tmp/try.out
 
+      - name: Package resolver smoke test
+        shell: bash
+        run: |
+          rm -rf /tmp/nova-packages
+          mkdir -p /tmp/nova-packages/app /tmp/nova-packages/util
+          cat > /tmp/nova-packages/app/nova.toml <<'EOF'
+          [package]
+          name = "app"
+          version = "0.1.0"
+
+          [dependencies]
+          util = { path = "../util" }
+          EOF
+          cat > /tmp/nova-packages/util/nova.toml <<'EOF'
+          [package]
+          name = "util"
+          version = "0.2.0"
+          EOF
+          cargo run --release -- package-check /tmp/nova-packages/app > /tmp/nova-package.out
+          grep -Fxq "app 0.1.0 root" /tmp/nova-package.out
+          grep -Fxq "util 0.2.0 root" /tmp/nova-package.out
+          grep -Fxq "ok" /tmp/nova-package.out
+          cargo run --release -- package-lock /tmp/nova-packages/app > /tmp/nova-lock-path.out
+          test -f /tmp/nova-packages/app/nova.lock
+          grep -Fxq 'format = 1' /tmp/nova-packages/app/nova.lock
+          grep -Fxq 'name = "app"' /tmp/nova-packages/app/nova.lock
+          grep -Fxq 'name = "util"' /tmp/nova-packages/app/nova.lock
+
       - name: Module graph smoke test
         shell: bash
         run: |
