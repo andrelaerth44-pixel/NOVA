@@ -228,7 +228,7 @@ impl Checker {
                 crate::types::Type::Unknown
             }
         }
-    
+    }
 
     fn check_pattern(&mut self, pattern: &Pattern, subject: &crate::types::Type, covered: &mut std::collections::HashSet<String>, wildcard: &mut bool) {
         match pattern {
