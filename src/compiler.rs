@@ -61,7 +61,12 @@ pub fn compile_source(source: &str) -> Result<Compilation, String> {
 /// compiler bootstrap. It intentionally contains no addresses or hash order.
 pub fn format_ssa(function: &SsaFunction) -> String {
     let mut out = String::new();
-    out.push_str(&format!("fn {} -> {:?}\n", function.name, function.return_type));
+    let params = function.params
+        .iter()
+        .map(|(name, ty, _)| format!("{}: {:?}", name, ty))
+        .collect::<Vec<_>>()
+        .join(", ");
+    out.push_str(&format!("fn {}({}) -> {:?}\n", function.name, params, function.return_type));
     for block in &function.blocks {
         out.push_str(&format!("block {}", block.id));
         if !block.params.is_empty() {
