@@ -1,4 +1,4 @@
-use crate::ir::{BasicBlock, Instr, IrType, Module};
+use crate::ir::{BasicBlock, Instr, IrType, Module, SsaFunction};
 
 pub fn optimize(mut module: Module) -> Module {
     for block in &mut module.blocks { block.code = optimize_block(std::mem::take(&mut block.code)); }
@@ -64,6 +64,13 @@ fn optimize_block(code: Vec<Instr>) -> Vec<Instr> {
         }
     }
     rewritten
+}
+
+pub fn validate_ssa(functions: &[SsaFunction]) -> Result<(), String> {
+    for function in functions {
+        function.validate()?;
+    }
+    Ok(())
 }
 
 fn fold_numeric(op:&str,a:f64,b:f64)->Option<f64>{
