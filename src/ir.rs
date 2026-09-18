@@ -191,6 +191,7 @@ impl IrBuilder {
                     crate::Value::Array(_) => self.push(Instr::Call { name: "array".into(), argc: 0, result: IrType::Any }),
                     crate::Value::Struct { name, fields } => self.push(Instr::StructInit { name: name.clone(), fields: fields.keys().cloned().collect() }),
                     crate::Value::Enum { name, variant, .. } => self.push(Instr::Call { name: format!("{}.{}", name, variant), argc: 0, result: IrType::Enum(name.clone()) }),
+                    crate::Value::Closure { .. } => self.push(Instr::Call { name: "closure".into(), argc: 0, result: IrType::Any }),
                 }
                 ty
             }
@@ -227,6 +228,8 @@ impl IrBuilder {
                 self.push(Instr::StructInit { name: name.clone(), fields: fields.iter().map(|(f, _)| f.clone()).collect() });
                 IrType::Struct(name.clone())
             }
+            crate::Expr::Closure(args, _) => { self.push(Instr::Call { name: "closure".into(), argc: args.len(), result: IrType::Any }); IrType::Any }
+            crate::Expr::CallValue(callee, args) => { self.lower_expr(callee); for a in args { self.lower_expr(a); } self.push(Instr::Call { name: "call_value".into(), argc: args.len()+1, result: IrType::Any }); IrType::Any }
             crate::Expr::Call(n, args) => {
                 for a in args { self.lower_expr(a); }
                 self.push(Instr::Call { name: n.clone(), argc: args.len(), result: IrType::Any });
