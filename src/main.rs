@@ -18,7 +18,7 @@ mod ssa_lower;
 mod module_loader;
 
 pub use token::Token;
-pub use ast::{Expr, Stmt, Value, Pattern};
+pub use ast::{Expr, Stmt, Value, Pattern, MapKey, EnvFrame, EnvRef, to_map_key};
 pub use lexer::lex;
 pub use parser::Parser;
 
