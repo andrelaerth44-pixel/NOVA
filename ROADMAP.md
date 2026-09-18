@@ -13,6 +13,8 @@ The roadmap is an implementation order, not a claim that unfinished features alr
 - language conformance tests
 
 ## 1.6 language system
+
+Implemented in the current 1.6 compiler line: structs, enums, pattern matching, Option/Result helpers, lexical closures, generic function inference, parameterized Option/Result types, and language-level `?` propagation.
 - explicit primitive types
 - arrays, maps and sets
 - structs and enums
