@@ -4,7 +4,7 @@ Simple. Native. Fast. Universal. Beautiful.
 
 NOVA is a general-purpose programming language designed to make applications, services, tools, games, graphics, automation, data systems, networking, native integrations and AI systems easier to build without removing access to the machine.
 
-Current development line: **1.5.0**
+Current development line: **1.7.0**
 
 The implementation is deliberately honest: a capability is documented as implemented only after executable code and validation exist.
 
@@ -20,8 +20,14 @@ The implementation is deliberately honest: a capability is documented as impleme
 - range
 - len
 - str
-- imports
-- match / else
+- imports and module graph validation
+- structs and enums
+- generic functions and type inference
+- Option / Result and `?` propagation in the VM
+- maps, sets and indexed collection access
+- lexical closures
+- first-class iterators (`iter`, `next`, `has_next`, `collect`)
+- filesystem, environment, path, time and JSON runtime builtins
 - CLI run/check/version
 
 The current 1.x line is still being hardened. Static typing, diagnostics, IR, native code generation, standard-library breadth, concurrency, package management, UI, graphics, GPU and platform backends remain separate implementation stages.
