@@ -166,11 +166,16 @@ impl Checker {
                         if !index_ty.compatible(&crate::types::Type::Number) { self.error("array index expects a number"); }
                         *inner
                     }
+                    crate::types::Type::String => {
+                        if !index_ty.compatible(&crate::types::Type::Number) { self.error("string index expects a number"); }
+                        crate::types::Type::String
+                    }
                     crate::types::Type::Generic(name, args) if name=="Map" && args.len()==2 => {
                         if !args[0].compatible(&index_ty) && !matches!(index_ty, crate::types::Type::Any) { self.error("map index type mismatch"); }
                         args[1].clone()
                     }
-                    _ => { self.error("indexing requires an array or Map"); crate::types::Type::Unknown }
+                    crate::types::Type::Any | crate::types::Type::Unknown => crate::types::Type::Any,
+                    _ => { self.error("indexing requires an array, string or Map"); crate::types::Type::Unknown }
                 }
             }
             Expr::Unary(op, x) => {
