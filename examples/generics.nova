@@ -1,0 +1,25 @@
+fn identity<T>(value: T) -> T {
+    return value
+}
+
+fn first<T>(a: T, b: T) -> T {
+    return a
+}
+
+number = identity(42)
+text = identity("NOVA")
+
+choice: Option<i64> = Some(42)
+missing: Option<i64> = None
+
+ok: Result<string, string> = Ok("done")
+err: Result<string, string> = Err("network")
+
+print number
+print text
+print unwrap(choice)
+print unwrap_or(missing, 99)
+print unwrap(ok)
+print unwrap_or(err, "fallback")
+
+print first(10, 20)
