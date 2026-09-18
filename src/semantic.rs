@@ -14,11 +14,12 @@ pub struct Checker {
     structs: HashMap<String, HashMap<String, crate::types::Type>>,
     enums: HashMap<String, HashMap<String, Option<crate::types::Type>>>,
     errors: Vec<String>,
+    current_return: Option<crate::types::Type>,
 }
 
 impl Checker {
     pub fn new() -> Self {
-        Self { scopes: vec![HashMap::new()], fns: HashMap::new(), structs: HashMap::new(), enums: HashMap::new(), errors: Vec::new() }
+        Self { scopes: vec![HashMap::new()], fns: HashMap::new(), structs: HashMap::new(), enums: HashMap::new(), errors: Vec::new(), current_return: None }
     }
 
     fn error(&mut self, msg: impl Into<String>) { self.errors.push(msg.into()); }
@@ -169,6 +170,34 @@ impl Checker {
                         crate::types::Type::Bool
                     }
                     _ => crate::types::Type::Unknown,
+                }
+            }
+            Expr::Try(inner) => {
+                let t=self.infer(inner);
+                match &t {
+                    crate::types::Type::Generic(name,args) if name=="Option" && args.len()==1 => {
+                        if let Some(expected)=self.current_return.clone() {
+                            match expected {
+                                crate::types::Type::Generic(en,ea) if en=="Option" && ea.len()==1 => {},
+                                crate::types::Type::Any | crate::types::Type::Unknown => {},
+                                other => self.error(format!("try on Option requires function return Option<T>, got {}",other.name())),
+                            }
+                        }
+                        args[0].clone()
+                    }
+                    crate::types::Type::Generic(name,args) if name=="Result" && args.len()==2 => {
+                        if let Some(expected)=self.current_return.clone() {
+                            match expected {
+                                crate::types::Type::Generic(en,ea) if en=="Result" && ea.len()==2 => {
+                                    if !ea[1].compatible(&args[1]) { self.error(format!("try error type mismatch: expected {}, got {}",ea[1].name(),args[1].name())); }
+                                }
+                                crate::types::Type::Any | crate::types::Type::Unknown => {},
+                                other => self.error(format!("try on Result requires function return Result<T, E>, got {}",other.name())),
+                            }
+                        }
+                        args[0].clone()
+                    }
+                    _ => { self.error(format!("try requires Option<T> or Result<T, E>, got {}",t.name())); crate::types::Type::Unknown }
                 }
             }
             Expr::Closure(args, _) => crate::types::Type::Function(vec![crate::types::Type::Any; args.len()], Box::new(crate::types::Type::Any)),
@@ -361,10 +390,13 @@ impl Checker {
             Stmt::StructDecl(_, _) => {},
             Stmt::EnumDecl(_, _) => {}
             Stmt::Fn(_, _generics, args, ret, body) => {
+                let previous=self.current_return.clone();
+                self.current_return=Some(ret.clone());
                 self.push_scope();
                 for (name, ty) in args { self.define(name.clone(), ty.clone()); }
                 for s in body { self.check_stmt(s, Some(ret)); }
                 self.pop_scope();
+                self.current_return=previous;
             }
         }
     }
