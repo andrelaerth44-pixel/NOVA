@@ -31,19 +31,27 @@ pub fn compile_program(program: Vec<Stmt>) -> Result<Compilation, String> {
     let ir = crate::optimizer::optimize(crate::lower::lower(&program));
     crate::lower::verify(&ir)?;
 
-    let main_ssa = crate::ssa_lower::lower_program(&program);
-    verify_ssa(&main_ssa)?;
-
-    let mut ssa_functions = Vec::new();
-    ssa_functions.push(main_ssa.clone());
+    let mut ssa_functions = crate::ssa_lower::lower_program_tree(&program);
+    for function in &ssa_functions {
+        verify_ssa(function)?;
+    }
 
     for stmt in &program {
         if let Stmt::Fn(name, _generics, args, ret, body) = stmt {
-            let function = crate::ssa_lower::lower_function(name, args, ret, body);
-            verify_ssa(&function)?;
-            ssa_functions.push(function);
+            let functions = crate::ssa_lower::lower_function_tree(name, args, ret, body);
+            for function in functions {
+                verify_ssa(&function)?;
+                if !ssa_functions.iter().any(|existing| existing.name == function.name) {
+                    ssa_functions.push(function);
+                }
+            }
         }
     }
+
+    let main_ssa = ssa_functions
+        .first()
+        .cloned()
+        .expect("SSA lowering always produces <main>");
 
     Ok(Compilation {
         program,
