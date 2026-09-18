@@ -141,6 +141,42 @@ jobs:
           grep -Fxq "1" /tmp/closures.out
           grep -Fxq "2" /tmp/closures.out
 
+      - name: Native struct smoke test
+        shell: bash
+        run: |
+          cargo run --release -- build-native-ssa examples/structs.nova /tmp/nova-struct-native
+          test -x /tmp/nova-struct-native
+          test "$(/tmp/nova-struct-native)" = $'Laerth\n18\ntrue'
+
+      - name: Native enum smoke test
+        shell: bash
+        run: |
+          cat > /tmp/native_enum.nova <<'EOF'
+          enum Status {
+              Ready
+              Running
+              Failed(string)
+          }
+
+          status = Status.Failed("oops")
+          match status {
+              Failed(message) {
+                  print message
+              },
+              else {
+                  print "other"
+              }
+          }
+          EOF
+          cargo run --release -- check /tmp/native_enum.nova
+          cargo run --release -- ssa /tmp/native_enum.nova > /tmp/native_enum.ssa
+          grep -Fq 'EnumInit' /tmp/native_enum.ssa
+          grep -Fq 'EnumTest' /tmp/native_enum.ssa
+          grep -Fq 'EnumPayload' /tmp/native_enum.ssa
+          cargo run --release -- build-native-ssa /tmp/native_enum.nova /tmp/nova-enum-native
+          test -x /tmp/nova-enum-native
+          test "$(/tmp/nova-enum-native)" = "oops"
+
       - name: Standard library smoke test
         shell: bash
         run: |
