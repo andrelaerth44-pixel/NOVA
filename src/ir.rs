@@ -287,10 +287,26 @@ impl IrBuilder {
             }
             crate::Stmt::Import(_) => {}
             crate::Stmt::Match(value,arms,otherwise) => {
+                let subject_name = "__nova_match_subject".to_string();
                 self.lower_expr(value);
+                self.push(Instr::Store(subject_name.clone()));
                 for (pat,body) in arms {
-                    self.lower_expr(pat);
-                    self.push(Instr::Binary { op: "EqEq".into(), ty: IrType::Bool });
+                    let test = match pat {
+                        crate::Pattern::Wildcard => {
+                            self.push(Instr::ConstBool(true));
+                        }
+                        crate::Pattern::Literal(expr) => {
+                            self.push(Instr::Load(subject_name.clone()));
+                            self.lower_expr(expr);
+                            self.push(Instr::Binary { op: "EqEq".into(), ty: IrType::Bool });
+                        }
+                        crate::Pattern::Enum { variant, .. } => {
+                            self.push(Instr::Load(subject_name.clone()));
+                            self.push(Instr::ConstString(variant.clone()));
+                            self.push(Instr::Call { name: "match_enum".into(), argc: 2, result: IrType::Bool });
+                        }
+                    };
+                    let _ = test;
                     let jf=self.module.blocks[self.current].code.len();
                     self.push(Instr::JumpIfFalse(usize::MAX));
                     for x in body { self.lower_stmt(x); }
