@@ -120,12 +120,15 @@ impl Parser {
             },
             Token::Ident(n)=>{
                 let name=n.clone();
-                if self.eat(&Token::Colon) {
+                if self.p+1<self.t.len() && self.t[self.p+1]==Token::Colon {
+                    self.take();
+                    self.take();
                     let ty=self.type_name()?;
                     if !self.eat(&Token::Eq){return Err("expected =".into())}
                     return Ok(Stmt::Let(name,Some(ty),self.expr()?));
                 }
-                if matches!(self.peek(), Token::Eq) {
+                if self.p+1<self.t.len() && self.t[self.p+1]==Token::Eq {
+                    self.take();
                     self.take();
                     return Ok(Stmt::Assign(name,self.expr()?));
                 }
