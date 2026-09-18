@@ -15,13 +15,13 @@ pub enum Stmt {
     EnumDecl(String, Vec<(String, Option<crate::types::Type>)>),
 }
 #[derive(Clone, Debug)]
-#[derive(Clone, Debug)]
 pub enum Pattern {
     Wildcard,
     Literal(Expr),
     Enum { variant: String, binding: Option<String> },
 }
 
+#[derive(Clone, Debug)]
 pub enum Value {
     Num(f64), Str(String), Bool(bool), Array(Vec<Value>),
     Struct { name: String, fields: std::collections::HashMap<String, Value> },
