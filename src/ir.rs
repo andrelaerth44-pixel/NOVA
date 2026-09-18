@@ -1,12 +1,48 @@
 #[derive(Clone, Debug, PartialEq)]
 pub enum IrType {
+    I32,
+    I64,
+    F32,
+    F64,
     Number,
     Bool,
     String,
     Null,
     Any,
+    Array(Box<IrType>),
     Struct(String),
     Enum(String),
+    Generic(String, Vec<IrType>),
+    TypeParam(String),
+    Function(Vec<IrType>, Box<IrType>),
+}
+
+impl IrType {
+    pub fn from_type(ty: &crate::types::Type) -> Self {
+        match ty {
+            crate::types::Type::Any | crate::types::Type::Unknown => Self::Any,
+            crate::types::Type::I32 => Self::I32,
+            crate::types::Type::I64 => Self::I64,
+            crate::types::Type::F32 => Self::F32,
+            crate::types::Type::F64 => Self::F64,
+            crate::types::Type::Number => Self::Number,
+            crate::types::Type::Bool => Self::Bool,
+            crate::types::Type::String => Self::String,
+            crate::types::Type::Array(inner) => Self::Array(Box::new(Self::from_type(inner))),
+            crate::types::Type::Struct(name) => Self::Struct(name.clone()),
+            crate::types::Type::Enum(name) => Self::Enum(name.clone()),
+            crate::types::Type::Generic(name, args) => Self::Generic(
+                name.clone(),
+                args.iter().map(Self::from_type).collect(),
+            ),
+            crate::types::Type::TypeParam(name) => Self::TypeParam(name.clone()),
+            crate::types::Type::Null | crate::types::Type::Void => Self::Null,
+            crate::types::Type::Function(args, ret) => Self::Function(
+                args.iter().map(Self::from_type).collect(),
+                Box::new(Self::from_type(ret)),
+            ),
+        }
+    }
 }
 
 impl Default for IrType {
