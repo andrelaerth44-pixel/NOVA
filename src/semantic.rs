@@ -297,7 +297,26 @@ impl Checker {
                     return crate::types::Type::Enum(enum_name);
                     }
                 }
-                if name=="None" { return crate::types::Type::Generic("Option".into(),vec![crate::types::Type::Any]); }
+                if let Some(value_type) = self.lookup(name) {
+                    match value_type {
+                        crate::types::Type::Function(params, ret) => {
+                            if params.len()!=args.len() { self.error(format!("{} expects {} arguments, got {}", name, params.len(), args.len())); }
+                            for (i,arg) in args.iter().enumerate() {
+                                let got=self.infer(arg);
+                                if let Some(want)=params.get(i) && !want.compatible(&got) {
+                                    self.error(format!("argument {} of {} expects {}, got {}",i+1,name,want.name(),got.name()));
+                                }
+                            }
+                            return *ret;
+                        }
+                        crate::types::Type::Any | crate::types::Type::Unknown => {
+                            for arg in args { self.infer(arg); }
+                            return crate::types::Type::Any;
+                        }
+                        _ => {}
+                    }
+                }
+                                if name=="None" { return crate::types::Type::Generic("Option".into(),vec![crate::types::Type::Any]); }
                 if name=="Some" || name=="Ok" || name=="Err" {
                     if args.len()!=1 { self.error(format!("{} expects 1 argument",name)); }
                     let got=if args.len()==1 { self.infer(&args[0]) } else { crate::types::Type::Any };
