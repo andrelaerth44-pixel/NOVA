@@ -1,0 +1,18 @@
+enum State {
+    Ready
+    Failed(string)
+}
+
+state = Failed("network")
+
+match state {
+    Ready {
+        print "ready"
+    },
+    Failed(message) {
+        print message
+    },
+    _ {
+        print "unknown"
+    }
+}
