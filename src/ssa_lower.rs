@@ -88,7 +88,15 @@ impl Builder {
                 };
                 self.emit(SsaInstr::Binary { op: format!("{:?}", op), left, right, ty })
             }
-            Expr::EnumInit(name, variant, value) => { let args = value.as_ref().map(|v| vec![self.expr(v)]).unwrap_or_default(); self.emit(SsaInstr::Call { name: format!("{}.{}",name,variant), args, result: IrType::Enum(name.clone()) }) }
+            Expr::EnumInit(name, variant, value) => {
+                let payload = value.as_ref().map(|v| self.expr(v));
+                self.emit(SsaInstr::EnumInit {
+                    name: name.clone(),
+                    variant: variant.clone(),
+                    payload,
+                    ty: IrType::Enum(name.clone()),
+                })
+            }
             Expr::Field(base, field) => {
                 let base = self.expr(base);
                 self.emit(SsaInstr::FieldGet { base, field: field.clone(), ty: IrType::Any })
@@ -103,10 +111,50 @@ impl Builder {
                 values.extend(args.iter().map(|x| self.expr(x)));
                 self.emit(SsaInstr::Call { name: "call_value".into(), args: values, result: IrType::Any })
             }
-            Expr::Try(inner) => { let value=self.expr(inner); self.emit(SsaInstr::Call { name: "try".into(), args: vec![value], result: IrType::Any }) }
+            Expr::Try(inner) => {
+                let value = self.expr(inner);
+                self.emit(SsaInstr::Try { value, result: IrType::Any })
+            }
             Expr::Call(name, args) => {
-                let values = args.iter().map(|x| self.expr(x)).collect();
-                self.emit(SsaInstr::Call { name: name.clone(), args: values, result: IrType::Any })
+                match name.as_str() {
+                    "None" => self.emit(SsaInstr::EnumInit {
+                        name: "Option".into(),
+                        variant: "None".into(),
+                        payload: None,
+                        ty: IrType::Generic("Option".into(), vec![IrType::Any]),
+                    }),
+                    "Some" => {
+                        let payload = args.first().map(|x| self.expr(x));
+                        self.emit(SsaInstr::EnumInit {
+                            name: "Option".into(),
+                            variant: "Some".into(),
+                            payload,
+                            ty: IrType::Generic("Option".into(), vec![IrType::Any]),
+                        })
+                    }
+                    "Ok" => {
+                        let payload = args.first().map(|x| self.expr(x));
+                        self.emit(SsaInstr::EnumInit {
+                            name: "Result".into(),
+                            variant: "Ok".into(),
+                            payload,
+                            ty: IrType::Generic("Result".into(), vec![IrType::Any, IrType::Any]),
+                        })
+                    }
+                    "Err" => {
+                        let payload = args.first().map(|x| self.expr(x));
+                        self.emit(SsaInstr::EnumInit {
+                            name: "Result".into(),
+                            variant: "Err".into(),
+                            payload,
+                            ty: IrType::Generic("Result".into(), vec![IrType::Any, IrType::Any]),
+                        })
+                    }
+                    _ => {
+                        let values = args.iter().map(|x| self.expr(x)).collect();
+                        self.emit(SsaInstr::Call { name: name.clone(), args: values, result: IrType::Any })
+                    }
+                }
             }
         }
     }
@@ -254,8 +302,7 @@ impl Builder {
                             self.emit(SsaInstr::Binary { op: "EqEq".into(), left: subject, right: p, ty: IrType::Bool })
                         }
                         Pattern::Enum { variant, .. } => {
-                            let name = self.emit(SsaInstr::Const(SsaValue::String(variant.clone())));
-                            self.emit(SsaInstr::Call { name: "match_enum".into(), args: vec![subject, name], result: IrType::Bool })
+                            self.emit(SsaInstr::EnumTest { value: subject, variant: variant.clone() })
                         }
                     };
                     let yes = self.new_block();
@@ -263,7 +310,7 @@ impl Builder {
                     self.blocks[self.current].terminator = Some(Terminator::Branch { condition: test, then_block: yes, else_block: no });
                     self.set_current(yes);
                     if let Pattern::Enum { binding: Some(name), .. } = pattern {
-                        let payload = self.emit(SsaInstr::Call { name: "enum_payload".into(), args: vec![subject], result: IrType::Any });
+                        let payload = self.emit(SsaInstr::EnumPayload { value: subject, ty: IrType::Any });
                         self.bind(name.to_string(), payload);
                     }
                     self.stmt_list(body);
