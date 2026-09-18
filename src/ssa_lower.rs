@@ -265,6 +265,7 @@ fn type_to_ir(t: &crate::types::Type) -> IrType {
         crate::types::Type::String => IrType::String,
         crate::types::Type::Null | crate::types::Type::Void => IrType::Null,
         crate::types::Type::Struct(name) => IrType::Struct(name.clone()),
+        crate::types::Type::Enum(name) => IrType::Enum(name.clone()),
         _ => IrType::Any,
     }
 }
