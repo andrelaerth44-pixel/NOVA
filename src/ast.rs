@@ -82,6 +82,8 @@ impl std::fmt::Display for Value {
             Value::Num(x)=>write!(f,"{}", if x.fract()==0.0 {format!("{}",*x as i64)} else {x.to_string()}),
             Value::Str(x)=>write!(f,"{}",x), Value::Bool(x)=>write!(f,"{}",x),
             Value::Array(x)=>{write!(f,"[")?;for(i,v) in x.iter().enumerate(){if i>0{write!(f,", ")?;}write!(f,"{}",v)?;}write!(f,"]")},
+            Value::Map(x)=>{let x=x.borrow();write!(f,"map {{ ")?;let mut first=true;for(k,v) in x.iter(){if !first{write!(f,", ")?;}first=false;write!(f,"{}: {}",display_map_key(k),v)?;}write!(f," }}")},
+            Value::Set(x)=>{let x=x.borrow();write!(f,"set {{ ")?;let mut first=true;for(k) in x.iter(){if !first{write!(f,", ")?;}first=false;write!(f,"{}",display_map_key(k))?;}write!(f," }}")},
             Value::Struct{name,fields}=>{write!(f,"{} {{ ",name)?;let mut first=true;for(k,v)in fields{if !first{write!(f,", ")?;}first=false;write!(f,"{}: {}",k,v)?;}write!(f," }}")},
             Value::Enum{name,variant,value}=>match value{Some(v)=>write!(f,"{}.{}({})",name,variant,v),None=>write!(f,"{}.{}",name,variant)},
             Value::Closure{..}=>write!(f,"<closure>"),
