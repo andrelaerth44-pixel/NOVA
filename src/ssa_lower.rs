@@ -143,11 +143,14 @@ impl Builder {
                 self.blocks[preheader].terminator = Some(Terminator::Jump(header));
                 self.set_current(header);
 
+                // Loop-carried values are represented by header phis. The
+                // preheader provides the first iteration value; the body
+                // provides the backedge value when the body actually loops.
                 let mut phis = Vec::<(String, ValueId)>::new();
                 for (name, value) in incoming.iter() {
                     let phi = self.fresh();
                     self.blocks[header].instrs.push((phi, SsaInstr::Phi {
-                        incomings: vec![(preheader, *value), (loop_body, *value)],
+                        incomings: vec![(preheader, *value)],
                         ty: IrType::Any,
                     }));
                     self.bind(name.clone(), phi);
@@ -165,26 +168,33 @@ impl Builder {
                 self.push_scope();
                 self.stmt_list(body);
                 let body_vars = self.vars.last().cloned().unwrap_or_default();
-                if self.blocks[self.current].terminator.is_none() {
+                let loops_back = self.blocks[self.current].terminator.is_none();
+                if loops_back {
                     self.blocks[self.current].terminator = Some(Terminator::Jump(header));
                 }
                 let backedge = self.current;
                 self.pop_scope();
 
-                for (name, phi) in phis {
-                    let initial = incoming.get(&name).copied().unwrap();
-                    let value = body_vars.get(&name).copied().unwrap_or(initial);
-                    if let Some((_, instr)) = self.blocks[header].instrs.iter_mut().find(|(id, _)| *id == phi) {
-                        if let SsaInstr::Phi { incomings, .. } = instr {
-                            if let Some(slot) = incomings.iter_mut().find(|(pred, _)| *pred == loop_body) {
-                                *slot = (backedge, value);
+                if loops_back {
+                    for (name, phi) in &phis {
+                        let initial = incoming.get(name).copied().unwrap();
+                        let value = body_vars.get(name).copied().unwrap_or(initial);
+                        if let Some((_, instr)) = self.blocks[header].instrs.iter_mut().find(|(id, _)| *id == *phi) {
+                            if let SsaInstr::Phi { incomings, .. } = instr {
+                                incomings.push((backedge, value));
                             }
                         }
                     }
                 }
 
+                // The header phi is also the value visible after the loop:
+                // the exit edge leaves the header after the final condition
+                // check, so the phi dominates the exit block.
                 self.set_current(exit);
                 self.vars.last_mut().unwrap().clone_from(&incoming);
+                for (name, phi) in phis {
+                    self.bind(name, phi);
+                }
             }
             Stmt::For(name, iterable, body) => {
                 let iterable_v = self.expr(iterable);
