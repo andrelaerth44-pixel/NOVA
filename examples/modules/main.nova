@@ -1,0 +1,3 @@
+import "math.nova"
+
+print add(20, 22)
