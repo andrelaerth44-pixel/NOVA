@@ -505,7 +505,13 @@ impl Vm {
                 Stmt::Fn(n, _, a, _, b) => {
                     self.fns.insert(n.clone(), Function { args: a.iter().map(|x| x.0.clone()).collect(), body: b.clone() });
                 }
-                Stmt::StructDecl(_, _) | Stmt::EnumDecl(_, _) => {}
+                Stmt::StructDecl(_, _) => {}
+                Stmt::EnumDecl(name, variants) => {
+                    let table = self.enums.entry(name.clone()).or_default();
+                    for (variant, payload) in variants {
+                        table.insert(variant.clone(), payload.clone());
+                    }
+                }
             }
         }
         Ok(None)
