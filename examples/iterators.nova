@@ -1,0 +1,20 @@
+values = [1, 2, 3, 4]
+
+it = iter(values)
+print has_next(it)
+print unwrap(next(it))
+print unwrap(next(it))
+
+remaining = collect(it)
+print len(remaining)
+print remaining[0]
+
+it2 = iter([5, 6, 7])
+total = 0
+for x in it2 {
+    total = total + x
+}
+print total
+
+chars = iter("NOVA")
+print unwrap(next(chars))
