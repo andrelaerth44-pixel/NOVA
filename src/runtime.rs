@@ -239,6 +239,68 @@ impl Vm {
                     if a.len() != 1 { return Err("Err expects 1 argument".into()); }
                     return Ok(Value::Enum { name: "Result".into(), variant: "Err".into(), value: Some(Box::new(self.eval(&a[0])?)) });
                 }
+                if n == "iter" {
+                    if a.len() != 1 { return Err("iter expects 1 argument".into()); }
+                    let value = self.eval(&a[0])?;
+                    let values = match value {
+                        Value::Array(values) => values,
+                        Value::Str(text) => text.chars().map(|ch| Value::Str(ch.to_string())).collect(),
+                        Value::Iterator(iterator) => {
+                            let mut state = iterator.borrow_mut();
+                            let remaining = state.values[state.index..].to_vec();
+                            state.index = state.values.len();
+                            remaining
+                        }
+                        _ => return Err("iter expects an array, string or iterator".into()),
+                    };
+                    return Ok(Value::Iterator(std::rc::Rc::new(std::cell::RefCell::new(
+                        crate::ast::IteratorState { values, index: 0 }
+                    ))));
+                }
+                if n == "next" {
+                    if a.len() != 1 { return Err("next expects 1 argument".into()); }
+                    let value = self.eval(&a[0])?;
+                    match value {
+                        Value::Iterator(iterator) => {
+                            let mut state = iterator.borrow_mut();
+                            if state.index < state.values.len() {
+                                let item = state.values[state.index].clone();
+                                state.index += 1;
+                                return Ok(Value::Enum {
+                                    name: "Option".into(),
+                                    variant: "Some".into(),
+                                    value: Some(Box::new(item)),
+                                });
+                            }
+                            return Ok(Value::Enum { name: "Option".into(), variant: "None".into(), value: None });
+                        }
+                        _ => return Err("next expects an Iterator".into()),
+                    }
+                }
+                if n == "has_next" {
+                    if a.len() != 1 { return Err("has_next expects 1 argument".into()); }
+                    let value = self.eval(&a[0])?;
+                    match value {
+                        Value::Iterator(iterator) => {
+                            let state = iterator.borrow();
+                            return Ok(Value::Bool(state.index < state.values.len()));
+                        }
+                        _ => return Err("has_next expects an Iterator".into()),
+                    }
+                }
+                if n == "collect" {
+                    if a.len() != 1 { return Err("collect expects 1 argument".into()); }
+                    let value = self.eval(&a[0])?;
+                    match value {
+                        Value::Iterator(iterator) => {
+                            let mut state = iterator.borrow_mut();
+                            let remaining = state.values[state.index..].to_vec();
+                            state.index = state.values.len();
+                            return Ok(Value::Array(remaining));
+                        }
+                        _ => return Err("collect expects an Iterator".into()),
+                    }
+                }
                 if n == "range" {
                     if a.len() != 2 { return Err("range expects 2 arguments".into()); }
                     let x = self.eval(&a[0])?;
@@ -593,7 +655,28 @@ impl Vm {
                                 if let Some(v) = self.exec(b)? { return Ok(Some(v)); }
                             }
                         }
-                        _ => return Err("for expects an array or range".into()),
+                        Value::Iterator(iterator) => {
+                            loop {
+                                let item = {
+                                    let mut state = iterator.borrow_mut();
+                                    if state.index >= state.values.len() {
+                                        None
+                                    } else {
+                                        let item = state.values[state.index].clone();
+                                        state.index += 1;
+                                        Some(item)
+                                    }
+                                };
+                                match item {
+                                    Some(x) => {
+                                        self.define(n.clone(), x);
+                                        if let Some(v) = self.exec(b)? { return Ok(Some(v)); }
+                                    }
+                                    None => break,
+                                }
+                            }
+                        }
+                        _ => return Err("for expects an array or Iterator".into()),
                     }
                 }
                 Stmt::Match(value, arms, otherwise) => {
