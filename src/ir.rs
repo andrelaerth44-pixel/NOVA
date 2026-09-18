@@ -313,40 +313,154 @@ pub fn format_module(m: &Module) -> String {
 }
 
 impl SsaFunction {
-    /// Verifies that every instruction operand is defined before use and that
-    /// every basic block has a terminator. This is the first strict SSA gate.
+    /// Validate the SSA graph using CFG-aware dominance rules.
+    ///
+    /// A normal instruction must be dominated by its use. Phi operands are
+    /// exceptional: each incoming value must be available at the end of the
+    /// corresponding predecessor. This makes loop-carried and branch-merged
+    /// values legal without relying on source/block iteration order.
     pub fn verify_operands(&self) -> Result<(), String> {
         self.validate()?;
-        let mut defined = std::collections::HashSet::<ValueId>::new();
-        for (_, _, id) in &self.params { defined.insert(*id); }
+
+        let n = self.blocks.len();
+        let mut by_id = vec![None; n];
         for block in &self.blocks {
-            for id in &block.params { defined.insert(*id); }
-            for (id, instr) in &block.instrs {
-                let uses = match instr {
-                    SsaInstr::Const(_) => Vec::new(),
-                    SsaInstr::Load { .. } => Vec::new(),
-                    SsaInstr::Store { value, .. } => vec![*value],
-                    SsaInstr::Unary { value, .. } => vec![*value],
-                    SsaInstr::Binary { left, right, .. } => vec![*left, *right],
-                    SsaInstr::Call { args, .. } => args.clone(),
-                    SsaInstr::Phi { incomings, .. } => incomings.iter().map(|(_,v)| *v).collect(),
-                };
-                for value in uses {
-                    if !defined.contains(&value) {
-                        return Err(format!("SSA value {} is used before definition in block {}", value, block.id));
-                    }
+            by_id[block.id] = Some(block);
+        }
+
+        let mut preds = vec![Vec::<usize>::new(); n];
+        for block in &self.blocks {
+            match block.terminator.as_ref() {
+                Some(Terminator::Jump(to)) => preds[*to].push(block.id),
+                Some(Terminator::Branch { then_block, else_block, .. }) => {
+                    preds[*then_block].push(block.id);
+                    preds[*else_block].push(block.id);
                 }
-                defined.insert(*id);
-            }
-            match &block.terminator {
-                Some(Terminator::Branch { condition, .. }) if !defined.contains(condition) =>
-                    return Err(format!("SSA branch in block {} uses undefined value {}", block.id, condition)),
-                Some(Terminator::Return(Some(value))) if !defined.contains(value) =>
-                    return Err(format!("SSA return in block {} uses undefined value {}", block.id, value)),
-                None => return Err(format!("SSA block {} has no terminator", block.id)),
-                _ => {}
+                Some(Terminator::Return(_)) | None => {}
             }
         }
+
+        // Every non-entry block must be reachable. Keeping unreachable blocks
+        // out of the SSA graph prevents silently accepting dead malformed IR.
+        let mut reachable = vec![false; n];
+        let mut work = vec![0usize];
+        reachable[0] = true;
+        while let Some(b) = work.pop() {
+            match by_id[b].unwrap().terminator.as_ref().unwrap() {
+                Terminator::Jump(t) => {
+                    if !reachable[*t] { reachable[*t] = true; work.push(*t); }
+                }
+                Terminator::Branch { then_block, else_block, .. } => {
+                    if !reachable[*then_block] { reachable[*then_block] = true; work.push(*then_block); }
+                    if !reachable[*else_block] { reachable[*else_block] = true; work.push(*else_block); }
+                }
+                Terminator::Return(_) => {}
+            }
+        }
+        for block in &self.blocks {
+            if !reachable[block.id] {
+                return Err(format!("SSA block {} is unreachable", block.id));
+            }
+        }
+
+        // Compute dominator sets to validate ordinary SSA uses.
+        let all: std::collections::HashSet<usize> = (0..n).collect();
+        let mut dom = vec![all.clone(); n];
+        dom[0].clear();
+        dom[0].insert(0);
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for b in 1..n {
+                if preds[b].is_empty() {
+                    continue;
+                }
+                let mut next = all.clone();
+                for p in &preds[b] {
+                    next.retain(|x| dom[*p].contains(x));
+                }
+                next.insert(b);
+                if next != dom[b] {
+                    dom[b] = next;
+                    changed = true;
+                }
+            }
+        }
+
+        let mut defs = std::collections::HashMap::<ValueId, (usize, usize)>::new();
+        for block in &self.blocks {
+            for &id in &block.params {
+                if defs.insert(id, (block.id, usize::MAX)).is_some() {
+                    return Err(format!("SSA value {} is defined more than once", id));
+                }
+            }
+            for (idx, (id, _)) in block.instrs.iter().enumerate() {
+                if defs.insert(*id, (block.id, idx)).is_some() {
+                    return Err(format!("SSA value {} is defined more than once", id));
+                }
+            }
+        }
+        for (_, _, id) in &self.params {
+            if defs.insert(*id, (0, usize::MAX)).is_some() {
+                return Err(format!("SSA value {} is defined more than once", id));
+            }
+        }
+
+        let check_use = |value: ValueId, use_block: usize, use_index: usize,
+                         defs: &std::collections::HashMap<ValueId, (usize, usize)>,
+                         dom: &Vec<std::collections::HashSet<usize>>|
+                         -> Result<(), String> {
+            let (def_block, def_index) = defs.get(&value).copied()
+                .ok_or_else(|| format!("SSA value {} is undefined", value))?;
+            if !dom[use_block].contains(&def_block) {
+                return Err(format!("SSA value {} does not dominate use in block {}", value, use_block));
+            }
+            if def_block == use_block && def_index != usize::MAX && def_index >= use_index {
+                return Err(format!("SSA value {} is used before its definition in block {}", value, use_block));
+            }
+            Ok(())
+        };
+
+        for block in &self.blocks {
+            for (idx, (_, instr)) in block.instrs.iter().enumerate() {
+                match instr {
+                    SsaInstr::Const(_) | SsaInstr::Load { .. } => {}
+                    SsaInstr::Store { value, .. } |
+                    SsaInstr::Unary { value, .. } => check_use(*value, block.id, idx, &defs, &dom)?,
+                    SsaInstr::Binary { left, right, .. } => {
+                        check_use(*left, block.id, idx, &defs, &dom)?;
+                        check_use(*right, block.id, idx, &defs, &dom)?;
+                    }
+                    SsaInstr::Call { args, .. } => {
+                        for value in args { check_use(*value, block.id, idx, &defs, &dom)?; }
+                    }
+                    SsaInstr::Phi { incomings, .. } => {
+                        let expected: std::collections::HashSet<_> = preds[block.id].iter().copied().collect();
+                        let actual: std::collections::HashSet<_> = incomings.iter().map(|(p, _)| *p).collect();
+                        if actual != expected {
+                            return Err(format!("SSA phi in block {} has predecessors {:?}, expected {:?}", block.id, actual, expected));
+                        }
+                        for (pred, value) in incomings {
+                            let pred_block = by_id[*pred].unwrap();
+                            let use_index = pred_block.instrs.len();
+                            check_use(*value, *pred, use_index, &defs, &dom)?;
+                        }
+                    }
+                }
+            }
+
+            match block.terminator.as_ref() {
+                Some(Terminator::Branch { condition, .. }) => {
+                    check_use(*condition, block.id, block.instrs.len(), &defs, &dom)?;
+                }
+                Some(Terminator::Return(Some(value))) => {
+                    check_use(*value, block.id, block.instrs.len(), &defs, &dom)?;
+                }
+                Some(Terminator::Jump(_)) | Some(Terminator::Return(None)) => {}
+                None => return Err(format!("SSA block {} has no terminator", block.id)),
+            }
+        }
+
         Ok(())
     }
 }
