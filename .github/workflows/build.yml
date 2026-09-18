@@ -126,6 +126,8 @@ jobs:
           cargo run --release -- check examples/closures.nova
           cargo run --release -- ssa examples/closures.nova > /tmp/closures.ssa
           grep -Fq 'Closure' /tmp/closures.ssa
+          grep -Fq 'captures' /tmp/closures.ssa
+          grep -Fq 'CallIndirect' /tmp/closures.ssa
           grep -Fq 'value' /tmp/closures.ssa
           cargo run --release -- run examples/closures.nova > /tmp/closures.out
           grep -Fxq "1" /tmp/closures.out
