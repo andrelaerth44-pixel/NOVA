@@ -86,6 +86,7 @@ impl Builder {
                 values.extend(args.iter().map(|x| self.expr(x)));
                 self.emit(SsaInstr::Call { name: "call_value".into(), args: values, result: IrType::Any })
             }
+            Expr::Try(inner) => { let value=self.expr(inner); self.emit(SsaInstr::Call { name: "try".into(), args: vec![value], result: IrType::Any }) }
             Expr::Call(name, args) => {
                 let values = args.iter().map(|x| self.expr(x)).collect();
                 self.emit(SsaInstr::Call { name: name.clone(), args: values, result: IrType::Any })
