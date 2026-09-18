@@ -454,6 +454,22 @@ struct NovaEnum {
   NovaValue payload;
 };
 
+struct NovaArray {
+  size_t len;
+  NovaValue* items;
+};
+
+struct NovaMap {
+  size_t len;
+  NovaValue* keys;
+  NovaValue* values;
+};
+
+struct NovaSet {
+  size_t len;
+  NovaValue* items;
+};
+
 struct NovaEnv {
   size_t len;
   NovaValue slots[32];
@@ -503,13 +519,82 @@ static NovaValue nova_enum_value(const char* name, const char* variant, NovaValu
   e->name = nova_dup(name);
   e->variant = nova_dup(variant);
   e->payload = payload;
-  NovaValue v = { NOVA_ENUM, 0, NULL, NULL, NULL, e };
+  NovaValue v = { NOVA_ENUM, 0, NULL, NULL, NULL, e, NULL, NULL, NULL };
   return v;
 }
 
 static NovaValue nova_closure_value(NovaClosure* c) {
   NovaValue v = { NOVA_CLOSURE, 0, NULL, c, NULL, NULL };
   return v;
+}
+
+static NovaValue nova_array_value(NovaArray* a) {
+  NovaValue v = { NOVA_ARRAY, 0, NULL, NULL, NULL, NULL, a, NULL, NULL };
+  return v;
+}
+
+static NovaValue nova_map_value(NovaMap* m) {
+  NovaValue v = { NOVA_MAP, 0, NULL, NULL, NULL, NULL, NULL, m, NULL };
+  return v;
+}
+
+static NovaValue nova_set_value(NovaSet* s) {
+  NovaValue v = { NOVA_SET, 0, NULL, NULL, NULL, NULL, NULL, NULL, s };
+  return v;
+}
+
+static NovaValue nova_array(NovaValue* args, size_t argc) {
+  NovaArray* a = (NovaArray*)calloc(1, sizeof(NovaArray));
+  if (!a) return nova_null();
+  a->len = argc;
+  a->items = argc ? (NovaValue*)calloc(argc, sizeof(NovaValue)) : NULL;
+  if (argc && !a->items) return nova_null();
+  for (size_t i = 0; i < argc; i++) a->items[i] = args[i];
+  return nova_array_value(a);
+}
+
+static NovaValue nova_map(NovaValue* args, size_t argc) {
+  if (argc % 2 != 0) return nova_null();
+  NovaMap* m = (NovaMap*)calloc(1, sizeof(NovaMap));
+  if (!m) return nova_null();
+  m->len = argc / 2;
+  m->keys = m->len ? (NovaValue*)calloc(m->len, sizeof(NovaValue)) : NULL;
+  m->values = m->len ? (NovaValue*)calloc(m->len, sizeof(NovaValue)) : NULL;
+  if (m->len && (!m->keys || !m->values)) return nova_null();
+  for (size_t i = 0; i < m->len; i++) {
+    m->keys[i] = args[i * 2];
+    m->values[i] = args[i * 2 + 1];
+  }
+  return nova_map_value(m);
+}
+
+static NovaValue nova_set(NovaValue* args, size_t argc) {
+  NovaSet* set = (NovaSet*)calloc(1, sizeof(NovaSet));
+  if (!set) return nova_null();
+  set->items = argc ? (NovaValue*)calloc(argc, sizeof(NovaValue)) : NULL;
+  if (argc && !set->items) return nova_null();
+  for (size_t i = 0; i < argc; i++) {
+    int duplicate = 0;
+    for (size_t j = 0; j < set->len; j++) {
+      if (nova_equal(set->items[j], args[i])) { duplicate = 1; break; }
+    }
+    if (!duplicate) set->items[set->len++] = args[i];
+  }
+  return nova_set_value(set);
+}
+
+static NovaValue nova_index(NovaValue base, NovaValue index) {
+  if (base.tag == NOVA_ARRAY && base.array && index.tag == NOVA_NUMBER) {
+    size_t i = (size_t)index.number;
+    if (index.number >= 0 && (double)i == index.number && i < base.array->len)
+      return base.array->items[i];
+  }
+  if (base.tag == NOVA_MAP && base.map) {
+    for (size_t i = 0; i < base.map->len; i++) {
+      if (nova_equal(base.map->keys[i], index)) return base.map->values[i];
+    }
+  }
+  return nova_null();
 }
 
 static int nova_truthy(NovaValue v) {
