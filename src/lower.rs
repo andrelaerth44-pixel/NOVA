@@ -1,5 +1,4 @@
 use crate::ir::{BasicBlock, Instr, Module};
-use std::collections::VecDeque;
 
 pub fn lower(program: &[crate::Stmt]) -> Module {
     crate::ir::IrBuilder::new().lower_program(program)
