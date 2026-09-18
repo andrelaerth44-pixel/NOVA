@@ -71,7 +71,7 @@ impl IrBuilder {
                 self.lower_expr(e); self.module.push(Instr::Store(n.clone()));
             }
             crate::Stmt::Print(e) => {
-                self.lower_expr(e); self.module.push(Instr::Call("print".into(),1)); self.module.push(Instr::Pop);
+                self.lower_expr(e); self.module.push(Instr::Call("print".into(),1));
             }
             crate::Stmt::Return(e) => { self.lower_expr(e); self.module.push(Instr::Return); }
             crate::Stmt::If(c,a,b) => {
