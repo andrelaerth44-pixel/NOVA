@@ -3,6 +3,8 @@
 The roadmap is an implementation order, not a claim that unfinished features already exist.
 
 ## 1.5 hardening
+- bootstrap/self-hosting compiler architecture
+- compiler-as-library API and deterministic compiler pipeline
 - source spans and line/column diagnostics
 - deterministic parser errors
 - static semantic checking
