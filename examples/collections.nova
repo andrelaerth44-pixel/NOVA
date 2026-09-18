@@ -1,0 +1,19 @@
+scores = map {
+    "Laerth": 100,
+    "NOVA": 42
+}
+
+tags = set {
+    "compiler",
+    "runtime"
+}
+
+map_set(scores, "NOVA", 99)
+set_add(tags, "language")
+
+print map_get(scores, "NOVA")
+print map_has(scores, "Laerth")
+print set_has(tags, "language")
+print len(scores)
+print len(tags)
+print scores["Laerth"]
