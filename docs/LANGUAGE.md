@@ -98,3 +98,21 @@ failure = Err("network")
 ```
 
 The runtime also provides `is_some`, `is_none`, `is_ok`, `is_err`, `unwrap`, and `unwrap_or`. These form the current safe value-inspection layer while the language-level propagation operator is still being implemented.
+
+
+## Closures
+
+Function expressions can capture the surrounding lexical environment:
+
+```nova
+fn make_adder(x) {
+    return fn(y) {
+        return x + y
+    }
+}
+
+add10 = make_adder(10)
+print add10(32)
+```
+
+Closures are values and can be assigned to variables and called like functions. The runtime captures the environment at closure creation time.
