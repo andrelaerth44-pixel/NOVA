@@ -129,9 +129,12 @@ impl Parser {
         match e {
             Expr::Var(n) if n=="_" => Ok(Pattern::Wildcard),
             Expr::Var(n) => Ok(Pattern::Enum{variant:n,binding:None}),
-            Expr::Call(n,args) if n=="Some"||n=="Ok"||n=="Err" => {
-                if args.len()!=1 { return Err(format!("{} pattern expects one binding",n)); }
-                let binding=match &args[0]{Expr::Var(x) if x!="_"=>Some(x.clone()),Expr::Var(x) if x=="_"=>None,_=>return Err("enum pattern payload must be a binding or _".into())};
+            Expr::Call(n,args) if args.len() == 1 => {
+                let binding=match &args[0]{
+                    Expr::Var(x) if x!="_"=>Some(x.clone()),
+                    Expr::Var(x) if x=="_"=>None,
+                    _=>return Err("enum pattern payload must be a binding or _".into())
+                };
                 Ok(Pattern::Enum{variant:n,binding})
             }
             Expr::Call(n,args) if args.is_empty() => Ok(Pattern::Enum{variant:n,binding:None}),
