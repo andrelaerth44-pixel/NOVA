@@ -85,16 +85,16 @@ fn emit_function(
         "static NovaValue {}(NovaEnv* env, NovaValue* args, size_t argc)",
         c_ident(&function.name)
     ));
-    out.push_str(" {\\n");
+    out.push_str(" {\n");
     out.push_str("  jmp_buf nova_jmp;\n");
     out.push_str("  jmp_buf* nova_prev_jmp = nova_active_jmp;\n");
     out.push_str("  nova_active_jmp = &nova_jmp;\n");
     out.push_str("  int nova_jmp_code = setjmp(nova_jmp);\n");
     out.push_str("  if (nova_jmp_code != 0) {\n");
-    out.push_str("    NovaValue nova_result = nova_pending_return;\\n");
+    out.push_str("    NovaValue nova_result = nova_pending_return;\n");
     out.push_str("    nova_active_jmp = nova_prev_jmp;\n");
-    out.push_str("    return nova_result;\\n");
-    out.push_str("  }\\n");
+    out.push_str("    return nova_result;\n");
+    out.push_str("  }\n");
 
     for id in 0..=max {
         out.push_str(&format!("  NovaValue {} = nova_null();\n", v(id)));
