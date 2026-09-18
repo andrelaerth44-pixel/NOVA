@@ -26,8 +26,8 @@ use runtime::Vm;
 
 fn main(){
     let a:Vec<String>=env::args().collect();
-    if a.len()<2 {eprintln!("NOVA 1.5.0\nusage: nova run <file> | nova check <file> | nova ir <file> | nova build-c <file> [output.c] | nova build-native <file> [output] | nova app-check <file> | nova build-android <file> [MainActivity.kt] | nova version");return}
-    if a[1]=="version"{println!("NOVA 1.5.0");return}
+    if a.len()<2 {eprintln!("NOVA 1.6.0\nusage: nova run <file> | nova check <file> | nova ir <file> | nova build-c <file> [output.c] | nova build-native <file> [output] | nova app-check <file> | nova build-android <file> [MainActivity.kt] | nova version");return}
+    if a[1]=="version"{println!("NOVA 1.6.0");return}
     if a[1]=="app-check" {
         let src=match fs::read_to_string(&a[2]){Ok(x)=>x,Err(e)=>{eprintln!("{}",e);std::process::exit(1)}};
         let app=match app_parser::AppParser::new(&src).parse(){Ok(x)=>x,Err(e)=>{eprintln!("app parse error: {}",e);std::process::exit(1)}};
