@@ -149,15 +149,36 @@ impl Parser {
                     let mut a=vec![];if !self.eat(&Token::RParen){loop{a.push(self.expr()?);if self.eat(&Token::RParen){break}if !self.eat(&Token::Comma){return Err("expected ,".into())}}}
                     Expr::Call(n,a)
                 } else if self.eat(&Token::LBrace) {
-                    let mut fields=vec![];
-                    if !self.eat(&Token::RBrace){loop{
-                        let field=match self.take(){Token::Ident(x)=>x,_=>return Err("expected field name".into())};
-                        if !self.eat(&Token::Colon){return Err("expected : in struct literal".into())}
-                        fields.push((field,self.expr()?));
-                        if self.eat(&Token::RBrace){break}
-                        if !self.eat(&Token::Comma){return Err("expected , in struct literal".into())}
-                    }}
-                    Expr::StructInit(n,fields)
+                    if n == "map" {
+                        let mut entries=vec![];
+                        if !self.eat(&Token::RBrace){loop{
+                            let key=self.expr()?;
+                            if !self.eat(&Token::Colon){return Err("expected : in map literal".into())}
+                            let value=self.expr()?;
+                            entries.push((key,value));
+                            if self.eat(&Token::RBrace){break}
+                            if !self.eat(&Token::Comma){return Err("expected , in map literal".into())}
+                        }}
+                        Expr::Map(entries)
+                    } else if n == "set" {
+                        let mut values=vec![];
+                        if !self.eat(&Token::RBrace){loop{
+                            values.push(self.expr()?);
+                            if self.eat(&Token::RBrace){break}
+                            if !self.eat(&Token::Comma){return Err("expected , in set literal".into())}
+                        }}
+                        Expr::Set(values)
+                    } else {
+                        let mut fields=vec![];
+                        if !self.eat(&Token::RBrace){loop{
+                            let field=match self.take(){Token::Ident(x)=>x,_=>return Err("expected field name".into())};
+                            if !self.eat(&Token::Colon){return Err("expected : in struct literal".into())}
+                            fields.push((field,self.expr()?));
+                            if self.eat(&Token::RBrace){break}
+                            if !self.eat(&Token::Comma){return Err("expected , in struct literal".into())}
+                        }}
+                        Expr::StructInit(n,fields)
+                    }
                 } else {Expr::Var(n)}
             },
             Token::LBracket=>{let mut a=vec![];if !self.eat(&Token::RBracket){loop{a.push(self.expr()?);if self.eat(&Token::RBracket){break}if !self.eat(&Token::Comma){return Err("expected ,".into())}}}Expr::Array(a)},
@@ -181,6 +202,10 @@ impl Parser {
             if self.eat(&Token::Dot) {
                 let field = match self.take() { Token::Ident(n)=>n, _=>return Err("expected field name after .".into()) };
                 x = Expr::Field(Box::new(x), field);
+            } else if self.eat(&Token::LBracket) {
+                let index = self.expr()?;
+                if !self.eat(&Token::RBracket) { return Err("expected ] after index".into()); }
+                x = Expr::Index(Box::new(x), Box::new(index));
             } else if self.eat(&Token::LParen) {
                 let mut args=vec![];
                 if !self.eat(&Token::RParen) { loop { args.push(self.expr()?); if self.eat(&Token::RParen){break} if !self.eat(&Token::Comma){return Err("expected , in call".into())} } }
