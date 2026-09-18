@@ -141,6 +141,7 @@ pub struct SsaBlock {
 pub struct SsaFunction {
     pub name: String,
     pub params: Vec<(String, IrType, ValueId)>,
+    pub captures: Vec<(String, IrType, ValueId)>,
     pub return_type: IrType,
     pub blocks: Vec<SsaBlock>,
 }
@@ -515,6 +516,11 @@ impl SsaFunction {
             }
         }
         for (_, _, id) in &self.params {
+            if defs.insert(*id, (0, usize::MAX)).is_some() {
+                return Err(format!("SSA value {} is defined more than once", id));
+            }
+        }
+        for (_, _, id) in &self.captures {
             if defs.insert(*id, (0, usize::MAX)).is_some() {
                 return Err(format!("SSA value {} is defined more than once", id));
             }
