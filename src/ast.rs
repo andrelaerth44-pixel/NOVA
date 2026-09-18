@@ -3,6 +3,12 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub type EnvRef = Rc<RefCell<EnvFrame>>;
 
+#[derive(Clone, Debug)]
+pub struct IteratorState {
+    pub values: Vec<Value>,
+    pub index: usize,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum MapKey {
     Number(u64),
@@ -48,6 +54,7 @@ pub enum Value {
     Struct { name: String, fields: std::collections::HashMap<String, Value> },
     Enum { name: String, variant: String, value: Option<Box<Value>> },
     Closure { args: Vec<String>, body: Vec<Stmt>, env: EnvRef },
+    Iterator(Rc<RefCell<IteratorState>>),
     Null,
 }
 impl Value {
@@ -66,13 +73,14 @@ impl Value {
             (Value::Struct{name:an,fields:af},Value::Struct{name:bn,fields:bf})=>an==bn&&af.len()==bf.len()&&af.iter().all(|(k,v)|bf.get(k).is_some_and(|x|v.equals(x))),
             (Value::Enum{name:an,variant:av,value:ax},Value::Enum{name:bn,variant:bv,value:bx})=>an==bn&&av==bv&&match (ax,bx){(None,None)=>true,(Some(a),Some(b))=>a.equals(b),_=>false},
             (Value::Closure{..},Value::Closure{..})=>false,
+            (Value::Iterator(a),Value::Iterator(b))=>Rc::ptr_eq(a,b),
             _=>false
         }
     }
     pub fn truth(&self)->bool {
         match self {
             Value::Bool(x)=>*x, Value::Num(x)=>*x!=0.0, Value::Str(x)=>!x.is_empty(),
-            Value::Array(x)=>!x.is_empty(), Value::Map(x)=>!x.borrow().is_empty(), Value::Set(x)=>!x.borrow().is_empty(), Value::Struct{..}=>true, Value::Enum{..}=>true, Value::Closure{..}=>true, Value::Null=>false
+            Value::Array(x)=>!x.is_empty(), Value::Map(x)=>!x.borrow().is_empty(), Value::Set(x)=>!x.borrow().is_empty(), Value::Struct{..}=>true, Value::Enum{..}=>true, Value::Closure{..}=>true, Value::Iterator(x)=>x.borrow().index < x.borrow().values.len(), Value::Null=>false
         }
     }
 }
@@ -87,6 +95,7 @@ impl std::fmt::Display for Value {
             Value::Struct{name,fields}=>{write!(f,"{} {{ ",name)?;let mut first=true;for(k,v)in fields{if !first{write!(f,", ")?;}first=false;write!(f,"{}: {}",k,v)?;}write!(f," }}")},
             Value::Enum{name,variant,value}=>match value{Some(v)=>write!(f,"{}.{}({})",name,variant,v),None=>write!(f,"{}.{}",name,variant)},
             Value::Closure{..}=>write!(f,"<closure>"),
+            Value::Iterator(_) => write!(f,"<iterator>"),
             Value::Null=>write!(f,"null")
         }
     }
