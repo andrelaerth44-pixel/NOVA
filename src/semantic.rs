@@ -10,12 +10,13 @@ struct StaticFn {
 pub struct Checker {
     scopes: Vec<HashMap<String, crate::types::Type>>,
     fns: HashMap<String, StaticFn>,
+    structs: HashMap<String, HashMap<String, crate::types::Type>>,
     errors: Vec<String>,
 }
 
 impl Checker {
     pub fn new() -> Self {
-        Self { scopes: vec![HashMap::new()], fns: HashMap::new(), errors: Vec::new() }
+        Self { scopes: vec![HashMap::new()], fns: HashMap::new(), structs: HashMap::new(), errors: Vec::new() }
     }
 
     fn error(&mut self, msg: impl Into<String>) { self.errors.push(msg.into()); }
@@ -57,6 +58,24 @@ impl Checker {
                 self.error(format!("undefined variable {}", n));
                 crate::types::Type::Unknown
             }),
+            Expr::StructInit(name, fields) => {
+                let schema = match self.structs.get(name).cloned() { Some(x)=>x, None=>{ self.error(format!("undefined struct {}",name)); return crate::types::Type::Unknown; } };
+                if fields.len() != schema.len() { self.error(format!("struct {} expects {} fields, got {}", name, schema.len(), fields.len())); }
+                let mut seen = std::collections::HashSet::new();
+                for (field, expr) in fields {
+                    let got = self.infer(expr);
+                    if !seen.insert(field) { self.error(format!("duplicate field {} in {}", field, name)); }
+                    match schema.get(field) { Some(want) if !want.compatible(&got) => self.error(format!("field {}.{} expects {}, got {}", name, field, want.name(), got.name())), None => self.error(format!("unknown field {}.{}", name, field)), _=>{} }
+                }
+                crate::types::Type::Struct(name.clone())
+            }
+            Expr::Field(base, field) => {
+                let t = self.infer(base);
+                match t {
+                    crate::types::Type::Struct(name) => match self.structs.get(&name).and_then(|m|m.get(field)).cloned() { Some(t)=>t, None=>{self.error(format!("unknown field {}.{}",name,field));crate::types::Type::Unknown} },
+                    _ => { self.error(format!("field access requires struct, got {}", t.name())); crate::types::Type::Unknown }
+                }
+            }
             Expr::Array(xs) => {
                 if xs.is_empty() { return crate::types::Type::Array(Box::new(crate::types::Type::Any)); }
                 let first = self.infer(&xs[0]);
@@ -241,6 +260,7 @@ impl Checker {
                 self.pop_scope();
             }
             Stmt::Import(_) => {}
+            Stmt::StructDecl(_, _) => {}
             Stmt::Fn(_, args, ret, body) => {
                 self.push_scope();
                 for (name, ty) in args { self.define(name.clone(), ty.clone()); }
@@ -252,6 +272,10 @@ impl Checker {
 
     pub fn check(&mut self, program: &[Stmt]) -> Result<(), Vec<String>> {
         for stmt in program {
+            if let Stmt::StructDecl(name, fields) = stmt {
+                if self.structs.contains_key(name) { self.error(format!("duplicate struct {}", name)); }
+                else { self.structs.insert(name.clone(), fields.iter().cloned().collect()); }
+            }
             if let Stmt::Fn(name, args, ret, _) = stmt {
                 if self.fns.contains_key(name) {
                     self.error(format!("duplicate function {}", name));
