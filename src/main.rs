@@ -159,6 +159,12 @@ impl Vm {
                 if n=="range" {if a.len()!=2{return Err("range expects 2 arguments".into())}let x=self.eval(&a[0])?;let y=self.eval(&a[1])?;let (x,y)=(num(x)? as i64,num(y)? as i64);return Ok(Value::Array((x..y).map(|n|Value::Num(n as f64)).collect()));}
                 if n=="str" {if a.len()!=1{return Err("str expects 1 argument".into())}return Ok(Value::Str(self.eval(&a[0])?.to_string()));}
                 if n=="len" {if a.len()!=1{return Err("len expects 1 argument".into())}let v=self.eval(&a[0])?;return Ok(Value::Num(match v{Value::Str(x)=>x.chars().count() as f64,Value::Array(x)=>x.len() as f64,_=>return Err("len expects string or array".into())}));}
+                if n=="abs" {if a.len()!=1{return Err("abs expects 1 argument".into())}return Ok(Value::Num(num(self.eval(&a[0])?)?.abs()));}
+                if n=="sqrt" {if a.len()!=1{return Err("sqrt expects 1 argument".into())}let v=num(self.eval(&a[0])?)?;if v<0.0{return Err("sqrt expects a non-negative number".into())}return Ok(Value::Num(v.sqrt()));}
+                if n=="read_file" {if a.len()!=1{return Err("read_file expects 1 argument".into())}let path=self.eval(&a[0])?;let path=match path{Value::Str(x)=>x,_=>return Err("read_file expects a string path".into())};return Ok(Value::Str(fs::read_to_string(&path).map_err(|e|format!("cannot read {}: {}",path,e))?));}
+                if n=="write_file" {if a.len()!=2{return Err("write_file expects 2 arguments".into())}let path=self.eval(&a[0])?;let data=self.eval(&a[1])?;let path=match path{Value::Str(x)=>x,_=>return Err("write_file expects a string path".into())};let data=match data{Value::Str(x)=>x,_=>return Err("write_file expects string data".into())};fs::write(&path,&data).map_err(|e|format!("cannot write {}: {}",path,e))?;return Ok(Value::Null);}
+                if n=="exists" {if a.len()!=1{return Err("exists expects 1 argument".into())}let path=self.eval(&a[0])?;let path=match path{Value::Str(x)=>x,_=>return Err("exists expects a string path".into())};return Ok(Value::Bool(std::path::Path::new(&path).exists()));}
+                if n=="env" {if a.len()!=1{return Err("env expects 1 argument".into())}let key=self.eval(&a[0])?;let key=match key{Value::Str(x)=>x,_=>return Err("env expects a string key".into())};return Ok(std::env::var(&key).map(Value::Str).unwrap_or(Value::Null));}
                 let f=self.fns.get(n).cloned().ok_or_else(||format!("undefined function {}",n))?;
                 if f.args.len()!=a.len(){return Err(format!("{} expects {} arguments",n,f.args.len()))}
                 let old=self.vars.clone();for(i,k)in f.args.iter().enumerate(){self.vars.insert(k.clone(),self.eval(&a[i])?);}
@@ -292,6 +298,30 @@ impl Checker {
                     }
                     return types::Type::Number;
                 }
+                if n == "abs" || n == "sqrt" {
+                    if args.len() != 1 { self.error(format!("{} expects 1 argument", n)); }
+                    if let Some(a) = args.first() {
+                        let t = self.infer(a);
+                        if !t.compatible(&types::Type::Number) { self.error(format!("{} expects a number, got {}", n, t.name())); }
+                    }
+                    return types::Type::Number;
+                }
+                if n == "read_file" {
+                    if args.len() != 1 { self.error("read_file expects 1 argument"); }
+                    if let Some(a) = args.first() { let t=self.infer(a); if !t.compatible(&types::Type::String) { self.error(format!("read_file expects a string path, got {}", t.name())); } }
+                    return types::Type::String;
+                }
+                if n == "write_file" {
+                    if args.len() != 2 { self.error("write_file expects 2 arguments"); }
+                    if let Some(a)=args.first(){let t=self.infer(a);if !t.compatible(&types::Type::String){self.error(format!("write_file expects a string path, got {}",t.name()));}}
+                    if let Some(a)=args.get(1){let t=self.infer(a);if !t.compatible(&types::Type::String){self.error(format!("write_file expects string data, got {}",t.name()));}}
+                    return types::Type::Null;
+                }
+                if n == "exists" || n == "env" {
+                    if args.len() != 1 { self.error(format!("{} expects 1 argument", n)); }
+                    if let Some(a)=args.first(){let t=self.infer(a);if !t.compatible(&types::Type::String){self.error(format!("{} expects a string, got {}",n,t.name()));}}
+                    return if n=="exists" { types::Type::Bool } else { types::Type::String };
+                }
                 let f = match self.fns.get(n).cloned() {
                     Some(f) => f,
                     None => {
@@ -409,4 +439,7 @@ mod tests {
     #[test] fn divide_zero(){assert!(run("let x = 10 / 0").is_err());}
     #[test] fn builtin_arity(){assert!(run("let x = len([1])").is_ok());assert!(run("let x = len([1],[2])").is_err());}
     #[test] fn short_circuit(){let vm=run("let x = false and (1 / 0)").unwrap();assert_eq!(vm.vars.get("x").unwrap().to_string(),"false");}
+    #[test] fn math_builtins(){let vm=run("let x = abs(-4) let y = sqrt(9)").unwrap();assert_eq!(vm.vars.get("x").unwrap().to_string(),"4");assert_eq!(vm.vars.get("y").unwrap().to_string(),"3");}
+    #[test] fn filesystem_builtins(){let path="/tmp/nova_test_runtime.txt";let src=format!("write_file(\"{}\", \"hello\") let x = read_file(\"{}\")",path,path);let vm=run(&src).unwrap();assert_eq!(vm.vars.get("x").unwrap().to_string(),"hello");assert_eq!(run(&format!("let x = exists(\"{}\")",path)).unwrap().vars.get("x").unwrap().to_string(),"true");let _=std::fs::remove_file(path);}
+
 }
