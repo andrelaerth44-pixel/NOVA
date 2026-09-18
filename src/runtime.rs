@@ -154,7 +154,12 @@ impl Vm {
                     _ => Err("field access requires struct".into()),
                 }
             }
-            Expr::Var(n) => self.lookup(n).ok_or_else(|| format!("undefined variable {}", n).into()),
+            Expr::Var(n) => {
+                if n == "None" {
+                    return Ok(Value::Enum { name: "Option".into(), variant: "None".into(), value: None });
+                }
+                self.lookup(n).ok_or_else(|| format!("undefined variable {}", n).into())
+            },
             Expr::Array(a) => Ok(Value::Array(a.iter().map(|x| self.eval(x)).collect::<Result<_, _>>()?)),
             Expr::Map(entries) => {
                 let mut map = HashMap::new();
