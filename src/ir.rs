@@ -9,6 +9,10 @@ pub enum IrType {
     Enum(String),
 }
 
+impl Default for IrType {
+    fn default() -> Self { IrType::Any }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Instr {
     ConstNumber(f64),
@@ -213,7 +217,7 @@ impl IrBuilder {
                 let _ = self.lower_expr(a);
                 let _ = self.lower_expr(b);
                 let name = format!("{:?}", op);
-                let ty = if matches!(op, crate::Token::EqEq | crate::Token::NotEq | crate::Token::Lt | crate::Token::Le | crate::Token::Gt | crate::Token::Ge | crate::Token::And | crate::Token::Or) { IrType::Bool } else { IrType::Number };
+                let ty = if matches!(op, crate::Token::EqEq | crate::Token::Ne | crate::Token::Lt | crate::Token::Le | crate::Token::Gt | crate::Token::Ge | crate::Token::And | crate::Token::Or) { IrType::Bool } else { IrType::Number };
                 self.push(Instr::Binary { op: name, ty: ty.clone() });
                 ty
             }
