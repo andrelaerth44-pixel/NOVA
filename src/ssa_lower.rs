@@ -103,16 +103,35 @@ fn collect_stmt_vars(
     }
 }
 
+#[derive(Clone)]
+struct ClosureSpec {
+    function: String,
+    params: Vec<String>,
+    body: Vec<Stmt>,
+    captures: Vec<String>,
+}
+
 struct Builder {
     blocks: Vec<SsaBlock>,
     current: usize,
     next: ValueId,
     vars: Vec<HashMap<String, ValueId>>,
+    owner_name: String,
+    closure_counter: usize,
+    closures: Vec<ClosureSpec>,
 }
 
 impl Builder {
-    fn new() -> Self {
-        Self { blocks: vec![SsaBlock { id: 0, ..Default::default() }], current: 0, next: 0, vars: vec![HashMap::new()] }
+    fn new(owner_name: impl Into<String>) -> Self {
+        Self {
+            blocks: vec![SsaBlock { id: 0, ..Default::default() }],
+            current: 0,
+            next: 0,
+            vars: vec![HashMap::new()],
+            owner_name: owner_name.into(),
+            closure_counter: 0,
+            closures: Vec::new(),
+        }
     }
     fn fresh(&mut self) -> ValueId { let v = self.next; self.next += 1; v }
     fn emit(&mut self, instr: SsaInstr) -> ValueId {
@@ -211,15 +230,25 @@ impl Builder {
                 for arg in args { bound.insert(arg.clone()); }
                 let mut used = std::collections::BTreeSet::new();
                 collect_stmt_vars(body, &mut bound, &mut used);
-                let captures = used
-                    .into_iter()
-                    .filter_map(|name| self.lookup(&name).map(|value| (name, value)))
+                let capture_names = used.into_iter().collect::<Vec<_>>();
+                let captures = capture_names
+                    .iter()
+                    .filter_map(|name| self.lookup(name).map(|value| (name.clone(), value)))
                     .collect::<Vec<_>>();
+                let function = format!("{}__closure{}", self.owner_name, self.closure_counter);
+                self.closure_counter += 1;
+                self.closures.push(ClosureSpec {
+                    function: function.clone(),
+                    params: args.clone(),
+                    body: body.clone(),
+                    captures: capture_names,
+                });
                 let ty = IrType::Function(
                     vec![IrType::Any; args.len()],
                     Box::new(IrType::Any),
                 );
                 self.emit(SsaInstr::Closure {
+                    function,
                     params: args.clone(),
                     captures,
                     ty,
@@ -459,29 +488,89 @@ impl Builder {
     }
 }
 
-pub fn lower_function(name: &str, args: &[(String, crate::types::Type)], ret: &crate::types::Type, body: &[Stmt]) -> SsaFunction {
-    let mut b = Builder::new();
+fn lower_function_tree_with_captures(
+    name: &str,
+    args: &[(String, crate::types::Type)],
+    ret: &crate::types::Type,
+    body: &[Stmt],
+    captures: &[String],
+) -> Vec<SsaFunction> {
+    let mut b = Builder::new(name);
     let mut params = Vec::new();
+
+    for capture in captures {
+        let id = b.fresh();
+        b.bind(capture.clone(), id);
+        params.push((capture.clone(), IrType::Any, id));
+    }
+
     for (arg, ty) in args {
         let id = b.fresh();
         b.bind(arg.clone(), id);
         params.push((arg.clone(), type_to_ir(ty), id));
     }
+
     b.stmt_list(body);
     if b.blocks.iter().any(|x| x.terminator.is_none()) {
         for block in &mut b.blocks {
-            if block.terminator.is_none() { block.terminator = Some(Terminator::Return(None)); }
+            if block.terminator.is_none() {
+                block.terminator = Some(Terminator::Return(None));
+            }
         }
     }
-    SsaFunction { name: name.into(), params, return_type: type_to_ir(ret), blocks: b.blocks }
+
+    let closure_specs = b.closures.clone();
+    let function = SsaFunction {
+        name: name.into(),
+        params,
+        return_type: type_to_ir(ret),
+        blocks: b.blocks,
+    };
+
+    let mut functions = vec![function];
+    for spec in closure_specs {
+        functions.extend(lower_function_tree_with_captures(
+            &spec.function,
+            &spec.params.iter().map(|p| (p.clone(), crate::types::Type::Any)).collect::<Vec<_>>(),
+            &crate::types::Type::Any,
+            &spec.body,
+            &spec.captures,
+        ));
+    }
+    functions
+}
+
+pub fn lower_function(
+    name: &str,
+    args: &[(String, crate::types::Type)],
+    ret: &crate::types::Type,
+    body: &[Stmt],
+) -> SsaFunction {
+    lower_function_tree_with_captures(name, args, ret, body, &[])
+        .into_iter()
+        .next()
+        .expect("lower_function always produces a function")
 }
 
 fn type_to_ir(t: &crate::types::Type) -> IrType {
     IrType::from_type(t)
 }
 
+pub fn lower_function_tree(
+    name: &str,
+    args: &[(String, crate::types::Type)],
+    ret: &crate::types::Type,
+    body: &[Stmt],
+) -> Vec<SsaFunction> {
+    lower_function_tree_with_captures(name, args, ret, body, &[])
+}
+
 pub fn lower_program(program: &[Stmt]) -> SsaFunction {
     lower_function("<main>", &[], &crate::types::Type::Void, program)
+}
+
+pub fn lower_program_tree(program: &[Stmt]) -> Vec<SsaFunction> {
+    lower_function_tree("<main>", &[], &crate::types::Type::Void, program)
 }
 
 pub fn verify_program(program: &[Stmt]) -> Result<(), String> {
