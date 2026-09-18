@@ -86,10 +86,15 @@ impl Checker {
     fn infer(&mut self, e: &Expr) -> crate::types::Type {
         match e {
             Expr::Val(v) => self.value_type(v),
-            Expr::Var(n) => self.lookup(n).unwrap_or_else(|| {
-                self.error(format!("undefined variable {}", n));
-                crate::types::Type::Unknown
-            }),
+            Expr::Var(n) => {
+                if n == "None" {
+                    return crate::types::Type::Generic("Option".into(), vec![crate::types::Type::Any]);
+                }
+                self.lookup(n).unwrap_or_else(|| {
+                    self.error(format!("undefined variable {}", n));
+                    crate::types::Type::Unknown
+                })
+            },
             Expr::EnumInit(name, variant, value) => {
                 match self.enums.get(name).and_then(|m|m.get(variant)).cloned() {
                     Some(expected) => { if let (Some(want), Some(expr)) = (expected, value) { let got=self.infer(expr); if !want.compatible(&got){self.error(format!("enum {}.{} expects {}, got {}",name,variant,want.name(),got.name()));} } }
@@ -276,7 +281,8 @@ impl Checker {
                     }
                     return ret;
                 }
-                if let Some((enum_name, payload_type)) = self.enums.iter().find_map(|(enum_name, variants)| {
+                if !matches!(name.as_str(), "None" | "Some" | "Ok" | "Err") {
+                    if let Some((enum_name, payload_type)) = self.enums.iter().find_map(|(enum_name, variants)| {
                     variants.get(name).map(|payload| (enum_name.clone(), payload.clone()))
                 }) {
                     if args.len() != if payload_type.is_some() { 1 } else { 0 } {
@@ -289,6 +295,7 @@ impl Checker {
                         }
                     }
                     return crate::types::Type::Enum(enum_name);
+                    }
                 }
                 if name=="None" { return crate::types::Type::Generic("Option".into(),vec![crate::types::Type::Any]); }
                 if name=="Some" || name=="Ok" || name=="Err" {
