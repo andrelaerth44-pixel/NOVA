@@ -28,7 +28,8 @@ The implementation is deliberately honest: a capability is documented as impleme
 - lexical closures
 - first-class iterators (`iter`, `next`, `has_next`, `collect`)
 - filesystem, environment, path, time and JSON runtime builtins
-- CLI run/check/version
+- deterministic compiler pipeline API (`compile_source` / `compile_program`)
+- CLI run/check/ir/ssa/version
 
 The current 1.x line is still being hardened. Static typing, diagnostics, IR, native code generation, standard-library breadth, concurrency, package management, UI, graphics, GPU and platform backends remain separate implementation stages.
 
