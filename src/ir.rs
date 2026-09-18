@@ -195,6 +195,8 @@ impl IrBuilder {
                     crate::Value::Bool(b) => self.push(Instr::ConstBool(*b)),
                     crate::Value::Null => self.push(Instr::ConstNull),
                     crate::Value::Array(_) => self.push(Instr::Call { name: "array".into(), argc: 0, result: IrType::Any }),
+                    crate::Value::Map(_) => self.push(Instr::Call { name: "map".into(), argc: 0, result: IrType::Any }),
+                    crate::Value::Set(_) => self.push(Instr::Call { name: "set".into(), argc: 0, result: IrType::Any }),
                     crate::Value::Struct { name, fields } => self.push(Instr::StructInit { name: name.clone(), fields: fields.keys().cloned().collect() }),
                     crate::Value::Enum { name, variant, .. } => self.push(Instr::Call { name: format!("{}.{}", name, variant), argc: 0, result: IrType::Enum(name.clone()) }),
                     crate::Value::Closure { .. } => self.push(Instr::Call { name: "closure".into(), argc: 0, result: IrType::Any }),
