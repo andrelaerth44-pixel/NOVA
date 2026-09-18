@@ -40,6 +40,7 @@ impl Checker {
             Value::Null => crate::types::Type::Null,
             Value::Struct { name, .. } => crate::types::Type::Struct(name.clone()),
             Value::Enum { name, .. } => crate::types::Type::Enum(name.clone()),
+            Value::Closure { .. } => crate::types::Type::Function(vec![], Box::new(crate::types::Type::Any)),
             Value::Array(xs) => {
                 if xs.is_empty() { return crate::types::Type::Array(Box::new(crate::types::Type::Any)); }
                 let first = self.value_type(&xs[0]);
