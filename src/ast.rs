@@ -4,6 +4,7 @@ pub enum Expr {
     Binary(Box<Expr>, Token, Box<Expr>), Call(String, Vec<Expr>),
     Array(Vec<Expr>), Field(Box<Expr>, String),
     StructInit(String, Vec<(String, Expr)>),
+    EnumInit(String, String, Option<Box<Expr>>),
 }
 #[derive(Clone, Debug)]
 pub enum Stmt {
@@ -11,11 +12,13 @@ pub enum Stmt {
     If(Expr, Vec<Stmt>, Vec<Stmt>), While(Expr, Vec<Stmt>), For(String, Expr, Vec<Stmt>), Import(String), Match(Expr, Vec<(Expr, Vec<Stmt>)>, Vec<Stmt>),
     Fn(String, Vec<(String, crate::types::Type)>, crate::types::Type, Vec<Stmt>), Return(Expr),
     StructDecl(String, Vec<(String, crate::types::Type)>),
+    EnumDecl(String, Vec<(String, Option<crate::types::Type>)>),
 }
 #[derive(Clone, Debug)]
 pub enum Value {
     Num(f64), Str(String), Bool(bool), Array(Vec<Value>),
     Struct { name: String, fields: std::collections::HashMap<String, Value> },
+    Enum { name: String, variant: String, value: Option<Box<Value>> },
     Null,
 }
 impl Value {
@@ -27,6 +30,7 @@ impl Value {
             (Value::Null,Value::Null)=>true,
             (Value::Array(a),Value::Array(b))=>a.len()==b.len()&&a.iter().zip(b).all(|(x,y)|x.equals(y)),
             (Value::Struct{name:an,fields:af},Value::Struct{name:bn,fields:bf})=>an==bn&&af.len()==bf.len()&&af.iter().all(|(k,v)|bf.get(k).is_some_and(|x|v.equals(x))),
+            (Value::Enum{name:an,variant:av,value:ax},Value::Enum{name:bn,variant:bv,value:bx})=>an==bn&&av==bv&&match (ax,bx){(None,None)=>true,(Some(a),Some(b))=>a.equals(b),_=>false},
             _=>false
         }
     }
@@ -44,6 +48,7 @@ impl std::fmt::Display for Value {
             Value::Str(x)=>write!(f,"{}",x), Value::Bool(x)=>write!(f,"{}",x),
             Value::Array(x)=>{write!(f,"[")?;for(i,v) in x.iter().enumerate(){if i>0{write!(f,", ")?;}write!(f,"{}",v)?;}write!(f,"]")},
             Value::Struct{name,fields}=>{write!(f,"{} {{ ",name)?;let mut first=true;for(k,v)in fields{if !first{write!(f,", ")?;}first=false;write!(f,"{}: {}",k,v)?;}write!(f," }}")},
+            Value::Enum{name,variant,value}=>match value{Some(v)=>write!(f,"{}.{}({})",name,variant,v),None=>write!(f,"{}.{}",name,variant)},
             Value::Null=>write!(f,"null")
         }
     }
