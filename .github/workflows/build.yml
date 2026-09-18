@@ -78,3 +78,15 @@ jobs:
         run: |
           cargo run --release -- check examples/structs.nova
           test "$(cargo run --release -- run examples/structs.nova)" = Laerth\n18\ntrue'
+
+      - name: Generics smoke test
+        shell: bash
+        run: |
+          cargo run --release -- check examples/generics.nova
+          test "$(cargo run --release -- run examples/generics.nova)" = $'42
+NOVA
+42
+99
+done
+fallback
+10'
