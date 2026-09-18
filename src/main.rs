@@ -329,11 +329,16 @@ impl Checker {
                         if !expected.compatible(&t) { self.error(format!("return type mismatch: expected {}, got {}", expected.name(), t.name())); }
                     }
                 }
-                Stmt::If(c, a, b) | Stmt::While(c, a) => {
+                Stmt::If(c, a, b) => {
                     let t = self.infer(c);
                     if !t.compatible(&types::Type::Bool) && !t.compatible(&types::Type::Number) { self.error(format!("condition must be bool or number, got {}", t.name())); }
                     self.check_block(a, expected_return.clone());
-                    if let Stmt::If(_, _, _) = s { self.check_block(b, expected_return.clone()); }
+                    self.check_block(b, expected_return.clone());
+                }
+                Stmt::While(c, b) => {
+                    let t = self.infer(c);
+                    if !t.compatible(&types::Type::Bool) && !t.compatible(&types::Type::Number) { self.error(format!("condition must be bool or number, got {}", t.name())); }
+                    self.check_block(b, expected_return.clone());
                 }
                 Stmt::For(n, it, b) => {
                     match self.infer(it) {
