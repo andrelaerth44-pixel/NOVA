@@ -6,9 +6,9 @@ pub enum Expr {
 }
 #[derive(Clone, Debug)]
 pub enum Stmt {
-    Expr(Expr), Let(String, Expr), Assign(String, Expr), Print(Expr),
+    Expr(Expr), Let(String, Option<crate::types::Type>, Expr), Assign(String, Expr), Print(Expr),
     If(Expr, Vec<Stmt>, Vec<Stmt>), While(Expr, Vec<Stmt>), For(String, Expr, Vec<Stmt>), Import(String), Match(Expr, Vec<(Expr, Vec<Stmt>)>, Vec<Stmt>),
-    Fn(String, Vec<String>, Vec<Stmt>), Return(Expr),
+    Fn(String, Vec<(String, crate::types::Type)>, crate::types::Type, Vec<Stmt>), Return(Expr),
 }
 #[derive(Clone, Debug)]
 pub enum Value { Num(f64), Str(String), Bool(bool), Array(Vec<Value>), Null }
