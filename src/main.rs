@@ -91,8 +91,10 @@ fn main(){
     };
 
     if a[1]=="ssa"{
-        let src=match fs::read_to_string(&a[2]){Ok(x)=>x,Err(e)=>{eprintln!("{}",e);std::process::exit(1)}};
-        let compiled=match compiler::compile_source(&src){Ok(x)=>x,Err(e)=>{eprintln!("compile error:\\n{}",e);std::process::exit(1)}};
+        let compiled=match compiler::compile_program(program){
+            Ok(x)=>x,
+            Err(e)=>{eprintln!("compile error:\n{}",e);std::process::exit(1)}
+        };
         print!("{}", compiler::format_ssa(&compiled.ssa));
         return
     }
