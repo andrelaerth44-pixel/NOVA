@@ -17,6 +17,7 @@ mod semantic;
 mod ssa_lower;
 mod module_loader;
 mod package;
+mod compiler;
 
 pub use token::Token;
 pub use ast::{Expr, Stmt, Value, Pattern, MapKey, EnvFrame, EnvRef, to_map_key};
@@ -40,7 +41,7 @@ fn load_program(path: &str) -> Result<Vec<Stmt>, String> {
 fn main(){
     let a:Vec<String>=env::args().collect();
     if a.len()<2 {
-        eprintln!("NOVA 1.7.0\nusage: nova run <file> | nova check <file> | nova ir <file> | nova build-c <file> [output.c] | nova build-native <file> [output] | nova app-check <file> | nova build-android <file> [MainActivity.kt] | nova package-check <manifest-or-dir> | nova package-lock <manifest-or-dir> | nova version");
+        eprintln!("NOVA 1.7.0\nusage: nova run <file> | nova check <file> | nova ir <file> | nova ssa <file> | nova build-c <file> [output.c] | nova build-native <file> [output] | nova app-check <file> | nova build-android <file> [MainActivity.kt] | nova package-check <manifest-or-dir> | nova package-lock <manifest-or-dir> | nova version");
         return
     }
     if a[1]=="version"{println!("NOVA 1.7.0");return}
@@ -88,6 +89,13 @@ fn main(){
         Ok(x)=>x,
         Err(e)=>{eprintln!("{}",e);std::process::exit(1)}
     };
+
+    if a[1]=="ssa"{
+        let src=match fs::read_to_string(&a[2]){Ok(x)=>x,Err(e)=>{eprintln!("{}",e);std::process::exit(1)}};
+        let compiled=match compiler::compile_source(&src){Ok(x)=>x,Err(e)=>{eprintln!("compile error:\\n{}",e);std::process::exit(1)}};
+        print!("{}", compiler::format_ssa(&compiled.ssa));
+        return
+    }
 
     if a[1]=="check"{
         if let Err(e)=run_semantic_check(&program){eprintln!("semantic error:\n{}",e);std::process::exit(1)}
