@@ -775,6 +775,9 @@ static int nova_truthy(NovaValue v) {
     case NOVA_STRUCT: return 1;
     case NOVA_ENUM: return 1;
     case NOVA_CLOSURE: return 1;
+    case NOVA_ARRAY: return 1;
+    case NOVA_MAP: return 1;
+    case NOVA_SET: return 1;
     default: return 0;
   }
 }
@@ -793,6 +796,12 @@ static int nova_equal(NovaValue a, NovaValue b) {
       return a.structure == b.structure;
     case NOVA_CLOSURE:
       return a.closure == b.closure;
+    case NOVA_ARRAY:
+      return a.array == b.array;
+    case NOVA_MAP:
+      return a.map == b.map;
+    case NOVA_SET:
+      return a.set == b.set;
     default: return 0;
   }
 }
