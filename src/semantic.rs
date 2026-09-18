@@ -5,6 +5,7 @@ use std::collections::HashMap;
 struct StaticFn {
     args: Vec<crate::types::Type>,
     ret: crate::types::Type,
+    generics: Vec<String>,
 }
 
 pub struct Checker {
@@ -52,6 +53,30 @@ impl Checker {
                 }
                 crate::types::Type::Array(Box::new(first))
             }
+        }
+    }
+
+    fn substitute(t: &crate::types::Type, map: &HashMap<String, crate::types::Type>) -> crate::types::Type {
+        match t {
+            crate::types::Type::TypeParam(n) => map.get(n).cloned().unwrap_or_else(|| t.clone()),
+            crate::types::Type::Array(inner) => crate::types::Type::Array(Box::new(Self::substitute(inner,map))),
+            crate::types::Type::Generic(n,args) => crate::types::Type::Generic(n.clone(),args.iter().map(|x|Self::substitute(x,map)).collect()),
+            crate::types::Type::Function(args,ret) => crate::types::Type::Function(args.iter().map(|x|Self::substitute(x,map)).collect(),Box::new(Self::substitute(ret,map))),
+            _ => t.clone()
+        }
+    }
+
+    fn unify(expected: &crate::types::Type, actual: &crate::types::Type, map: &mut HashMap<String, crate::types::Type>) -> bool {
+        match expected {
+            crate::types::Type::TypeParam(n) => {
+                if let Some(old)=map.get(n) { old.compatible(actual) } else { map.insert(n.clone(),actual.clone()); true }
+            }
+            crate::types::Type::Array(a) => matches!(actual,crate::types::Type::Array(b) if Self::unify(a,b,map)),
+            crate::types::Type::Generic(en,ea) => match actual {
+                crate::types::Type::Generic(an,aa) if en==an && ea.len()==aa.len() => ea.iter().zip(aa).all(|(x,y)|Self::unify(x,y,map)),
+                _ => expected.compatible(actual)
+            },
+            _ => expected.compatible(actual)
         }
     }
 
@@ -161,23 +186,24 @@ impl Checker {
             }
             Expr::Call(name, args) => {
                 if let Some(f) = self.fns.get(name).cloned() {
-                    if f.args.len() != args.len() {
-                        self.error(format!("{} expects {} arguments, got {}", name, f.args.len(), args.len()));
-                    }
-                    for (i, arg) in args.iter().enumerate() {
-                        let got = self.infer(arg);
-                        if let Some(expected) = f.args.get(i) {
-                            if !expected.compatible(&got) {
-                                self.error(format!("argument {} of {} expects {}, got {}", i + 1, name, expected.name(), got.name()));
-                            }
+                    if f.args.len() != args.len() { self.error(format!("{} expects {} arguments, got {}", name, f.args.len(), args.len())); }
+                    let mut bindings=HashMap::new();
+                    for (i,arg) in args.iter().enumerate() {
+                        let got=self.infer(arg);
+                        if let Some(expected)=f.args.get(i) && !Self::unify(expected,&got,&mut bindings) {
+                            self.error(format!("argument {} of {} expects {}, got {}",i+1,name,expected.name(),got.name()));
                         }
                     }
-                    return f.ret;
+                    return Self::substitute(&f.ret,&bindings);
                 }
-
-                if name=="None" { return crate::types::Type::Enum("Option".into()); }
-                if name=="Some" || name=="Ok" || name=="Err" { if args.len()!=1 { self.error(format!("{} expects 1 argument",name)); } else { self.infer(&args[0]); } return crate::types::Type::Enum(if name=="Some" {"Option"} else {"Result"}.into()); }
-
+                if name=="None" { return crate::types::Type::Generic("Option".into(),vec![crate::types::Type::Any]); }
+                if name=="Some" || name=="Ok" || name=="Err" {
+                    if args.len()!=1 { self.error(format!("{} expects 1 argument",name)); }
+                    let got=if args.len()==1 { self.infer(&args[0]) } else { crate::types::Type::Any };
+                    return if name=="Some" { crate::types::Type::Generic("Option".into(),vec![got]) }
+                           else if name=="Ok" { crate::types::Type::Generic("Result".into(),vec![got,crate::types::Type::Any]) }
+                           else { crate::types::Type::Generic("Result".into(),vec![crate::types::Type::Any,got]) };
+                }
                 let builtin = match name.as_str() {
                     "range" => Some((vec![crate::types::Type::Number], crate::types::Type::Array(Box::new(crate::types::Type::Number)))),
                     "str" => Some((vec![crate::types::Type::Any], crate::types::Type::String)),
@@ -193,24 +219,14 @@ impl Checker {
                     _ => None,
                 };
                 if let Some((expected, ret)) = builtin {
-                    if expected.len() != args.len() {
-                        self.error(format!("{} expects {} arguments, got {}", name, expected.len(), args.len()));
-                    }
-                    for (i, arg) in args.iter().enumerate() {
-                        let got = self.infer(arg);
-                        if let Some(want) = expected.get(i) {
-                            if !want.compatible(&got) {
-                                self.error(format!("argument {} of {} expects {}, got {}", i + 1, name, want.name(), got.name()));
-                            }
-                        }
-                    }
+                    if expected.len()!=args.len(){self.error(format!("{} expects {} arguments, got {}",name,expected.len(),args.len()));}
+                    for (i,arg) in args.iter().enumerate(){let got=self.infer(arg);if let Some(want)=expected.get(i) && !want.compatible(&got){self.error(format!("argument {} of {} expects {}, got {}",i+1,name,want.name(),got.name()));}}
                     return ret;
                 }
-
                 for arg in args { self.infer(arg); }
-                self.error(format!("undefined function {}", name));
+                self.error(format!("undefined function {}",name));
                 crate::types::Type::Unknown
-            }
+            }}
         }
     }
 
