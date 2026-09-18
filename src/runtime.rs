@@ -241,8 +241,8 @@ impl Vm {
                     return Ok(Value::Num(match v {
                         Value::Str(x) => x.chars().count() as f64,
                         Value::Array(x) => x.len() as f64,
-                        Value::Map(x) => x.len() as f64,
-                        Value::Set(x) => x.len() as f64,
+                        Value::Map(x) => x.borrow().len() as f64,
+                        Value::Set(x) => x.borrow().len() as f64,
                         _ => return Err("len expects string, array, map or set".into()),
                     }));
                 }
