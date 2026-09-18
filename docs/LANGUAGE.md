@@ -135,3 +135,15 @@ Generic types use angle brackets:
     result: Result<string, string> = Ok("done")
 
 The current compiler represents Option<T> and Result<T, E> as parameterized types and propagates their concrete payload types through type inference and pattern bindings.
+
+
+## Option/Result propagation
+
+The postfix `?` operator propagates `None` or `Err(...)` from the current function and unwraps `Some(...)` or `Ok(...)` for continued evaluation:
+
+    fn compute(flag: bool) -> Option<i64> {
+        value = maybe_number(flag)?
+        return Some(value + 8)
+    }
+
+For `Option<T>`, `?` returns the payload `T` when the value is `Some(T)` and propagates `None`. For `Result<T, E>`, it returns `T` from `Ok(T)` and propagates the complete `Err(E)` value. The semantic checker verifies that the enclosing function returns the matching Option or Result family and, for Result, checks the error type.
