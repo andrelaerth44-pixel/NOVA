@@ -28,6 +28,7 @@ struct Function { pub args: Vec<String>, pub body: Vec<Stmt> }
 pub struct Vm {
     env: EnvRef,
     fns: HashMap<String, Function>,
+    enums: HashMap<String, HashMap<String, Option<crate::types::Type>>>,
     modules: HashMap<String, bool>,
     module_stack: Vec<std::path::PathBuf>,
 }
@@ -37,6 +38,7 @@ impl Vm {
         Self {
             env: std::rc::Rc::new(std::cell::RefCell::new(EnvFrame { values: HashMap::new(), parent: None })),
             fns: HashMap::new(),
+            enums: HashMap::new(),
             modules: HashMap::new(),
             module_stack: Vec::new(),
         }
@@ -208,6 +210,14 @@ impl Vm {
                 self.bin(x, op, y)
             }
             Expr::Call(n, a) => {
+                if let Some((enum_name, payload)) = self.enums.iter().find_map(|(enum_name, variants)| variants.get(n).map(|p| (enum_name.clone(), p.clone()))) {
+                    if a.len() != usize::from(payload.is_some()) {
+                        return Err(format!("{} expects {} arguments", n, usize::from(payload.is_some())).into());
+                    }
+                    let value = if payload.is_some() { Some(Box::new(self.eval(&a[0])?)) } else { None };
+                    return Ok(Value::Enum { name: enum_name, variant: n.clone(), value });
+                }
+
                 if n == "None" {
                     if !a.is_empty() { return Err("None expects 0 arguments".into()); }
                     return Ok(Value::Enum { name: "Option".into(), variant: "None".into(), value: None });
