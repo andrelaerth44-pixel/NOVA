@@ -433,15 +433,17 @@ impl Checker {
                             _ => None,
                         };
                         if let Some(enum_name)=enum_name {
-                            if let Some(Some(payload)) = self.enums.get(&enum_name).and_then(|m|m.get(variant)).cloned() {
-                                let bound = match (&subject, &enum_name[..], variant.as_str()) {
-                                    (crate::types::Type::Generic(_, args), "Option", "Some") => args.get(0).cloned().unwrap_or(crate::types::Type::Any),
-                                    (crate::types::Type::Generic(_, args), "Result", "Ok") => args.get(0).cloned().unwrap_or(crate::types::Type::Any),
-                                    (crate::types::Type::Generic(_, args), "Result", "Err") => args.get(1).cloned().unwrap_or(crate::types::Type::Any),
-                                    _ => payload,
-                                };
-                                self.define(name.clone(), bound);
-                            } else { self.define(name.clone(), crate::types::Type::Any); }
+                            let bound = if let Some(payload) = self.enums.get(&enum_name).and_then(|m|m.get(variant)).cloned().flatten() {
+                            match (&subject, &enum_name[..], variant.as_str()) {
+                                (crate::types::Type::Generic(_, args), "Option", "Some") => args.get(0).cloned().unwrap_or(crate::types::Type::Any),
+                                (crate::types::Type::Generic(_, args), "Result", "Ok") => args.get(0).cloned().unwrap_or(crate::types::Type::Any),
+                                (crate::types::Type::Generic(_, args), "Result", "Err") => args.get(1).cloned().unwrap_or(crate::types::Type::Any),
+                                _ => payload,
+                            }
+                        } else {
+                            crate::types::Type::Any
+                        };
+                        self.define(name.clone(), bound);
                         } else { self.define(name.clone(), crate::types::Type::Any); }
                     }
                     for s in body { self.check_stmt(s, expected_return); }
