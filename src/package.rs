@@ -29,7 +29,7 @@ fn unquote(value: &str) -> Result<String, String> {
         return Err(format!("expected quoted string, got {}", value));
     }
     let inner = &value[1..value.len() - 1];
-    Ok(inner.replace("\\"", "\"").replace("\\\\", "\\"))
+    Ok(inner.to_string())
 }
 
 fn split_assignment(line: &str) -> Result<(&str, &str), String> {
@@ -231,9 +231,9 @@ pub fn write_lock(path: &Path) -> Result<PathBuf, String> {
             format!("path:{}", rel.display())
         };
         text.push_str("[[package]]\n");
-        text.push_str(&format!("name = \"{}\"\\n", package.name));
-        text.push_str(&format!("version = \"{}\"\\n", package.version));
-        text.push_str(&format!("source = \"{}\"\\n\\n", source));
+        text.push_str(&format!("name = \"{}\"\n", package.name));
+        text.push_str(&format!("version = \"{}\"\n", package.version));
+        text.push_str(&format!("source = \"{}\"\n\n", source));
     }
 
     fs::write(&lock_path, text)
