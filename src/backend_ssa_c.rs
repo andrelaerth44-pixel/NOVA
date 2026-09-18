@@ -86,13 +86,13 @@ fn emit_function(
         c_ident(&function.name)
     ));
     out.push_str(" {\\n");
-    out.push_str("  jmp_buf nova_jmp;\\n");
-    out.push_str("  jmp_buf* nova_prev_jmp = nova_active_jmp;\\n");
-    out.push_str("  nova_active_jmp = &nova_jmp;\\n");
-    out.push_str("  int nova_jmp_code = setjmp(nova_jmp);\\n");
-    out.push_str("  if (nova_jmp_code != 0) {\\n");
+    out.push_str("  jmp_buf nova_jmp;\n");
+    out.push_str("  jmp_buf* nova_prev_jmp = nova_active_jmp;\n");
+    out.push_str("  nova_active_jmp = &nova_jmp;\n");
+    out.push_str("  int nova_jmp_code = setjmp(nova_jmp);\n");
+    out.push_str("  if (nova_jmp_code != 0) {\n");
     out.push_str("    NovaValue nova_result = nova_pending_return;\\n");
-    out.push_str("    nova_active_jmp = nova_prev_jmp;\\n");
+    out.push_str("    nova_active_jmp = nova_prev_jmp;\n");
     out.push_str("    return nova_result;\\n");
     out.push_str("  }\\n");
 
@@ -212,6 +212,62 @@ fn emit_function(
                         }
                         out.push_str(&format!("  nova_print({});\n", v(args[0])));
                         out.push_str(&format!("  {} = nova_null();\n", v(*id)));
+                    } else if matches!(name.as_str(), "array" | "map" | "set") {
+                        let args_expr = if args.is_empty() {
+                            "NULL".to_string()
+                        } else {
+                            format!("call_args_{}", id)
+                        };
+                        if !args.is_empty() {
+                            out.push_str(&format!(
+                                "  NovaValue call_args_{}[{}] = {{ {} }};\n",
+                                id,
+                                args.len(),
+                                args.iter().map(|a| v(*a)).collect::<Vec<_>>().join(", ")
+                            ));
+                        }
+                        let helper = match name.as_str() {
+                            "array" => "nova_array",
+                            "map" => "nova_map",
+                            _ => "nova_set",
+                        };
+                        out.push_str(&format!(
+                            "  {} = {}({}, {});\n",
+                            v(*id),
+                            helper,
+                            args_expr,
+                            args.len()
+                        ));
+                    } else if name == "index" {
+                        if args.len() != 2 {
+                            return Err("SSA C backend: index expects two arguments".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_index({}, {});\n",
+                            v(*id),
+                            v(args[0]),
+                            v(args[1])
+                        ));
+                    } else if matches!(name.as_str(), "len" | "unwrap" | "unwrap_or" | "is_none" | "is_some" | "is_ok" | "is_err") {
+                        let expected = if name == "unwrap_or" { 2 } else { 1 };
+                        if args.len() != expected {
+                            return Err(format!("SSA C backend: {} expects {} arguments", name, expected));
+                        }
+                        let helper = match name.as_str() {
+                            "len" => "nova_len",
+                            "unwrap" => "nova_unwrap",
+                            "unwrap_or" => "nova_unwrap_or",
+                            "is_none" => "nova_is_none",
+                            "is_some" => "nova_is_some",
+                            "is_ok" => "nova_is_ok",
+                            _ => "nova_is_err",
+                        };
+                        out.push_str(&format!(
+                            "  {} = {}({});\n",
+                            v(*id),
+                            helper,
+                            args.iter().map(|a| v(*a)).collect::<Vec<_>>().join(", ")
+                        ));
                     } else if functions.contains(name) {
                         let cname = c_ident(name);
                         if args.is_empty() {
@@ -241,7 +297,6 @@ fn emit_function(
                             name
                         ));
                     }
-
                     if matches!(result, IrType::Null) && name != "print" {
                         out.push_str(&format!("  {} = nova_null();\n", v(*id)));
                     }
