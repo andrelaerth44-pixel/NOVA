@@ -1,0 +1,15 @@
+# Explicit types in NOVA
+
+fn add(a: i64, b: i64) -> i64 {
+    return a + b
+}
+
+let age: i64 = 18
+let name: string = "Laerth"
+let enabled: bool = true
+let values: i64[] = [1, 2, 3]
+
+if enabled {
+    print add(age, 24)
+    print name
+}
