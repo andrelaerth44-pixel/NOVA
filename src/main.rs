@@ -192,6 +192,189 @@ fn cmp2(a:Value,b:Value,f:fn(f64,f64)->bool)->Result<Value,String>{Ok(Value::Boo
 fn div2(a:Value,b:Value)->Result<Value,String>{let x=num(a)?;let y=num(b)?;if y==0.0{return Err("division by zero".into())}Ok(Value::Num(x/y))}
 fn mod2(a:Value,b:Value)->Result<Value,String>{let x=num(a)?;let y=num(b)?;if y==0.0{return Err("modulo by zero".into())}Ok(Value::Num(x%y))}
 
+#[derive(Clone, Debug)]
+struct StaticFn {
+    args: Vec<types::Type>,
+    ret: types::Type,
+}
+
+struct Checker {
+    vars: HashMap<String, types::Type>,
+    fns: HashMap<String, StaticFn>,
+    errors: Vec<String>,
+}
+
+impl Checker {
+    fn new() -> Self { Self { vars: HashMap::new(), fns: HashMap::new(), errors: Vec::new() } }
+    fn error(&mut self, msg: impl Into<String>) { self.errors.push(msg.into()); }
+
+    fn infer(&mut self, e: &Expr) -> types::Type {
+        match e {
+            Expr::Val(Value::Num(_)) => types::Type::Number,
+            Expr::Val(Value::Str(_)) => types::Type::String,
+            Expr::Val(Value::Bool(_)) => types::Type::Bool,
+            Expr::Val(Value::Null) => types::Type::Null,
+            Expr::Val(Value::Array(xs)) => {
+                if xs.is_empty() { return types::Type::Array(Box::new(types::Type::Any)); }
+                let first = self.infer(&Expr::Val(xs[0].clone()));
+                for v in xs.iter().skip(1) {
+                    let t = self.infer(&Expr::Val(v.clone()));
+                    if !first.compatible(&t) { self.error(format!("array elements have incompatible types: {} and {}", first.name(), t.name())); }
+                }
+                types::Type::Array(Box::new(first))
+            }
+            Expr::Var(n) => self.vars.get(n).cloned().unwrap_or_else(|| {
+                self.error(format!("undefined variable {}", n)); types::Type::Unknown
+            }),
+            Expr::Array(xs) => {
+                if xs.is_empty() { return types::Type::Array(Box::new(types::Type::Any)); }
+                let first = self.infer(&xs[0]);
+                for x in xs.iter().skip(1) {
+                    let t = self.infer(x);
+                    if !first.compatible(&t) { self.error(format!("array elements have incompatible types: {} and {}", first.name(), t.name())); }
+                }
+                types::Type::Array(Box::new(first))
+            }
+            Expr::Unary(op, x) => {
+                let t = self.infer(x);
+                match op {
+                    Token::Minus if !t.compatible(&types::Type::Number) => {
+                        self.error(format!("unary - expects number, got {}", t.name())); types::Type::Unknown
+                    }
+                    Token::Minus => types::Type::Number,
+                    Token::Bang => types::Type::Bool,
+                    _ => types::Type::Unknown,
+                }
+            }
+            Expr::Binary(a, op, b) => {
+                let x = self.infer(a); let y = self.infer(b);
+                match op {
+                    Token::Plus => {
+                        if x.compatible(&types::Type::Number) && y.compatible(&types::Type::Number) { types::Type::Number }
+                        else if x.compatible(&types::Type::String) && y.compatible(&types::Type::String) { types::Type::String }
+                        else { self.error(format!("operator + cannot combine {} and {}", x.name(), y.name())); types::Type::Unknown }
+                    }
+                    Token::Minus | Token::Star | Token::Slash | Token::Percent => {
+                        if !x.compatible(&types::Type::Number) || !y.compatible(&types::Type::Number) {
+                            self.error(format!("arithmetic operator expects numbers, got {} and {}", x.name(), y.name())); types::Type::Unknown
+                        } else { types::Type::Number }
+                    }
+                    Token::Lt | Token::Le | Token::Gt | Token::Ge => {
+                        if !x.compatible(&types::Type::Number) || !y.compatible(&types::Type::Number) {
+                            self.error(format!("comparison expects numbers, got {} and {}", x.name(), y.name()));
+                        }
+                        types::Type::Bool
+                    }
+                    Token::EqEq | Token::Ne | Token::And | Token::Or => types::Type::Bool,
+                    _ => types::Type::Unknown,
+                }
+            }
+            Expr::Call(n, args) => {
+                if n == "range" {
+                    if args.len() != 2 { self.error("range expects 2 arguments"); }
+                    for a in args { let t = self.infer(a); if !t.compatible(&types::Type::Number) { self.error("range arguments must be numbers"); } }
+                    return types::Type::Array(Box::new(types::Type::Number));
+                }
+                if n == "str" {
+                    if args.len() != 1 { self.error("str expects 1 argument"); }
+                    for a in args { self.infer(a); }
+                    return types::Type::String;
+                }
+                if n == "len" {
+                    if args.len() != 1 { self.error("len expects 1 argument"); }
+                    if let Some(a) = args.first() {
+                        let t = self.infer(a);
+                        if !matches!(t, types::Type::String | types::Type::Array(_) | types::Type::Any | types::Type::Unknown) {
+                            self.error(format!("len expects string or array, got {}", t.name()));
+                        }
+                    }
+                    return types::Type::Number;
+                }
+                let f = match self.fns.get(n).cloned() {
+                    Some(f) => f,
+                    None => {
+                        self.error(format!("undefined function {}", n));
+                        for a in args { self.infer(a); }
+                        return types::Type::Unknown;
+                    }
+                };
+                if f.args.len() != args.len() { self.error(format!("{} expects {} arguments, got {}", n, f.args.len(), args.len())); }
+                for (i, a) in args.iter().enumerate() {
+                    let t = self.infer(a);
+                    if let Some(expected) = f.args.get(i) {
+                        if !expected.compatible(&t) { self.error(format!("argument {} of {} expects {}, got {}", i + 1, n, expected.name(), t.name())); }
+                    }
+                }
+                f.ret
+            }
+        }
+    }
+
+    fn check_block(&mut self, body: &[Stmt], expected_return: Option<types::Type>) {
+        for s in body {
+            match s {
+                Stmt::Let(n, e) | Stmt::Assign(n, e) => {
+                    let t = self.infer(e);
+                    if matches!(s, Stmt::Assign(_, _)) && !self.vars.contains_key(n) { self.error(format!("assignment to undefined variable {}", n)); }
+                    if let Some(old) = self.vars.get(n) {
+                        if !old.compatible(&t) { self.error(format!("cannot assign {} to {} (expected {})", t.name(), n, old.name())); }
+                    }
+                    self.vars.insert(n.clone(), t);
+                }
+                Stmt::Print(e) | Stmt::Expr(e) => { self.infer(e); }
+                Stmt::Return(e) => {
+                    if expected_return.is_none() { self.error("return outside function"); }
+                    let t = self.infer(e);
+                    if let Some(expected) = &expected_return {
+                        if !expected.compatible(&t) { self.error(format!("return type mismatch: expected {}, got {}", expected.name(), t.name())); }
+                    }
+                }
+                Stmt::If(c, a, b) | Stmt::While(c, a) => {
+                    let t = self.infer(c);
+                    if !t.compatible(&types::Type::Bool) && !t.compatible(&types::Type::Number) { self.error(format!("condition must be bool or number, got {}", t.name())); }
+                    self.check_block(a, expected_return.clone());
+                    if let Stmt::If(_, _, _) = s { self.check_block(b, expected_return.clone()); }
+                }
+                Stmt::For(n, it, b) => {
+                    match self.infer(it) {
+                        types::Type::Array(inner) => { self.vars.insert(n.clone(), *inner); self.check_block(b, expected_return.clone()); }
+                        types::Type::Any | types::Type::Unknown => { self.vars.insert(n.clone(), types::Type::Any); self.check_block(b, expected_return.clone()); }
+                        other => self.error(format!("for expects an array, got {}", other.name())),
+                    }
+                }
+                Stmt::Match(value, arms, otherwise) => {
+                    let vt = self.infer(value);
+                    for (pat, body) in arms {
+                        let pt = self.infer(pat);
+                        if !vt.compatible(&pt) { self.error(format!("match pattern type {} does not match {}", pt.name(), vt.name())); }
+                        self.check_block(body, expected_return.clone());
+                    }
+                    self.check_block(otherwise, expected_return.clone());
+                }
+                Stmt::Import(_) => {}
+                Stmt::Fn(n, args, body) => {
+                    if self.fns.contains_key(n) { self.error(format!("duplicate function {}", n)); continue; }
+                    self.fns.insert(n.clone(), StaticFn { args: args.iter().map(|_| types::Type::Any).collect(), ret: types::Type::Any });
+                    let saved = self.vars.clone();
+                    for a in args { self.vars.insert(a.clone(), types::Type::Any); }
+                    self.check_block(body, Some(types::Type::Any));
+                    self.vars = saved;
+                }
+            }
+        }
+    }
+
+    fn check(&mut self, program: &[Stmt]) -> Result<(), Vec<String>> {
+        self.check_block(program, None);
+        if self.errors.is_empty() { Ok(()) } else { Err(self.errors.clone()) }
+    }
+}
+
+fn run_semantic_check(program: &[Stmt]) -> Result<(), String> {
+    let mut checker = Checker::new();
+    checker.check(program).map_err(|errs| errs.join("\n"))
+}
+
 fn main(){
     let a:Vec<String>=env::args().collect();
     if a.len()<2 {eprintln!("NOVA 1.5.0\nusage: nova run <file> | nova check <file> | nova version");return}
@@ -201,7 +384,7 @@ fn main(){
     let t=match lex(&src){Ok(x)=>x,Err(e)=>{eprintln!("lex error: {}",e);std::process::exit(1)}};
     let mut p=Parser::new(t);
     let program=match p.program(){Ok(x)=>x,Err(e)=>{eprintln!("parse error: {}",e);std::process::exit(1)}};
-    if a[1]=="check"{println!("ok");return}
+    if a[1]=="check"{if let Err(e)=run_semantic_check(&program){eprintln!("semantic error:\n{}",e);std::process::exit(1)}println!("ok");return}
     if a[1]!="run"{eprintln!("unknown command {}",a[1]);std::process::exit(2)}
     if let Err(e)=Vm::new().exec(&program){eprintln!("runtime error: {}",e);std::process::exit(1)}
 }
