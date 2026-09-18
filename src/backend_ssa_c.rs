@@ -1,6 +1,9 @@
 use crate::ir::{IrType, SsaFunction, SsaInstr, SsaValue, Terminator, ValueId};
 
 fn c_ident(name: &str) -> String {
+    if name == "<main>" {
+        return "nova_main".into();
+    }
     let mut out = String::from("nova_");
     for ch in name.chars() {
         if ch.is_ascii_alphanumeric() || ch == '_' {
@@ -481,4 +484,15 @@ static NovaValue nova_call_closure(
     out.push('\n');
 
     Ok(out)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::c_ident;
+
+    #[test]
+    fn main_symbol_has_stable_c_name() {
+        assert_eq!(c_ident("<main>"), "nova_main");
+    }
 }
