@@ -203,10 +203,9 @@ impl Checker {
             Pattern::Literal(expr) => { let t=self.infer(expr); if !subject.compatible(&t) { self.error(format!("match pattern expects {}, got {}", subject.name(), t.name())); } }
             Pattern::Enum { variant, .. } => match subject {
                 crate::types::Type::Enum(name) => {
-                    if let Some(vars)=self.enums.get(name) {
-                        if !vars.contains_key(variant) { self.error(format!("unknown variant {}.{}",name,variant)); }
-                        else { covered.insert(variant.clone()); }
-                    }
+                    let known = self.enums.get(name).map(|vars| vars.contains_key(variant)).unwrap_or(false);
+                    if !known { self.error(format!("unknown variant {}.{}",name,variant)); }
+                    else { covered.insert(variant.clone()); }
                 }
                 _ => self.error(format!("enum pattern {} requires enum subject, got {}",variant,subject.name())),
             }
