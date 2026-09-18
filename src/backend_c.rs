@@ -70,6 +70,7 @@ fn emit_code(code: &[Instr], current_fn: Option<&Function>) -> Result<String, St
                 c.push_str(&format!("  {{ double b=stack[--sp]; double a=stack[--sp]; stack[sp++] = {}; }}
 ", expr));
             }
+            Instr::Call { name, .. } if name == "try" => return Err("native C backend: Option/Result try propagation is currently VM/SSA only".into()),
             Instr::Call { name, argc: 1, .. } if name == "print" => c.push_str("  printf("%.15g\\n", stack[--sp]);
 "),
             Instr::Call { name, argc, result } => {
