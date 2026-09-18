@@ -38,7 +38,7 @@ fn c_string(value: &str) -> String {
 }
 fn binary_expr(op: &str, left: &str, right: &str) -> Option<String> {
     Some(match op {
-        "Plus" => format!("nova_num({}.number + {}.number)", left, right),
+        "Plus" => format!("nova_add({}, {})", left, right),
         "Minus" => format!("nova_num({}.number - {}.number)", left, right),
         "Star" => format!("nova_num({}.number * {}.number)", left, right),
         "Slash" => format!("nova_num({}.number / {}.number)", left, right),
@@ -85,7 +85,16 @@ fn emit_function(
         "static NovaValue {}(NovaEnv* env, NovaValue* args, size_t argc)",
         c_ident(&function.name)
     ));
-    out.push_str(" {\n");
+    out.push_str(" {\\n");
+    out.push_str("  jmp_buf nova_jmp;\\n");
+    out.push_str("  jmp_buf* nova_prev_jmp = nova_active_jmp;\\n");
+    out.push_str("  nova_active_jmp = &nova_jmp;\\n");
+    out.push_str("  int nova_jmp_code = setjmp(nova_jmp);\\n");
+    out.push_str("  if (nova_jmp_code != 0) {\\n");
+    out.push_str("    NovaValue nova_result = nova_pending_return;\\n");
+    out.push_str("    nova_active_jmp = nova_prev_jmp;\\n");
+    out.push_str("    return nova_result;\\n");
+    out.push_str("  }\\n");
 
     for id in 0..=max {
         out.push_str(&format!("  NovaValue {} = nova_null();\n", v(id)));
@@ -322,10 +331,11 @@ fn emit_function(
                         v(*value)
                     ));
                 }
-                SsaInstr::Try { .. } => {
-                    return Err(format!(
-                        "SSA C backend: Try not yet implemented in {}",
-                        function.name
+                SsaInstr::Try { value, .. } => {
+                    out.push_str(&format!(
+                        "  {} = nova_try({});\n",
+                        v(*id),
+                        v(*value)
                     ));
                 }
                 SsaInstr::Closure {
@@ -380,9 +390,11 @@ fn emit_function(
                 ));
             }
             Some(Terminator::Return(Some(value))) => {
+                out.push_str("  nova_active_jmp = nova_prev_jmp;\n");
                 out.push_str(&format!("  return {};\n", v(*value)));
             }
             Some(Terminator::Return(None)) => {
+                out.push_str("  nova_active_jmp = nova_prev_jmp;\n");
                 out.push_str("  return nova_null();\n");
             }
             None => {
@@ -406,6 +418,7 @@ pub fn emit_c(functions: &[SsaFunction]) -> Result<String, String> {
 
     let runtime = r#"
 #include <math.h>
+#include <setjmp.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -480,6 +493,9 @@ struct NovaClosure {
   NovaValue (*invoke)(NovaEnv*, NovaValue*, size_t);
 };
 
+static jmp_buf* nova_active_jmp = NULL;
+static NovaValue nova_pending_return;
+
 static char* nova_dup(const char* value) {
   size_t len = strlen(value) + 1;
   char* out = (char*)malloc(len);
@@ -528,7 +544,95 @@ static NovaValue nova_closure_value(NovaClosure* c) {
   return v;
 }
 
-static int nova_equal(NovaValue a, NovaValue b);\n\nstatic NovaValue nova_array_value(NovaArray* a) {
+static int nova_equal(NovaValue a, NovaValue b);
+
+static NovaValue nova_propagate(NovaValue value) {
+  nova_pending_return = value;
+  if (nova_active_jmp) longjmp(*nova_active_jmp, 1);
+  fprintf(stderr, "NOVA: uncaught Option/Result error during native execution\n");
+  exit(1);
+}
+
+static NovaValue nova_try(NovaValue value) {
+  if (value.tag != NOVA_ENUM || !value.enumeration) return value;
+  if (strcmp(value.enumeration->name, "Option") == 0) {
+    if (strcmp(value.enumeration->variant, "Some") == 0) return value.enumeration->payload;
+    return nova_propagate(value);
+  }
+  if (strcmp(value.enumeration->name, "Result") == 0) {
+    if (strcmp(value.enumeration->variant, "Ok") == 0) return value.enumeration->payload;
+    return nova_propagate(value);
+  }
+  return value;
+}
+
+static NovaValue nova_unwrap(NovaValue value) {
+  if (value.tag == NOVA_ENUM && value.enumeration &&
+      ((strcmp(value.enumeration->name, "Option") == 0 && strcmp(value.enumeration->variant, "Some") == 0) ||
+       (strcmp(value.enumeration->name, "Result") == 0 && strcmp(value.enumeration->variant, "Ok") == 0))) {
+    return value.enumeration->payload;
+  }
+  return nova_propagate(value);
+}
+
+static NovaValue nova_unwrap_or(NovaValue value, NovaValue fallback) {
+  if (value.tag == NOVA_ENUM && value.enumeration &&
+      ((strcmp(value.enumeration->name, "Option") == 0 && strcmp(value.enumeration->variant, "Some") == 0) ||
+       (strcmp(value.enumeration->name, "Result") == 0 && strcmp(value.enumeration->variant, "Ok") == 0))) {
+    return value.enumeration->payload;
+  }
+  return fallback;
+}
+
+static NovaValue nova_is_none(NovaValue value) {
+  return nova_bool(value.tag == NOVA_ENUM && value.enumeration &&
+      strcmp(value.enumeration->name, "Option") == 0 &&
+      strcmp(value.enumeration->variant, "None") == 0);
+}
+
+static NovaValue nova_is_some(NovaValue value) {
+  return nova_bool(value.tag == NOVA_ENUM && value.enumeration &&
+      strcmp(value.enumeration->name, "Option") == 0 &&
+      strcmp(value.enumeration->variant, "Some") == 0);
+}
+
+static NovaValue nova_is_ok(NovaValue value) {
+  return nova_bool(value.tag == NOVA_ENUM && value.enumeration &&
+      strcmp(value.enumeration->name, "Result") == 0 &&
+      strcmp(value.enumeration->variant, "Ok") == 0);
+}
+
+static NovaValue nova_is_err(NovaValue value) {
+  return nova_bool(value.tag == NOVA_ENUM && value.enumeration &&
+      strcmp(value.enumeration->name, "Result") == 0 &&
+      strcmp(value.enumeration->variant, "Err") == 0);
+}
+
+static NovaValue nova_len(NovaValue value) {
+  switch (value.tag) {
+    case NOVA_STRING: return nova_num(value.string ? (double)strlen(value.string) : 0.0);
+    case NOVA_ARRAY: return nova_num(value.array ? (double)value.array->len : 0.0);
+    case NOVA_MAP: return nova_num(value.map ? (double)value.map->len : 0.0);
+    case NOVA_SET: return nova_num(value.set ? (double)value.set->len : 0.0);
+    default: return nova_num(0.0);
+  }
+}
+
+static NovaValue nova_add(NovaValue left, NovaValue right) {
+  if (left.tag == NOVA_NUMBER && right.tag == NOVA_NUMBER) return nova_num(left.number + right.number);
+  if (left.tag == NOVA_STRING && right.tag == NOVA_STRING) {
+    const char* a = left.string ? left.string : "";
+    const char* b = right.string ? right.string : "";
+    size_t a_len = strlen(a);
+    size_t b_len = strlen(b);
+    char* joined = (char*)malloc(a_len + b_len + 1);
+    if (!joined) return nova_null();
+    memcpy(joined, a, a_len);
+    memcpy(joined + a_len, b, b_len + 1);
+    return nova_string(joined);
+  }
+  return nova_null();
+}\n\nstatic NovaValue nova_array_value(NovaArray* a) {
   NovaValue v = { NOVA_ARRAY, 0, NULL, NULL, NULL, NULL, a, NULL, NULL };
   return v;
 }
