@@ -100,7 +100,7 @@ impl Vm {
                         Ok(value.map(|v| *v).unwrap_or(Value::Null))
                     }
                     ref v @ Value::Enum { ref variant, .. } if variant == "None" || variant == "Err" => {
-                        Err(RuntimeError::Propagate(v))
+                        Err(RuntimeError::Propagate(v.clone()))
                     }
                     v => Err(RuntimeError::Failure(format!("try requires Option/Result, got {}", v))),
                 }
