@@ -96,7 +96,7 @@ impl Builder {
                 let fields = fields.iter().map(|(field, value)| (field.clone(), self.expr(value))).collect();
                 self.emit(SsaInstr::StructInit { name: name.clone(), fields })
             }
-            Expr::Closure(args, _) => self.emit(SsaInstr::Call { name: "closure".into(), args: Vec::new(), result: IrType::Any }),
+            Expr::Closure(_args, _) => self.emit(SsaInstr::Call { name: "closure".into(), args: Vec::new(), result: IrType::Any }),
             Expr::CallValue(callee, args) => {
                 let mut values=vec![self.expr(callee)];
                 values.extend(args.iter().map(|x| self.expr(x)));
