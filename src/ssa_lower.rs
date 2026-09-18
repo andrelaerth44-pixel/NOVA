@@ -111,6 +111,21 @@ struct ClosureSpec {
     captures: Vec<String>,
 }
 
+
+type EnumVariants = std::collections::HashMap<String, String>;
+
+fn collect_enum_variants(stmts: &[Stmt]) -> EnumVariants {
+    let mut variants = EnumVariants::new();
+    for stmt in stmts {
+        if let Stmt::EnumDecl(name, members) = stmt {
+            for (variant, _) in members {
+                variants.insert(variant.clone(), name.clone());
+            }
+        }
+    }
+    variants
+}
+
 struct Builder {
     blocks: Vec<SsaBlock>,
     current: usize,
@@ -119,10 +134,18 @@ struct Builder {
     owner_name: String,
     closure_counter: usize,
     closures: Vec<ClosureSpec>,
+    enum_variants: EnumVariants,
 }
 
 impl Builder {
     fn new(owner_name: impl Into<String>) -> Self {
+        Self::new_with_enums(owner_name, EnumVariants::new())
+    }
+
+    fn new_with_enums(
+        owner_name: impl Into<String>,
+        enum_variants: EnumVariants,
+    ) -> Self {
         Self {
             blocks: vec![SsaBlock { id: 0, ..Default::default() }],
             current: 0,
@@ -131,6 +154,7 @@ impl Builder {
             owner_name: owner_name.into(),
             closure_counter: 0,
             closures: Vec::new(),
+            enum_variants,
         }
     }
     fn fresh(&mut self) -> ValueId { let v = self.next; self.next += 1; v }
@@ -313,7 +337,16 @@ impl Builder {
                     }
                     _ => {
                         let values = args.iter().map(|x| self.expr(x)).collect();
-                        self.emit(SsaInstr::Call { name: name.clone(), args: values, result: IrType::Any })
+                        if let Some(enum_name) = self.enum_variants.get(name) {
+                            self.emit(SsaInstr::EnumInit {
+                                name: enum_name.clone(),
+                                variant: name.clone(),
+                                payload: values.first().copied(),
+                                ty: IrType::Enum(enum_name.clone()),
+                            })
+                        } else {
+                            self.emit(SsaInstr::Call { name: name.clone(), args: values, result: IrType::Any })
+                        }
                     }
                 }
             }
@@ -494,8 +527,9 @@ fn lower_function_tree_with_captures(
     ret: &crate::types::Type,
     body: &[Stmt],
     captures: &[String],
+    enum_variants: &EnumVariants,
 ) -> Vec<SsaFunction> {
-    let mut b = Builder::new(name);
+    let mut b = Builder::new_with_enums(name, enum_variants.clone());
     let mut params = Vec::new();
 
     let mut capture_params = Vec::new();
@@ -537,6 +571,7 @@ fn lower_function_tree_with_captures(
             &crate::types::Type::Any,
             &spec.body,
             &spec.captures,
+            enum_variants,
         ));
     }
     functions
@@ -548,7 +583,7 @@ pub fn lower_function(
     ret: &crate::types::Type,
     body: &[Stmt],
 ) -> SsaFunction {
-    lower_function_tree_with_captures(name, args, ret, body, &[])
+    lower_function_tree_with_captures(name, args, ret, body, &[], &EnumVariants::new())
         .into_iter()
         .next()
         .expect("lower_function always produces a function")
@@ -564,15 +599,32 @@ pub fn lower_function_tree(
     ret: &crate::types::Type,
     body: &[Stmt],
 ) -> Vec<SsaFunction> {
-    lower_function_tree_with_captures(name, args, ret, body, &[])
+    lower_function_tree_with_captures(name, args, ret, body, &[], &collect_enum_variants(body))
 }
 
 pub fn lower_program(program: &[Stmt]) -> SsaFunction {
-    lower_function("<main>", &[], &crate::types::Type::Void, program)
+    lower_function_tree_with_captures(
+        "<main>",
+        &[],
+        &crate::types::Type::Void,
+        program,
+        &[],
+        &collect_enum_variants(program),
+    )
+    .into_iter()
+    .next()
+    .expect("lower_program always produces a function")
 }
 
 pub fn lower_program_tree(program: &[Stmt]) -> Vec<SsaFunction> {
-    lower_function_tree("<main>", &[], &crate::types::Type::Void, program)
+    lower_function_tree_with_captures(
+        "<main>",
+        &[],
+        &crate::types::Type::Void,
+        program,
+        &[],
+        &collect_enum_variants(program),
+    )
 }
 
 pub fn verify_program(program: &[Stmt]) -> Result<(), String> {
