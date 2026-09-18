@@ -19,6 +19,22 @@ fn v(id: ValueId) -> String {
     format!("v{}", id)
 }
 
+fn c_string(value: &str) -> String {
+    let mut out = String::from(""");
+    for ch in value.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            _ => out.push(ch),
+        }
+    }
+    out.push('"');
+    out
+}
+
 fn binary_expr(op: &str, left: &str, right: &str) -> Option<String> {
     Some(match op {
         "Plus" => format!("nova_num({}.number + {}.number)", left, right),
@@ -26,8 +42,8 @@ fn binary_expr(op: &str, left: &str, right: &str) -> Option<String> {
         "Star" => format!("nova_num({}.number * {}.number)", left, right),
         "Slash" => format!("nova_num({}.number / {}.number)", left, right),
         "Percent" => format!("nova_num(fmod({}.number, {}.number))", left, right),
-        "EqEq" => format!("nova_bool({}.number == {}.number)", left, right),
-        "NotEq" => format!("nova_bool({}.number != {}.number)", left, right),
+        "EqEq" => format!("nova_equal({}, {})", left, right),
+        "NotEq" => format!("nova_bool(!nova_equal({}, {}))", left, right),
         "Lt" => format!("nova_bool({}.number < {}.number)", left, right),
         "Le" => format!("nova_bool({}.number <= {}.number)", left, right),
         "Gt" => format!("nova_bool({}.number > {}.number)", left, right),
@@ -68,61 +84,64 @@ fn emit_function(
         "static NovaValue {}(NovaEnv* env, NovaValue* args, size_t argc)",
         c_ident(&function.name)
     ));
-    out.push_str(" {");
-    out.push('\n');
+    out.push_str(" {\n");
 
     for id in 0..=max {
-        out.push_str(&format!("  NovaValue {} = nova_null();", v(id)));
-        out.push('\n');
+        out.push_str(&format!("  NovaValue {} = nova_null();\n", v(id)));
     }
 
     for (slot, (_, _, id)) in function.captures.iter().enumerate() {
         out.push_str(&format!(
-            "  {} = env ? env->slots[{}] : nova_null();",
+            "  {} = env ? env->slots[{}] : nova_null();\n",
             v(*id),
             slot
         ));
-        out.push('\n');
     }
 
     for (index, (_, _, id)) in function.params.iter().enumerate() {
         out.push_str(&format!(
-            "  {} = (argc > {}) ? args[{}] : nova_null();",
+            "  {} = (argc > {}) ? args[{}] : nova_null();\n",
             v(*id),
             index,
             index
         ));
-        out.push('\n');
     }
 
     for block in &function.blocks {
-        out.push_str(&format!("B{}:", block.id));
-        out.push('\n');
+        out.push_str(&format!("B{}:\n", block.id));
 
         for (id, instr) in &block.instrs {
             match instr {
                 SsaInstr::Const(SsaValue::Number(n)) => {
-                    out.push_str(&format!("  {} = nova_num({:.17});", v(*id), n));
-                    out.push('\n');
+                    out.push_str(&format!("  {} = nova_num({:.17});\n", v(*id), n));
                 }
                 SsaInstr::Const(SsaValue::Bool(b)) => {
                     out.push_str(&format!(
-                        "  {} = nova_bool({});",
+                        "  {} = nova_bool({});\n",
                         v(*id),
                         if *b { "1" } else { "0" }
                     ));
-                    out.push('\n');
                 }
                 SsaInstr::Const(SsaValue::Null) => {
-                    out.push_str(&format!("  {} = nova_null();", v(*id)));
-                    out.push('\n');
+                    out.push_str(&format!("  {} = nova_null();\n", v(*id)));
                 }
-                SsaInstr::Const(SsaValue::String(_))
-                | SsaInstr::Const(SsaValue::Struct { .. })
-                | SsaInstr::Const(SsaValue::Param(_))
-                | SsaInstr::Const(SsaValue::Instr(_)) => {
+                SsaInstr::Const(SsaValue::String(s)) => {
+                    out.push_str(&format!(
+                        "  {} = nova_string({});\n",
+                        v(*id),
+                        c_string(s)
+                    ));
+                }
+                SsaInstr::Const(SsaValue::Struct { name }) => {
+                    out.push_str(&format!(
+                        "  {} = nova_make_empty_struct({});\n",
+                        v(*id),
+                        c_string(name)
+                    ));
+                }
+                SsaInstr::Const(SsaValue::Param(_)) | SsaInstr::Const(SsaValue::Instr(_)) => {
                     return Err(format!(
-                        "SSA C backend: unsupported constant in {}",
+                        "SSA C backend: unsupported symbolic constant in {}",
                         function.name
                     ));
                 }
@@ -139,30 +158,23 @@ fn emit_function(
                         .position(|(capture, _, _)| capture == name)
                     {
                         out.push_str(&format!(
-                            "  if (env) env->slots[{}] = {};",
+                            "  if (env) env->slots[{}] = {};\n",
                             slot,
                             v(*value)
                         ));
-                        out.push('\n');
                     }
                 }
                 SsaInstr::Unary { op, value, .. } => match op.as_str() {
-                    "Minus" => {
-                        out.push_str(&format!(
-                            "  {} = nova_num(-{}.number);",
-                            v(*id),
-                            v(*value)
-                        ));
-                        out.push('\n');
-                    }
-                    "Bang" => {
-                        out.push_str(&format!(
-                            "  {} = nova_bool({}.number == 0);",
-                            v(*id),
-                            v(*value)
-                        ));
-                        out.push('\n');
-                    }
+                    "Minus" => out.push_str(&format!(
+                        "  {} = nova_num(-{}.number);\n",
+                        v(*id),
+                        v(*value)
+                    )),
+                    "Bang" => out.push_str(&format!(
+                        "  {} = nova_bool(!nova_truthy({}));\n",
+                        v(*id),
+                        v(*value)
+                    )),
                     other => {
                         return Err(format!(
                             "SSA C backend: unsupported unary {}",
@@ -170,17 +182,14 @@ fn emit_function(
                         ));
                     }
                 },
-                SsaInstr::Binary {
-                    op, left, right, ..
-                } => {
+                SsaInstr::Binary { op, left, right, .. } => {
                     let Some(expr) = binary_expr(op, &v(*left), &v(*right)) else {
                         return Err(format!(
                             "SSA C backend: unsupported binary {}",
                             op
                         ));
                     };
-                    out.push_str(&format!("  {} = {};", v(*id), expr));
-                    out.push('\n');
+                    out.push_str(&format!("  {} = {};\n", v(*id), expr));
                 }
                 SsaInstr::Call {
                     name,
@@ -191,38 +200,30 @@ fn emit_function(
                         if args.len() != 1 {
                             return Err("SSA C backend: print expects one argument".into());
                         }
-                        out.push_str(&format!("  nova_print({});", v(args[0])));
-                        out.push('\n');
-                        out.push_str(&format!("  {} = nova_null();", v(*id)));
-                        out.push('\n');
+                        out.push_str(&format!("  nova_print({});\n", v(args[0])));
+                        out.push_str(&format!("  {} = nova_null();\n", v(*id)));
                     } else if functions.contains(name) {
                         let cname = c_ident(name);
                         if args.is_empty() {
                             out.push_str(&format!(
-                                "  {} = {}(NULL, NULL, 0);",
+                                "  {} = {}(NULL, NULL, 0);\n",
                                 v(*id),
                                 cname
                             ));
-                            out.push('\n');
                         } else {
                             out.push_str(&format!(
-                                "  NovaValue call_args_{}[{}] = {{ {} }};",
+                                "  NovaValue call_args_{}[{}] = {{ {} }};\n",
                                 id,
                                 args.len(),
-                                args.iter()
-                                    .map(|a| v(*a))
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
+                                args.iter().map(|a| v(*a)).collect::<Vec<_>>().join(", ")
                             ));
-                            out.push('\n');
                             out.push_str(&format!(
-                                "  {} = {}(NULL, call_args_{}, {});",
+                                "  {} = {}(NULL, call_args_{}, {});\n",
                                 v(*id),
                                 cname,
                                 id,
                                 args.len()
                             ));
-                            out.push('\n');
                         }
                     } else {
                         return Err(format!(
@@ -232,69 +233,125 @@ fn emit_function(
                     }
 
                     if matches!(result, IrType::Null) && name != "print" {
-                        out.push_str(&format!("  {} = nova_null();", v(*id)));
-                        out.push('\n');
+                        out.push_str(&format!("  {} = nova_null();\n", v(*id)));
                     }
                 }
                 SsaInstr::CallIndirect { callee, args, .. } => {
                     if args.is_empty() {
                         out.push_str(&format!(
-                            "  {} = nova_call_closure({}, NULL, 0);",
+                            "  {} = nova_call_closure({}, NULL, 0);\n",
                             v(*id),
                             v(*callee)
                         ));
-                        out.push('\n');
                     } else {
                         out.push_str(&format!(
-                            "  NovaValue indirect_args_{}[{}] = {{ {} }};",
+                            "  NovaValue indirect_args_{}[{}] = {{ {} }};\n",
                             id,
                             args.len(),
-                            args.iter()
-                                .map(|a| v(*a))
-                                .collect::<Vec<_>>()
-                                .join(", ")
+                            args.iter().map(|a| v(*a)).collect::<Vec<_>>().join(", ")
                         ));
-                        out.push('\n');
                         out.push_str(&format!(
-                            "  {} = nova_call_closure({}, indirect_args_{}, {});",
+                            "  {} = nova_call_closure({}, indirect_args_{}, {});\n",
                             v(*id),
                             v(*callee),
                             id,
                             args.len()
                         ));
-                        out.push('\n');
                     }
                 }
+                SsaInstr::StructInit { name, fields } => {
+                    out.push_str(&format!(
+                        "  NovaStruct* struct_{} = nova_make_struct({}, {});\n",
+                        id,
+                        c_string(name),
+                        fields.len()
+                    ));
+                    for (slot, (field, value)) in fields.iter().enumerate() {
+                        out.push_str(&format!(
+                            "  nova_struct_set(struct_{}, {}, {}, {});\n",
+                            id,
+                            slot,
+                            c_string(field),
+                            v(*value)
+                        ));
+                    }
+                    out.push_str(&format!(
+                        "  {} = nova_struct_value(struct_{});\n",
+                        v(*id),
+                        id
+                    ));
+                }
+                SsaInstr::FieldGet { base, field, .. } => {
+                    out.push_str(&format!(
+                        "  {} = nova_field_get({}, {});\n",
+                        v(*id),
+                        v(*base),
+                        c_string(field)
+                    ));
+                }
+                SsaInstr::EnumInit {
+                    name,
+                    variant,
+                    payload,
+                    ..
+                } => {
+                    let payload_expr = payload
+                        .map(|value| v(value))
+                        .unwrap_or_else(|| "nova_null()".into());
+                    out.push_str(&format!(
+                        "  {} = nova_enum_value({}, {}, {});\n",
+                        v(*id),
+                        c_string(name),
+                        c_string(variant),
+                        payload_expr
+                    ));
+                }
+                SsaInstr::EnumTest { value, variant } => {
+                    out.push_str(&format!(
+                        "  {} = nova_bool(nova_enum_is({}, {}));\n",
+                        v(*id),
+                        v(*value),
+                        c_string(variant)
+                    ));
+                }
+                SsaInstr::EnumPayload { value, .. } => {
+                    out.push_str(&format!(
+                        "  {} = nova_enum_payload({});\n",
+                        v(*id),
+                        v(*value)
+                    ));
+                }
+                SsaInstr::Try { .. } => {
+                    return Err(format!(
+                        "SSA C backend: Try not yet implemented in {}",
+                        function.name
+                    ));
+                }
                 SsaInstr::Closure {
-                    function,
+                    function: closure_function,
                     captures,
                     ..
                 } => {
                     out.push_str(&format!(
-                        "  NovaClosure* closure_{} = nova_make_closure({}, {});",
+                        "  NovaClosure* closure_{} = nova_make_closure({}, {});\n",
                         id,
-                        c_ident(function),
+                        c_ident(closure_function),
                         captures.len()
                     ));
-                    out.push('\n');
-
                     for (slot, (_, value)) in captures.iter().enumerate() {
                         out.push_str(&format!(
-                            "  if (closure_{}) closure_{}->env->slots[{}] = {};",
+                            "  if (closure_{}) closure_{}->env->slots[{}] = {};\n",
                             id,
                             id,
                             slot,
                             v(*value)
                         ));
-                        out.push('\n');
                     }
-
                     out.push_str(&format!(
-                        "  {} = nova_closure_value(closure_{});",
+                        "  {} = nova_closure_value(closure_{});\n",
                         v(*id),
                         id
                     ));
-                    out.push('\n');
                 }
                 SsaInstr::Phi { .. } => {
                     return Err(format!(
@@ -302,24 +359,12 @@ fn emit_function(
                         function.name
                     ));
                 }
-                SsaInstr::StructInit { .. }
-                | SsaInstr::FieldGet { .. }
-                | SsaInstr::EnumInit { .. }
-                | SsaInstr::EnumTest { .. }
-                | SsaInstr::EnumPayload { .. }
-                | SsaInstr::Try { .. } => {
-                    return Err(format!(
-                        "SSA C backend: instruction {:?} not implemented",
-                        instr
-                    ));
-                }
             }
         }
 
         match &block.terminator {
             Some(Terminator::Jump(target)) => {
-                out.push_str(&format!("  goto B{};", target));
-                out.push('\n');
+                out.push_str(&format!("  goto B{};\n", target));
             }
             Some(Terminator::Branch {
                 condition,
@@ -327,20 +372,17 @@ fn emit_function(
                 else_block,
             }) => {
                 out.push_str(&format!(
-                    "  if ({}.number != 0) goto B{}; else goto B{};",
+                    "  if (nova_truthy({})) goto B{}; else goto B{};\n",
                     v(*condition),
                     then_block,
                     else_block
                 ));
-                out.push('\n');
             }
             Some(Terminator::Return(Some(value))) => {
-                out.push_str(&format!("  return {};", v(*value)));
-                out.push('\n');
+                out.push_str(&format!("  return {};\n", v(*value)));
             }
             Some(Terminator::Return(None)) => {
-                out.push_str("  return nova_null();");
-                out.push('\n');
+                out.push_str("  return nova_null();\n");
             }
             None => {
                 return Err(format!(
@@ -351,9 +393,7 @@ fn emit_function(
         }
     }
 
-    out.push_str("}");
-    out.push('\n');
-    out.push('\n');
+    out.push_str("}\n\n");
     Ok(out)
 }
 
@@ -363,21 +403,54 @@ pub fn emit_c(functions: &[SsaFunction]) -> Result<String, String> {
         .map(|f| f.name.clone())
         .collect::<std::collections::HashSet<_>>();
 
-    let mut out = r#"#include <math.h>
+    let runtime = r#"
+#include <math.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-typedef enum { NOVA_NULL, NOVA_NUMBER, NOVA_BOOL, NOVA_CLOSURE } NovaTag;
+typedef enum {
+  NOVA_NULL,
+  NOVA_NUMBER,
+  NOVA_BOOL,
+  NOVA_STRING,
+  NOVA_STRUCT,
+  NOVA_ENUM,
+  NOVA_CLOSURE
+} NovaTag;
+
 typedef struct NovaValue NovaValue;
 typedef struct NovaClosure NovaClosure;
 typedef struct NovaEnv NovaEnv;
+typedef struct NovaStruct NovaStruct;
+typedef struct NovaEnum NovaEnum;
+
+typedef struct {
+  const char* name;
+  NovaValue value;
+} NovaField;
+
+struct NovaStruct {
+  char* name;
+  size_t len;
+  NovaField* fields;
+};
+
+struct NovaEnum {
+  char* name;
+  char* variant;
+  NovaValue payload;
+};
 
 struct NovaValue {
   NovaTag tag;
   double number;
+  const char* string;
   NovaClosure* closure;
+  NovaStruct* structure;
+  NovaEnum* enumeration;
 };
 
 struct NovaEnv {
@@ -391,34 +464,147 @@ struct NovaClosure {
 };
 
 static NovaValue nova_null(void) {
-  NovaValue v = { NOVA_NULL, 0, NULL };
+  NovaValue v = { NOVA_NULL, 0, NULL, NULL, NULL, NULL };
   return v;
 }
 
 static NovaValue nova_num(double x) {
-  NovaValue v = { NOVA_NUMBER, x, NULL };
+  NovaValue v = { NOVA_NUMBER, x, NULL, NULL, NULL, NULL };
   return v;
 }
 
 static NovaValue nova_bool(int x) {
-  NovaValue v = { NOVA_BOOL, x ? 1.0 : 0.0, NULL };
+  NovaValue v = { NOVA_BOOL, x ? 1.0 : 0.0, NULL, NULL, NULL, NULL };
+  return v;
+}
+
+static NovaValue nova_string(const char* x) {
+  NovaValue v = { NOVA_STRING, 0, x, NULL, NULL, NULL };
+  return v;
+}
+
+static NovaValue nova_struct_value(NovaStruct* x) {
+  NovaValue v = { NOVA_STRUCT, 0, NULL, NULL, x, NULL };
+  return v;
+}
+
+static NovaValue nova_enum_value(const char* name, const char* variant, NovaValue payload) {
+  NovaEnum* e = (NovaEnum*)calloc(1, sizeof(NovaEnum));
+  if (!e) return nova_null();
+  e->name = strdup(name);
+  e->variant = strdup(variant);
+  e->payload = payload;
+  NovaValue v = { NOVA_ENUM, 0, NULL, NULL, NULL, e };
   return v;
 }
 
 static NovaValue nova_closure_value(NovaClosure* c) {
-  NovaValue v = { NOVA_CLOSURE, 0, c };
+  NovaValue v = { NOVA_CLOSURE, 0, NULL, c, NULL, NULL };
   return v;
 }
 
+static int nova_truthy(NovaValue v) {
+  switch (v.tag) {
+    case NOVA_BOOL: return v.number != 0;
+    case NOVA_NUMBER: return v.number != 0;
+    case NOVA_STRING: return v.string && v.string[0] != '\0';
+    case NOVA_STRUCT: return 1;
+    case NOVA_ENUM: return 1;
+    case NOVA_CLOSURE: return 1;
+    default: return 0;
+  }
+}
+
+static int nova_equal(NovaValue a, NovaValue b) {
+  if (a.tag != b.tag) return 0;
+  switch (a.tag) {
+    case NOVA_NULL: return 1;
+    case NOVA_NUMBER:
+    case NOVA_BOOL: return a.number == b.number;
+    case NOVA_STRING: return strcmp(a.string ? a.string : "", b.string ? b.string : "") == 0;
+    case NOVA_ENUM:
+      return strcmp(a.enumeration->name, b.enumeration->name) == 0
+          && strcmp(a.enumeration->variant, b.enumeration->variant) == 0;
+    case NOVA_STRUCT:
+      return a.structure == b.structure;
+    case NOVA_CLOSURE:
+      return a.closure == b.closure;
+    default: return 0;
+  }
+}
+
+static NovaStruct* nova_make_empty_struct(const char* name) {
+  NovaStruct* s = (NovaStruct*)calloc(1, sizeof(NovaStruct));
+  if (!s) return NULL;
+  s->name = strdup(name);
+  return s;
+}
+
+static NovaStruct* nova_make_struct(const char* name, size_t len) {
+  NovaStruct* s = nova_make_empty_struct(name);
+  if (!s) return NULL;
+  s->len = len;
+  s->fields = (NovaField*)calloc(len, sizeof(NovaField));
+  if (!s->fields) return NULL;
+  return s;
+}
+
+static void nova_struct_set(NovaStruct* s, size_t slot, const char* name, NovaValue value) {
+  if (!s || slot >= s->len) return;
+  s->fields[slot].name = name;
+  s->fields[slot].value = value;
+}
+
+static NovaValue nova_field_get(NovaValue base, const char* field) {
+  if (base.tag != NOVA_STRUCT || !base.structure) return nova_null();
+  for (size_t i = 0; i < base.structure->len; i++) {
+    if (base.structure->fields[i].name
+        && strcmp(base.structure->fields[i].name, field) == 0) {
+      return base.structure->fields[i].value;
+    }
+  }
+  return nova_null();
+}
+
+static int nova_enum_is(NovaValue value, const char* variant) {
+  return value.tag == NOVA_ENUM
+      && value.enumeration
+      && strcmp(value.enumeration->variant, variant) == 0;
+}
+
+static NovaValue nova_enum_payload(NovaValue value) {
+  if (value.tag != NOVA_ENUM || !value.enumeration) return nova_null();
+  return value.enumeration->payload;
+}
+
 static void nova_print(NovaValue v) {
-  if (v.tag == NOVA_BOOL) {
-    printf("%s\n", v.number ? "true" : "false");
-  } else if (v.tag == NOVA_NUMBER) {
-    printf("%.15g\n", v.number);
-  } else if (v.tag == NOVA_NULL) {
-    printf("null\n");
-  } else {
-    printf("<closure>\n");
+  switch (v.tag) {
+    case NOVA_BOOL:
+      printf("%s\n", v.number ? "true" : "false");
+      break;
+    case NOVA_NUMBER:
+      printf("%.15g\n", v.number);
+      break;
+    case NOVA_STRING:
+      printf("%s\n", v.string ? v.string : "");
+      break;
+    case NOVA_STRUCT:
+      printf("<struct %s>\n", v.structure && v.structure->name ? v.structure->name : "?");
+      break;
+    case NOVA_ENUM:
+      if (v.enumeration && v.enumeration->payload.tag != NOVA_NULL)
+        printf("%s.%s\n", v.enumeration->name, v.enumeration->variant);
+      else
+        printf("%s.%s\n",
+               v.enumeration ? v.enumeration->name : "?",
+               v.enumeration ? v.enumeration->variant : "?");
+      break;
+    case NOVA_CLOSURE:
+      printf("<closure>\n");
+      break;
+    default:
+      printf("null\n");
+      break;
   }
 }
 
@@ -427,16 +613,13 @@ static NovaClosure* nova_make_closure(
     size_t captures
 ) {
   if (captures > 32) return NULL;
-
   NovaClosure* closure = (NovaClosure*)calloc(1, sizeof(NovaClosure));
   if (!closure) return NULL;
-
   closure->env = (NovaEnv*)calloc(1, sizeof(NovaEnv));
   if (!closure->env) {
     free(closure);
     return NULL;
   }
-
   closure->env->len = captures;
   closure->invoke = invoke;
   return closure;
@@ -454,17 +637,18 @@ static NovaValue nova_call_closure(
   ) {
     return nova_null();
   }
-
   return callee.closure->invoke(callee.closure->env, args, argc);
 }
+
 "#.to_string();
+
+    let mut out = runtime;
 
     for function in functions {
         out.push_str(&format!(
-            "static NovaValue {}(NovaEnv* env, NovaValue* args, size_t argc);",
+            "static NovaValue {}(NovaEnv* env, NovaValue* args, size_t argc);\n",
             c_ident(&function.name)
         ));
-        out.push('\n');
     }
     out.push('\n');
 
@@ -472,27 +656,21 @@ static NovaValue nova_call_closure(
         out.push_str(&emit_function(function, &names)?);
     }
 
-    out.push_str("int main(void) {");
-    out.push('\n');
-    out.push_str("  NovaValue result = nova_main(NULL, NULL, 0);");
-    out.push('\n');
-    out.push_str("  (void)result;");
-    out.push('\n');
-    out.push_str("  return 0;");
-    out.push('\n');
-    out.push_str("}");
-    out.push('\n');
+    out.push_str(
+        "int main(void) {\n"
+    );
+    out.push_str("  NovaValue result = nova_main(NULL, NULL, 0);\n");
+    out.push_str("  (void)result;\n");
+    out.push_str("  return 0;\n");
+    out.push_str("}\n");
 
     Ok(out)
 }
 
-
 #[cfg(test)]
 mod tests {
-    use super::c_ident;
-
     #[test]
-    fn main_symbol_has_stable_c_name() {
-        assert_eq!(c_ident("<main>"), "nova_main");
+    fn c_string_escapes_quotes_and_newlines() {
+        assert_eq!(super::c_string("a\"b\n"), "\"a\\\"b\\n\"");
     }
 }
