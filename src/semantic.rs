@@ -240,6 +240,10 @@ impl Checker {
                     if !known { self.error(format!("unknown variant {}.{}",name,variant)); }
                     else { covered.insert(variant.clone()); }
                 }
+                crate::types::Type::Generic(name, _) if name=="Option" || name=="Result" => {
+                    let known = self.enums.get(name).map(|vars| vars.contains_key(variant)).unwrap_or(false);
+                    if !known { self.error(format!("unknown variant {}.{}",name,variant)); } else { covered.insert(variant.clone()); }
+                }
                 _ => self.error(format!("enum pattern {} requires enum subject, got {}",variant,subject.name())),
             }
         }
@@ -334,13 +338,18 @@ impl Checker {
                             let missing: Vec<_> = vars.keys().filter(|v| !covered.contains(*v)).cloned().collect();
                             if !missing.is_empty() { self.error(format!("non-exhaustive match on {}: missing {}", enum_name, missing.join(", "))); }
                         }
+                    } else if let crate::types::Type::Generic(enum_name, _) = &subject {
+                        if let Some(vars) = self.enums.get(enum_name) {
+                            let missing: Vec<_> = vars.keys().filter(|v| !covered.contains(*v)).cloned().collect();
+                            if !missing.is_empty() { self.error(format!("non-exhaustive match on {}: missing {}", enum_name, missing.join(", "))); }
+                        }
                     }
                 }
             }
             Stmt::Import(_) => {}
             Stmt::StructDecl(_, _) => {},
             Stmt::EnumDecl(_, _) => {}
-            Stmt::Fn(_, args, ret, body) => {
+            Stmt::Fn(_, _generics, args, ret, body) => {
                 self.push_scope();
                 for (name, ty) in args { self.define(name.clone(), ty.clone()); }
                 for s in body { self.check_stmt(s, Some(ret)); }
@@ -360,13 +369,14 @@ impl Checker {
                 if self.structs.contains_key(name) { self.error(format!("duplicate struct {}", name)); }
                 else { self.structs.insert(name.clone(), fields.iter().cloned().collect()); }
             }
-            if let Stmt::Fn(name, args, ret, _) = stmt {
+            if let Stmt::Fn(name, generics, args, ret, _) = stmt {
                 if self.fns.contains_key(name) {
                     self.error(format!("duplicate function {}", name));
                 } else {
                     self.fns.insert(name.clone(), StaticFn {
                         args: args.iter().map(|(_, t)| t.clone()).collect(),
                         ret: ret.clone(),
+                        generics: generics.clone(),
                     });
                 }
             }
