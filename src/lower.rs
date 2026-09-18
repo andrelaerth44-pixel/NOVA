@@ -1,36 +1,56 @@
-pub fn lower(program: &[crate::Stmt]) -> crate::ir::Module {
+use crate::ir::{Instr, Module};
+
+pub fn lower(program: &[crate::Stmt]) -> Module {
     crate::ir::IrBuilder::new().lower_program(program)
 }
 
-pub fn verify(m: &crate::ir::Module) -> Result<(), String> {
-    fn check(code: &[crate::ir::Instr], label: &str) -> Result<(), String> {
+pub fn verify(m: &Module) -> Result<(), String> {
+    fn check(code: &[Instr], label: &str) -> Result<(), String> {
         let mut depth: isize = 0;
         for (i, ins) in code.iter().enumerate() {
             match ins {
-                crate::ir::Instr::ConstNumber(_) | crate::ir::Instr::ConstString(_) | crate::ir::Instr::ConstBool(_) | crate::ir::Instr::Load(_) => depth += 1,
-                crate::ir::Instr::Store(_) | crate::ir::Instr::Pop | crate::ir::Instr::JumpIfFalse(_) | crate::ir::Instr::Return => depth -= 1,
-                crate::ir::Instr::Binary(_) => depth -= 1,
-                crate::ir::Instr::Call(name, argc) => {
-                    if *argc == 0 { depth += 1; }
-                    else if name == "print" || name == "for_each" { depth -= *argc as isize; }
-                    else { depth -= *argc as isize - 1; }
+                Instr::ConstNumber(_) | Instr::ConstString(_) | Instr::ConstBool(_) | Instr::ConstNull | Instr::Load(_) => depth += 1,
+                Instr::Store(_) | Instr::Pop => depth -= 1,
+                Instr::Unary { .. } => {}
+                Instr::Binary { .. } => depth -= 1,
+                Instr::Call { name, argc, result } => {
+                    depth -= *argc as isize;
+                    if !matches!(result, crate::ir::IrType::Null) { depth += 1; }
+                    if name == "for_each" { depth -= 1; }
                 }
-                crate::ir::Instr::Jump(_) => {}
+                Instr::JumpIfFalse(_) => depth -= 1,
+                Instr::Jump(_) => {}
+                Instr::Return(_) => depth -= 1,
             }
             if depth < 0 {
                 return Err(format!("IR stack underflow in {} at {}", label, i));
             }
             match ins {
-                crate::ir::Instr::Jump(t) | crate::ir::Instr::JumpIfFalse(t) if *t >= code.len() => {
+                Instr::Jump(t) | Instr::JumpIfFalse(t) if *t >= code.len() => {
                     return Err(format!("IR error in {} at {}: jump target {} is out of bounds", label, i, t));
                 }
                 _ => {}
             }
         }
-        if depth != 0 { return Err(format!("IR stack imbalance in {}: final depth {}", label, depth)); }
+        if depth != 0 {
+            return Err(format!("IR stack imbalance in {}: final depth {}", label, depth));
+        }
         Ok(())
     }
-    check(&m.code, "module")?;
-    for f in &m.functions { check(&f.code, &format!("fn {}", f.name))?; }
+
+    fn check_blocks(blocks: &[crate::ir::BasicBlock], label: &str) -> Result<(), String> {
+        if blocks.is_empty() {
+            return Err(format!("{} has no basic blocks", label));
+        }
+        for block in blocks {
+            check(&block.code, &format!("{} block {}", label, block.id))?;
+        }
+        Ok(())
+    }
+
+    check_blocks(&m.blocks, "module")?;
+    for f in &m.functions {
+        check_blocks(&f.blocks, &format!("fn {}", f.name))?;
+    }
     Ok(())
 }
