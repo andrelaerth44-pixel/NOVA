@@ -180,6 +180,7 @@ impl IrBuilder {
             crate::Value::Struct { name, .. } => IrType::Struct(name.clone()),
             crate::Value::Enum { name, .. } => IrType::Enum(name.clone()),
             crate::Value::Null => IrType::Null,
+            crate::Value::Closure { .. } => IrType::Any,
         }
     }
 
