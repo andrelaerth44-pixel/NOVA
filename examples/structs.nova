@@ -1,0 +1,15 @@
+struct User {
+    name: string
+    age: i32
+    active: bool
+}
+
+user = User {
+    name: "Laerth",
+    age: 18,
+    active: true
+}
+
+print user.name
+print user.age
+print user.active
