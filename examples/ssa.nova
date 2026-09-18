@@ -1,0 +1,11 @@
+fn sum_to(limit: i64) -> i64 {
+    total: i64 = 0
+    i: i64 = 0
+    while i < limit {
+        i = i + 1
+        total = total + i
+    }
+    return total
+}
+
+print sum_to(5)
