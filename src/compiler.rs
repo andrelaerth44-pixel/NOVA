@@ -154,6 +154,16 @@ mod tests {
                 return Err("failed")
             }
 
+            result = maybe(true)
+            match result {
+                Some(value) {
+                    print value
+                },
+                None {
+                    print 0
+                }
+            }
+
             print compute(true)
             print parse(false)?
         "#;
