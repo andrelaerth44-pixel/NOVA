@@ -528,7 +528,7 @@ static NovaValue nova_closure_value(NovaClosure* c) {
   return v;
 }
 
-static NovaValue nova_array_value(NovaArray* a) {
+static int nova_equal(NovaValue a, NovaValue b);\n\nstatic NovaValue nova_array_value(NovaArray* a) {
   NovaValue v = { NOVA_ARRAY, 0, NULL, NULL, NULL, NULL, a, NULL, NULL };
   return v;
 }
