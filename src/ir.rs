@@ -118,7 +118,7 @@ pub enum SsaInstr {
     EnumTest { value: ValueId, variant: String },
     EnumPayload { value: ValueId, ty: IrType },
     Try { value: ValueId, result: IrType },
-    Closure { params: Vec<String>, captures: Vec<(String, ValueId)>, ty: IrType },
+    Closure { function: String, params: Vec<String>, captures: Vec<(String, ValueId)>, ty: IrType },
     Phi { incomings: Vec<(usize, ValueId)>, ty: IrType },
 }
 
