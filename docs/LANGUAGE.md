@@ -84,3 +84,17 @@ match state {
 ```
 
 Match patterns currently support literal values, `_` wildcard patterns, and enum variants with one binding. The checker validates enum variants and reports missing variants when a match has neither a wildcard nor an `else` arm.
+
+
+## Option and Result helpers
+
+NOVA provides built-in Option/Result constructors:
+
+```nova
+value = Some(42)
+missing = None
+success = Ok("done")
+failure = Err("network")
+```
+
+The runtime also provides `is_some`, `is_none`, `is_ok`, `is_err`, `unwrap`, and `unwrap_or`. These form the current safe value-inspection layer while the language-level propagation operator is still being implemented.
