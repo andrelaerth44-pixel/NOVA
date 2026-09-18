@@ -36,6 +36,15 @@ impl Parser {
             t=>Err(format!("expected type, got {:?}",t))
         }
     }
+    fn mark_type_params(t: crate::types::Type, params: &[String]) -> crate::types::Type {
+        match t {
+            crate::types::Type::Struct(n) if params.iter().any(|p| p==&n) => crate::types::Type::TypeParam(n),
+            crate::types::Type::Array(inner) => crate::types::Type::Array(Box::new(Self::mark_type_params(*inner, params))),
+            crate::types::Type::Generic(n,args) => crate::types::Type::Generic(n,args.into_iter().map(|x|Self::mark_type_params(x,params)).collect()),
+            other => other
+        }
+    }
+
     fn stmt(&mut self)->Result<Stmt,String>{
         if let Token::Ident(word) = self.peek() {
             if word == "struct" {
@@ -100,6 +109,8 @@ impl Parser {
                     if !self.eat(&Token::Comma){return Err("expected ,".into())}
                 }}
                 let ret=if self.eat(&Token::Arrow){self.type_name()?}else{crate::types::Type::Any};
+                let a=a.into_iter().map(|(name,t)|(name,Self::mark_type_params(t,&generics))).collect();
+                let ret=Self::mark_type_params(ret,&generics);
                 Ok(Stmt::Fn(n,generics,a,ret,self.block()?))
             },
             Token::Ident(n)=>{
