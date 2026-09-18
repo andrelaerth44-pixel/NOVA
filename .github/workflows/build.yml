@@ -125,7 +125,7 @@ jobs:
           grep -Fxq "1" /tmp/iterators.out
           grep -Fxq "2" /tmp/iterators.out
           grep -Fxq "1" /tmp/iterators.out
-          grep -Fxq "2" /tmp/iterators.out
+          grep -Fxq "3" /tmp/iterators.out
           grep -Fxq "18" /tmp/iterators.out
           grep -Fxq "N" /tmp/iterators.out
 
