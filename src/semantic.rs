@@ -320,9 +320,20 @@ impl Checker {
                     self.check_pattern(pattern, &subject, &mut covered, &mut wildcard);
                     self.push_scope();
                     if let Pattern::Enum { variant, binding: Some(name) } = pattern {
-                        if let crate::types::Type::Enum(enum_name) = &subject {
-                            if let Some(Some(payload)) = self.enums.get(enum_name).and_then(|m| m.get(variant)).cloned() {
-                                self.define(name.clone(), payload);
+                        let enum_name = match &subject {
+                            crate::types::Type::Enum(n) => Some(n.clone()),
+                            crate::types::Type::Generic(n, _) if n=="Option" || n=="Result" => Some(n.clone()),
+                            _ => None,
+                        };
+                        if let Some(enum_name)=enum_name {
+                            if let Some(Some(payload)) = self.enums.get(&enum_name).and_then(|m|m.get(variant)).cloned() {
+                                let bound = match (&subject, &enum_name[..], variant.as_str()) {
+                                    (crate::types::Type::Generic(_, args), "Option", "Some") => args.get(0).cloned().unwrap_or(crate::types::Type::Any),
+                                    (crate::types::Type::Generic(_, args), "Result", "Ok") => args.get(0).cloned().unwrap_or(crate::types::Type::Any),
+                                    (crate::types::Type::Generic(_, args), "Result", "Err") => args.get(1).cloned().unwrap_or(crate::types::Type::Any),
+                                    _ => payload,
+                                };
+                                self.define(name.clone(), bound);
                             } else { self.define(name.clone(), crate::types::Type::Any); }
                         } else { self.define(name.clone(), crate::types::Type::Any); }
                     }
