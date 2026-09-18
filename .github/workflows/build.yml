@@ -53,6 +53,10 @@ jobs:
           print x
           EOF
           cargo run --release -- check /tmp/ssa_loop.nova
+      - name: SSA control-flow smoke test
+        shell: bash
+        run: |
+          cargo run --release -- check examples/ssa_control_flow.nova
       - name: Explicit type smoke test
         shell: bash
         run: |
