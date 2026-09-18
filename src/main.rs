@@ -149,9 +149,9 @@ impl Vm {
             Expr::Unary(op,x)=>{let v=self.eval(x)?;match op{Token::Minus=>match v{Value::Num(n)=>Ok(Value::Num(-n)),_=>Err("unary - expects number".into())},Token::Bang=>Ok(Value::Bool(!v.truth())),_=>Err("bad unary".into())}},
             Expr::Binary(a,op,b)=>{let x=self.eval(a)?;if *op==Token::And&&!x.truth(){return Ok(Value::Bool(false))}if *op==Token::Or&&x.truth(){return Ok(Value::Bool(true))}let y=self.eval(b)?;self.bin(x,op,y)},
             Expr::Call(n,a)=>{
-                if n=="range" {let x=self.eval(&a[0])?;let y=self.eval(&a[1])?;let (x,y)=(num(x)? as i64,num(y)? as i64);return Ok(Value::Array((x..y).map(|n|Value::Num(n as f64)).collect()));}
-                if n=="str" {return Ok(Value::Str(self.eval(&a[0])?.to_string()));}
-                if n=="len" {let v=self.eval(&a[0])?;return Ok(Value::Num(match v{Value::Str(x)=>x.chars().count() as f64,Value::Array(x)=>x.len() as f64,_=>return Err("len expects string or array".into())}));}
+                if n=="range" {if a.len()!=2{return Err("range expects 2 arguments".into())}let x=self.eval(&a[0])?;let y=self.eval(&a[1])?;let (x,y)=(num(x)? as i64,num(y)? as i64);return Ok(Value::Array((x..y).map(|n|Value::Num(n as f64)).collect()));}
+                if n=="str" {if a.len()!=1{return Err("str expects 1 argument".into())}return Ok(Value::Str(self.eval(&a[0])?.to_string()));}
+                if n=="len" {if a.len()!=1{return Err("len expects 1 argument".into())}let v=self.eval(&a[0])?;return Ok(Value::Num(match v{Value::Str(x)=>x.chars().count() as f64,Value::Array(x)=>x.len() as f64,_=>return Err("len expects string or array".into())}));}
                 let f=self.fns.get(n).cloned().ok_or_else(||format!("undefined function {}",n))?;
                 if f.args.len()!=a.len(){return Err(format!("{} expects {} arguments",n,f.args.len()))}
                 let old=self.vars.clone();for(i,k)in f.args.iter().enumerate(){self.vars.insert(k.clone(),self.eval(&a[i])?);}
@@ -162,7 +162,7 @@ impl Vm {
     fn bin(&self,a:Value,o:&Token,b:Value)->Result<Value,String>{
         match o {
             Token::Plus=>match(a,b){(Value::Num(x),Value::Num(y))=>Ok(Value::Num(x+y)),(Value::Str(x),Value::Str(y))=>Ok(Value::Str(x+&y)),_=>Err("unsupported +".into())},
-            Token::Minus=>num2(a,b,|x,y|x-y),Token::Star=>num2(a,b,|x,y|x*y),Token::Slash=>num2(a,b,|x,y|x/y),Token::Percent=>num2(a,b,|x,y|x%y),
+            Token::Minus=>num2(a,b,|x,y|x-y),Token::Star=>num2(a,b,|x,y|x*y),Token::Slash=>div2(a,b),Token::Percent=>mod2(a,b),
             Token::EqEq=>Ok(Value::Bool(a.to_string()==b.to_string())),Token::Ne=>Ok(Value::Bool(a.to_string()!=b.to_string())),
             Token::Lt=>cmp2(a,b,|x,y|x<y),Token::Le=>cmp2(a,b,|x,y|x<=y),Token::Gt=>cmp2(a,b,|x,y|x>y),Token::Ge=>cmp2(a,b,|x,y|x>=y),
             Token::And=>Ok(Value::Bool(a.truth()&&b.truth())),Token::Or=>Ok(Value::Bool(a.truth()||b.truth())),_=>Err("bad operator".into())
@@ -184,10 +184,12 @@ impl Vm {
 fn num(v:Value)->Result<f64,String>{match v{Value::Num(n)=>Ok(n),_=>Err("number expected".into())}}
 fn num2(a:Value,b:Value,f:fn(f64,f64)->f64)->Result<Value,String>{Ok(Value::Num(f(num(a)?,num(b)?)))}
 fn cmp2(a:Value,b:Value,f:fn(f64,f64)->bool)->Result<Value,String>{Ok(Value::Bool(f(num(a)?,num(b)?)))}
+fn div2(a:Value,b:Value)->Result<Value,String>{let x=num(a)?;let y=num(b)?;if y==0.0{return Err("division by zero".into())}Ok(Value::Num(x/y))}
+fn mod2(a:Value,b:Value)->Result<Value,String>{let x=num(a)?;let y=num(b)?;if y==0.0{return Err("modulo by zero".into())}Ok(Value::Num(x%y))}
 
 fn main(){
     let a:Vec<String>=env::args().collect();
-    if a.len()<2 {eprintln!("NOVA 1.3.0\nusage: nova run <file> | nova check <file> | nova version");return}
+    if a.len()<2 {eprintln!("NOVA 1.5.0\nusage: nova run <file> | nova check <file> | nova version");return}
     if a[1]=="version"{println!("NOVA 1.5.0");return}
     if a.len()<3 {eprintln!("missing file");std::process::exit(2)}
     let src=match fs::read_to_string(&a[2]){Ok(x)=>x,Err(e)=>{eprintln!("{}",e);std::process::exit(1)}};
