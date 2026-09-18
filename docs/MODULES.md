@@ -1,35 +1,50 @@
-# NOVA 1.4 language core
+# NOVA modules
 
-NOVA now has the first real module mechanism.
-
-## Import
+NOVA modules are source files loaded by the compiler pipeline. The language keeps the import syntax deliberately small:
 
 ```nova
-import "lib/math.nova"
+import "math.nova"
 ```
 
-The imported file is parsed and executed once per runtime, with a module guard preventing repeated execution of the same path.
+## Resolution
 
-## Core surface
+- Relative imports resolve from the directory containing the importing module.
+- Absolute filesystem paths are accepted.
+- Each resolved module is canonicalized before it is cached.
+- A module is expanded once per compilation/load graph.
+- The loader preserves source order: imported declarations/statements are inserted at the import site.
+- Missing files, lexer errors and parser errors identify the module path.
 
-- variables and assignment
-- numbers, strings, booleans, arrays
-- arithmetic and comparisons
-- boolean operators
-- functions and return
-- if / else
-- while
-- for / in
-- range
-- len
-- str
-- import
+## Cycles
 
-This is an executable implementation, not a simulated API.
+Circular imports are diagnosed before execution instead of recursing forever:
+
+```text
+module import cycle: /path/a.nova -> /path/b.nova -> /path/a.nova
+```
+
+The active import stack is tracked independently from the cache, so a legal shared dependency can be imported by multiple modules without being expanded repeatedly.
+
+## Typed compilation
+
+For `nova check`, `nova ir`, and native compilation, the same expanded module graph is passed through semantic analysis and the compiler pipeline. This means declarations from imported NOVA modules participate in the same type checking and IR generation as local declarations.
+
+## Runtime
+
+The VM receives the same expanded program for the entry module. Module loading is therefore deterministic and does not depend on a second, runtime-only parser path.
 
 ## Direction
 
-The compiler line is being expanded toward:
-source -> parser -> semantic/type analysis -> NOVA IR -> optimization -> native backends.
+The next layer is a real package system built on top of this module graph:
 
-The runtime keeps unsupported native targets explicit rather than pretending they already exist.
+```text
+nova.toml
+  -> dependency resolver
+  -> package cache
+  -> module graph
+  -> semantic analysis
+  -> NOVA IR
+  -> backend
+```
+
+That package system will provide version constraints, lockfiles, local path dependencies and eventually external native/JAR/AAR/Maven bindings without changing NOVA source syntax.
