@@ -145,6 +145,19 @@ impl Checker {
                     _ => crate::types::Type::Unknown,
                 }
             }
+            Expr::Closure(args, _) => crate::types::Type::Function(vec![crate::types::Type::Any; args.len()], Box::new(crate::types::Type::Any)),
+            Expr::CallValue(callee, args) => {
+                let t=self.infer(callee);
+                match t {
+                    crate::types::Type::Function(params, ret) => {
+                        if params.len()!=args.len(){self.error(format!("closure expects {} arguments, got {}",params.len(),args.len()));}
+                        for (i,a) in args.iter().enumerate(){let got=self.infer(a);if let Some(w)=params.get(i){if !w.compatible(&got){self.error(format!("argument {} expects {}, got {}",i+1,w.name(),got.name()));}}}
+                        *ret
+                    }
+                    crate::types::Type::Any | crate::types::Type::Unknown => { for a in args{self.infer(a);} crate::types::Type::Any }
+                    _=>{self.error(format!("value of type {} is not callable",t.name()));crate::types::Type::Unknown}
+                }
+            }
             Expr::Call(name, args) => {
                 if let Some(f) = self.fns.get(name).cloned() {
                     if f.args.len() != args.len() {
