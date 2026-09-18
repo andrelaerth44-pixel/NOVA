@@ -17,7 +17,7 @@ mod semantic;
 mod ssa_lower;
 
 pub use token::Token;
-pub use ast::{Expr, Stmt, Value};
+pub use ast::{Expr, Stmt, Value, Pattern};
 pub use lexer::lex;
 pub use parser::Parser;
 
