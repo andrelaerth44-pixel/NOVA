@@ -56,7 +56,7 @@ impl Vm {
     }
     fn exec(&mut self,s:&[Stmt])->Result<Option<Value>,String>{
         for x in s {match x{
-            Stmt::Expr(e)=>{self.eval(e)?;}, Stmt::Let(n,e)|Stmt::Assign(n,e)=>{let v=self.eval(e)?;self.vars.insert(n.clone(),v);},
+            Stmt::Expr(e)=>{self.eval(e)?;}, Stmt::Let(n,_,e)|Stmt::Assign(n,e)=>{let v=self.eval(e)?;self.vars.insert(n.clone(),v);},
             Stmt::Print(e)=>println!("{}",self.eval(e)?), Stmt::Return(e)=>return Ok(Some(self.eval(e)?)),
             Stmt::If(c,a,b)=>{if self.eval(c)?.truth(){if let Some(v)=self.exec(a)?{return Ok(Some(v))}}else if let Some(v)=self.exec(b)?{return Ok(Some(v))}},
             Stmt::While(c,b)=>{while self.eval(c)?.truth(){if let Some(v)=self.exec(b)?{return Ok(Some(v))}}},
@@ -223,8 +223,11 @@ impl Checker {
     fn check_block(&mut self, body: &[Stmt], expected_return: Option<types::Type>) {
         for s in body {
             match s {
-                Stmt::Let(n, e) | Stmt::Assign(n, e) => {
+                Stmt::Let(n, explicit, e) | Stmt::Assign(n, e) => {
                     let t = self.infer(e);
+                    if let Some(expected) = explicit {
+                        if !expected.compatible(&t) { self.error(format!("type annotation for {} expects {}, got {}", n, expected.name(), t.name())); }
+                    }
                     if let Some(expected) = explicit {
                         if !expected.compatible(&t) { self.error(format!("type annotation for {} expects {}, got {}", n, expected.name(), t.name())); }
                     }
@@ -289,7 +292,7 @@ impl Checker {
                     self.fns.insert(n.clone(), StaticFn { args: args.iter().map(|x| x.1.clone()).collect(), ret: ret.clone() });
                     self.push_scope();
                     for (a, t) in args { self.define(a.clone(), t.clone()); }
-                    self.check_block(body, Some(types::Type::Any));
+                    self.check_block(body, Some(ret.clone()));
                     self.pop_scope();
                 }
             }
@@ -317,7 +320,8 @@ fn main(){
     let mut p=Parser::new(t);
     let program=match p.program(){Ok(x)=>x,Err(e)=>{eprintln!("parse error: {}",e);std::process::exit(1)}};
     if a[1]=="check"{if let Err(e)=run_semantic_check(&program){eprintln!("semantic error:\n{}",e);std::process::exit(1)}let m=optimizer::optimize(lower::lower(&program));if let Err(e)=lower::verify(&m){eprintln!("{}",e);std::process::exit(1)}println!("ok");return}
-    if a[1]=="ir"{let m=optimizer::optimize(lower::lower(&program));if let Err(e)=lower::verify(&m){eprintln!("{}",e);std::process::exit(1)}print!("{}",ir::format_module(&m));return}\n    if a[1]=="build-c"||a[1]=="build-native"{let m=optimizer::optimize(lower::lower(&program));if let Err(e)=lower::verify(&m){eprintln!("{}",e);std::process::exit(1)}let out=if a.len()>3{&a[3]}else{"a.out"};let c=match backend_c::emit_c(&m){Ok(x)=>x,Err(e)=>{eprintln!("native backend error: {}",e);std::process::exit(1)}};if a[1]=="build-c"{if let Err(e)=fs::write(out,&c){eprintln!("cannot write {}: {}",out,e);std::process::exit(1)}println!("{}",out);return}let status=std::process::Command::new("cc").args(["-O3","-std=c11","-x","c","-","-o",out]).stdin(std::process::Stdio::piped()).spawn().and_then(|mut child|{use std::io::Write;if let Some(mut stdin)=child.stdin.take(){stdin.write_all(c.as_bytes())?;}child.wait()});match status{Ok(s) if s.success()=>println!("{}",out),Ok(s)=>{eprintln!("C compiler exited with {}",s);std::process::exit(1)},Err(e)=>{eprintln!("cannot invoke cc: {}",e);std::process::exit(1)}}return}
+    if a[1]=="ir"{let m=optimizer::optimize(lower::lower(&program));if let Err(e)=lower::verify(&m){eprintln!("{}",e);std::process::exit(1)}print!("{}",ir::format_module(&m));return}
+    if a[1]=="build-c"||a[1]=="build-native"{let m=optimizer::optimize(lower::lower(&program));if let Err(e)=lower::verify(&m){eprintln!("{}",e);std::process::exit(1)}let out=if a.len()>3{&a[3]}else{"a.out"};let c=match backend_c::emit_c(&m){Ok(x)=>x,Err(e)=>{eprintln!("native backend error: {}",e);std::process::exit(1)}};if a[1]=="build-c"{if let Err(e)=fs::write(out,&c){eprintln!("cannot write {}: {}",out,e);std::process::exit(1)}println!("{}",out);return}let status=std::process::Command::new("cc").args(["-O3","-std=c11","-x","c","-","-o",out]).stdin(std::process::Stdio::piped()).spawn().and_then(|mut child|{use std::io::Write;if let Some(mut stdin)=child.stdin.take(){stdin.write_all(c.as_bytes())?;}child.wait()});match status{Ok(s) if s.success()=>println!("{}",out),Ok(s)=>{eprintln!("C compiler exited with {}",s);std::process::exit(1)},Err(e)=>{eprintln!("cannot invoke cc: {}",e);std::process::exit(1)}}return}
     if a[1]!="run"{eprintln!("unknown command {}",a[1]);std::process::exit(2)}
     let mut vm=Vm::new();let file_path=std::path::Path::new(&a[2]);let abs=fs::canonicalize(file_path).unwrap_or_else(|_|file_path.to_path_buf());vm.modules.insert(abs.to_string_lossy().to_string(),true);vm.module_stack.push(abs.parent().map(|x|x.to_path_buf()).unwrap_or_else(||std::path::PathBuf::from(".")));if let Err(e)=vm.exec(&program){eprintln!("runtime error: {}",e);std::process::exit(1)}
 }
