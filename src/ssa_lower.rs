@@ -254,8 +254,6 @@ pub fn lower_program(program: &[Stmt]) -> SsaFunction {
 pub fn verify_program(program: &[Stmt]) -> Result<(), String> {
     let main = lower_program(program);
     main.validate()?;
-    // The strict verifier is intentionally applied after construction; Phi
-    // operands are CFG values and are checked by the dedicated CFG verifier
-    // once dominance analysis is enabled.
+    main.verify_operands()?;
     Ok(())
 }
