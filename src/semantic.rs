@@ -327,7 +327,7 @@ impl Checker {
                            else if name=="Ok" { crate::types::Type::Generic("Result".into(),vec![got,crate::types::Type::Any]) }
                            else { crate::types::Type::Generic("Result".into(),vec![crate::types::Type::Any,got]) };
                 }
-                let iterator_builtin = match name.as_str() {
+                match name.as_str() {
                     "iter" => {
                         if args.len()!=1 { self.error("iter expects 1 argument"); return crate::types::Type::Generic("Iterator".into(), vec![crate::types::Type::Any]); }
                         let input = self.infer(&args[0]);
@@ -348,7 +348,7 @@ impl Checker {
                         };
                     }
                     "has_next" => {
-                        if args.len()!=1 { self.error("has_next expects 1 argument"); }
+                        if args.len()!=1 { self.error("has_next expects 1 argument"); return crate::types::Type::Bool; }
                         let input=self.infer(&args[0]);
                         if !matches!(input, crate::types::Type::Generic(n, _) if n=="Iterator") { self.error("has_next expects Iterator<T>"); }
                         return crate::types::Type::Bool;
