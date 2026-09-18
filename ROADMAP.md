@@ -21,7 +21,7 @@ Implemented in the current 1.6 compiler line: structs, enums, pattern matching, 
 - Option and Result
 - pattern matching beyond literal equality
 - closures
-- iterators and generators
+- first-class iterators
 
 ## 1.7 compiler
 - typed NOVA IR
@@ -33,10 +33,15 @@ Implemented in the current 1.6 compiler line: structs, enums, pattern matching, 
 - WebAssembly backend
 
 ## 1.8 standard library
+
+Implemented in the current 1.7 runtime line:
 - filesystem and paths
-- environment and processes
-- time
+- environment
+- time and sleep
 - JSON
+
+Remaining:
+- processes
 - HTTP and sockets
 - crypto and compression
 - databases
