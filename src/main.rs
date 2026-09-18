@@ -95,7 +95,7 @@ fn main(){
             Ok(x)=>x,
             Err(e)=>{eprintln!("compile error:\n{}",e);std::process::exit(1)}
         };
-        print!("{}", compiler::format_ssa(&compiled.ssa));
+        print!("{}", compiler::format_ssa_module(&compiled.ssa_functions));
         return
     }
 
