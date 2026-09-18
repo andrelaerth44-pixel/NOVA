@@ -1,102 +1,166 @@
 #[derive(Clone, Debug, PartialEq)]
+pub enum IrType {
+    Number,
+    Bool,
+    String,
+    Null,
+    Any,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Instr {
     ConstNumber(f64),
     ConstString(String),
     ConstBool(bool),
+    ConstNull,
     Load(String),
     Store(String),
-    Binary(String),
-    Call(String, usize),
+    Unary { op: String, ty: IrType },
+    Binary { op: String, ty: IrType },
+    Call { name: String, argc: usize, result: IrType },
     Jump(usize),
     JumpIfFalse(usize),
-    Return,
+    Return(IrType),
     Pop,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct BasicBlock {
+    pub id: usize,
+    pub code: Vec<Instr>,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Function {
     pub name: String,
-    pub params: Vec<String>,
-    pub code: Vec<Instr>,
+    pub params: Vec<(String, IrType)>,
+    pub return_type: IrType,
+    pub blocks: Vec<BasicBlock>,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Module {
-    pub code: Vec<Instr>,
+    pub blocks: Vec<BasicBlock>,
     pub functions: Vec<Function>,
 }
 
 impl Module {
-    pub fn push(&mut self, instr: Instr) { self.code.push(instr); }
+    pub fn new_block(&mut self) -> usize {
+        let id = self.blocks.len();
+        self.blocks.push(BasicBlock { id, code: Vec::new() });
+        id
+    }
 }
 
 pub struct IrBuilder {
     pub module: Module,
+    current: usize,
 }
 
 impl IrBuilder {
-    pub fn new() -> Self { Self { module: Module::default() } }
+    pub fn new() -> Self {
+        let mut module = Module::default();
+        module.new_block();
+        Self { module, current: 0 }
+    }
 
-    pub fn lower_expr(&mut self, e: &crate::Expr) {
+    fn push(&mut self, instr: Instr) {
+        self.module.blocks[self.current].code.push(instr);
+    }
+
+    fn value_type(v: &crate::Value) -> IrType {
+        match v {
+            crate::Value::Num(_) => IrType::Number,
+            crate::Value::Str(_) => IrType::String,
+            crate::Value::Bool(_) => IrType::Bool,
+            crate::Value::Array(_) => IrType::Any,
+            crate::Value::Null => IrType::Null,
+        }
+    }
+
+    pub fn lower_expr(&mut self, e: &crate::Expr) -> IrType {
         match e {
-            crate::Expr::Val(crate::Value::Num(n)) => self.module.push(Instr::ConstNumber(*n)),
-            crate::Expr::Val(crate::Value::Str(s)) => self.module.push(Instr::ConstString(s.clone())),
-            crate::Expr::Val(crate::Value::Bool(b)) => self.module.push(Instr::ConstBool(*b)),
-            crate::Expr::Val(crate::Value::Null) => self.module.push(Instr::ConstString("null".into())),
-            crate::Expr::Var(n) => self.module.push(Instr::Load(n.clone())),
+            crate::Expr::Val(v) => {
+                let ty = Self::value_type(v);
+                match v {
+                    crate::Value::Num(n) => self.push(Instr::ConstNumber(*n)),
+                    crate::Value::Str(s) => self.push(Instr::ConstString(s.clone())),
+                    crate::Value::Bool(b) => self.push(Instr::ConstBool(*b)),
+                    crate::Value::Null => self.push(Instr::ConstNull),
+                    crate::Value::Array(_) => self.push(Instr::Call { name: "array".into(), argc: 0, result: IrType::Any }),
+                }
+                ty
+            }
+            crate::Expr::Var(n) => {
+                self.push(Instr::Load(n.clone()));
+                IrType::Any
+            }
             crate::Expr::Array(xs) => {
                 for x in xs { self.lower_expr(x); }
-                self.module.push(Instr::Call("array".into(), xs.len()));
+                self.push(Instr::Call { name: "array".into(), argc: xs.len(), result: IrType::Any });
+                IrType::Any
             }
             crate::Expr::Unary(op, x) => {
-                self.lower_expr(x);
-                self.module.push(Instr::Binary(format!("{:?}", op)));
+                let ty = self.lower_expr(x);
+                self.push(Instr::Unary { op: format!("{:?}", op), ty: ty.clone() });
+                ty
             }
             crate::Expr::Binary(a, op, b) => {
-                self.lower_expr(a);
-                self.lower_expr(b);
-                self.module.push(Instr::Binary(format!("{:?}", op)));
+                let _ = self.lower_expr(a);
+                let _ = self.lower_expr(b);
+                let name = format!("{:?}", op);
+                let ty = if matches!(op, crate::Token::EqEq | crate::Token::NotEq | crate::Token::Lt | crate::Token::Le | crate::Token::Gt | crate::Token::Ge | crate::Token::And | crate::Token::Or) { IrType::Bool } else { IrType::Number };
+                self.push(Instr::Binary { op: name, ty: ty.clone() });
+                ty
             }
             crate::Expr::Call(n, args) => {
                 for a in args { self.lower_expr(a); }
-                self.module.push(Instr::Call(n.clone(), args.len()));
+                self.push(Instr::Call { name: n.clone(), argc: args.len(), result: IrType::Any });
+                IrType::Any
             }
         }
     }
 
     pub fn lower_stmt(&mut self, s: &crate::Stmt) {
         match s {
-            crate::Stmt::Expr(e) => { self.lower_expr(e); self.module.push(Instr::Pop); }
+            crate::Stmt::Expr(e) => { self.lower_expr(e); self.push(Instr::Pop); }
             crate::Stmt::Let(n,_,e) | crate::Stmt::Assign(n,e) => {
-                self.lower_expr(e); self.module.push(Instr::Store(n.clone()));
+                self.lower_expr(e); self.push(Instr::Store(n.clone()));
             }
             crate::Stmt::Print(e) => {
-                self.lower_expr(e); self.module.push(Instr::Call("print".into(),1));
+                self.lower_expr(e);
+                self.push(Instr::Call { name: "print".into(), argc: 1, result: IrType::Null });
             }
-            crate::Stmt::Return(e) => { self.lower_expr(e); self.module.push(Instr::Return); }
+            crate::Stmt::Return(e) => {
+                let ty = self.lower_expr(e);
+                self.push(Instr::Return(ty));
+            }
             crate::Stmt::If(c,a,b) => {
                 self.lower_expr(c);
-                let jf=self.module.code.len(); self.module.push(Instr::JumpIfFalse(usize::MAX));
+                let jf=self.module.blocks[self.current].code.len();
+                self.push(Instr::JumpIfFalse(usize::MAX));
                 for x in a { self.lower_stmt(x); }
-                let jend=self.module.code.len(); self.module.push(Instr::Jump(usize::MAX));
-                let else_at=self.module.code.len();
+                let jend=self.module.blocks[self.current].code.len();
+                self.push(Instr::Jump(usize::MAX));
+                let else_at=self.module.blocks[self.current].code.len();
                 for x in b { self.lower_stmt(x); }
-                let end=self.module.code.len();
-                if let Instr::JumpIfFalse(ref mut target)=self.module.code[jf] { *target=else_at; }
-                if let Instr::Jump(ref mut target)=self.module.code[jend] { *target=end; }
+                let end=self.module.blocks[self.current].code.len();
+                if let Instr::JumpIfFalse(ref mut target)=self.module.blocks[self.current].code[jf] { *target=else_at; }
+                if let Instr::Jump(ref mut target)=self.module.blocks[self.current].code[jend] { *target=end; }
             }
             crate::Stmt::While(c,b) => {
-                let head=self.module.code.len();
+                let head=self.module.blocks[self.current].code.len();
                 self.lower_expr(c);
-                let exit=self.module.code.len(); self.module.push(Instr::JumpIfFalse(usize::MAX));
+                let exit=self.module.blocks[self.current].code.len();
+                self.push(Instr::JumpIfFalse(usize::MAX));
                 for x in b { self.lower_stmt(x); }
-                self.module.push(Instr::Jump(head));
-                let end=self.module.code.len();
-                if let Instr::JumpIfFalse(ref mut target)=self.module.code[exit] { *target=end; }
+                self.push(Instr::Jump(head));
+                let end=self.module.blocks[self.current].code.len();
+                if let Instr::JumpIfFalse(ref mut target)=self.module.blocks[self.current].code[exit] { *target=end; }
             }
             crate::Stmt::For(_,it,b) => {
                 self.lower_expr(it);
-                self.module.push(Instr::Call("for_each".into(),1));
+                self.push(Instr::Call { name: "for_each".into(), argc: 1, result: IrType::Null });
                 for x in b { self.lower_stmt(x); }
             }
             crate::Stmt::Import(_) => {}
@@ -104,20 +168,32 @@ impl IrBuilder {
                 self.lower_expr(value);
                 for (pat,body) in arms {
                     self.lower_expr(pat);
-                    self.module.push(Instr::Binary("EqEq".into()));
-                    let jf=self.module.code.len(); self.module.push(Instr::JumpIfFalse(usize::MAX));
+                    self.push(Instr::Binary { op: "EqEq".into(), ty: IrType::Bool });
+                    let jf=self.module.blocks[self.current].code.len();
+                    self.push(Instr::JumpIfFalse(usize::MAX));
                     for x in body { self.lower_stmt(x); }
-                    let end=self.module.code.len();
-                    if let Instr::JumpIfFalse(ref mut target)=self.module.code[jf] { *target=end; }
+                    let end=self.module.blocks[self.current].code.len();
+                    if let Instr::JumpIfFalse(ref mut target)=self.module.blocks[self.current].code[jf] { *target=end; }
                 }
                 for x in otherwise { self.lower_stmt(x); }
             }
-            crate::Stmt::Fn(n,args,_,body) => {
-                let mut f=Function{name:n.clone(),params:args.clone(),code:Vec::new()};
-                let mut b=IrBuilder{module:Module::default()};
+            crate::Stmt::Fn(n,args,ret,body) => {
+                let params=args.iter().map(|(name,t)| (name.clone(), match t {
+                    crate::types::Type::Bool=>IrType::Bool,
+                    crate::types::Type::String=>IrType::String,
+                    crate::types::Type::Null=>IrType::Null,
+                    _=>IrType::Any,
+                })).collect();
+                let return_type=match ret {
+                    crate::types::Type::Bool=>IrType::Bool,
+                    crate::types::Type::String=>IrType::String,
+                    crate::types::Type::Null=>IrType::Null,
+                    _=>IrType::Any,
+                };
+                let mut b=IrBuilder::new();
                 for x in body { b.lower_stmt(x); }
-                f.code=b.module.code;
-                self.module.functions.push(f);
+                let blocks=b.module.blocks;
+                self.module.functions.push(Function{name:n.clone(),params,return_type,blocks});
             }
         }
     }
@@ -130,10 +206,16 @@ impl IrBuilder {
 
 pub fn format_module(m: &Module) -> String {
     let mut out=String::new();
-    for (i,ins) in m.code.iter().enumerate() { out.push_str(&format!("{:04} {:?}\n",i,ins)); }
+    for block in &m.blocks {
+        out.push_str(&format!("block {}\n", block.id));
+        for (i,ins) in block.code.iter().enumerate() { out.push_str(&format!("  {:04} {:?}\n",i,ins)); }
+    }
     for f in &m.functions {
-        out.push_str(&format!("fn {}({})\n",f.name,f.params.join(", ")));
-        for (i,ins) in f.code.iter().enumerate() { out.push_str(&format!("  {:04} {:?}\n",i,ins)); }
+        out.push_str(&format!("fn {}({}) -> {:?}\n",f.name,f.params.iter().map(|(n,_)|n.as_str()).collect::<Vec<_>>().join(", "),f.return_type));
+        for block in &f.blocks {
+            out.push_str(&format!("  block {}\n", block.id));
+            for (i,ins) in block.code.iter().enumerate() { out.push_str(&format!("    {:04} {:?}\n",i,ins)); }
+        }
     }
     out
 }
