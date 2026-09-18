@@ -3,6 +3,7 @@ mod types;
 mod ir;
 mod diagnostics;
 mod lower;
+mod optimizer;
 
 use std::{collections::HashMap, env, fs};
 
@@ -390,8 +391,8 @@ fn main(){
     let t=match lex(&src){Ok(x)=>x,Err(e)=>{eprintln!("lex error: {}",e);std::process::exit(1)}};
     let mut p=Parser::new(t);
     let program=match p.program(){Ok(x)=>x,Err(e)=>{eprintln!("parse error: {}",e);std::process::exit(1)}};
-    if a[1]=="check"{if let Err(e)=run_semantic_check(&program){eprintln!("semantic error:\n{}",e);std::process::exit(1)}let m=lower::lower(&program);if let Err(e)=lower::verify(&m){eprintln!("{}",e);std::process::exit(1)}println!("ok");return}
-    if a[1]=="ir"{let m=lower::lower(&program);if let Err(e)=lower::verify(&m){eprintln!("{}",e);std::process::exit(1)}print!("{}",ir::format_module(&m));return}
+    if a[1]=="check"{if let Err(e)=run_semantic_check(&program){eprintln!("semantic error:\n{}",e);std::process::exit(1)}let m=optimizer::optimize(lower::lower(&program));if let Err(e)=lower::verify(&m){eprintln!("{}",e);std::process::exit(1)}println!("ok");return}
+    if a[1]=="ir"{let m=optimizer::optimize(lower::lower(&program));if let Err(e)=lower::verify(&m){eprintln!("{}",e);std::process::exit(1)}print!("{}",ir::format_module(&m));return}
     if a[1]!="run"{eprintln!("unknown command {}",a[1]);std::process::exit(2)}
     if let Err(e)=Vm::new().exec(&program){eprintln!("runtime error: {}",e);std::process::exit(1)}
 }
