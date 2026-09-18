@@ -9,12 +9,19 @@ pub enum Expr {
 #[derive(Clone, Debug)]
 pub enum Stmt {
     Expr(Expr), Let(String, Option<crate::types::Type>, Expr), Assign(String, Expr), Print(Expr),
-    If(Expr, Vec<Stmt>, Vec<Stmt>), While(Expr, Vec<Stmt>), For(String, Expr, Vec<Stmt>), Import(String), Match(Expr, Vec<(Expr, Vec<Stmt>)>, Vec<Stmt>),
+    If(Expr, Vec<Stmt>, Vec<Stmt>), While(Expr, Vec<Stmt>), For(String, Expr, Vec<Stmt>), Import(String), Match(Expr, Vec<(Pattern, Vec<Stmt>)>, Vec<Stmt>),
     Fn(String, Vec<(String, crate::types::Type)>, crate::types::Type, Vec<Stmt>), Return(Expr),
     StructDecl(String, Vec<(String, crate::types::Type)>),
     EnumDecl(String, Vec<(String, Option<crate::types::Type>)>),
 }
 #[derive(Clone, Debug)]
+#[derive(Clone, Debug)]
+pub enum Pattern {
+    Wildcard,
+    Literal(Expr),
+    Enum { variant: String, binding: Option<String> },
+}
+
 pub enum Value {
     Num(f64), Str(String), Bool(bool), Array(Vec<Value>),
     Struct { name: String, fields: std::collections::HashMap<String, Value> },
@@ -37,7 +44,7 @@ impl Value {
     pub fn truth(&self)->bool {
         match self {
             Value::Bool(x)=>*x, Value::Num(x)=>*x!=0.0, Value::Str(x)=>!x.is_empty(),
-            Value::Array(x)=>!x.is_empty(), Value::Struct{..}=>true, Value::Null=>false
+            Value::Array(x)=>!x.is_empty(), Value::Struct{..}=>true, Value::Enum{..}=>true, Value::Null=>false
         }
     }
 }
