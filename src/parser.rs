@@ -125,7 +125,7 @@ impl Parser {
                     if !self.eat(&Token::Eq){return Err("expected =".into())}
                     return Ok(Stmt::Let(name,Some(ty),self.expr()?));
                 }
-                if self.p<self.t.len() && self.t[self.p]==Token::Eq {
+                if self.p+1<self.t.len() && self.t[self.p+1]==Token::Eq {
                     self.take();
                     return Ok(Stmt::Assign(name,self.expr()?));
                 }
