@@ -4,7 +4,7 @@ pub enum Token {
     Plus, Minus, Star, Slash, Percent,
     Eq, EqEq, Ne, Lt, Le, Gt, Ge,
     LParen, RParen, LBrace, RBrace, LBracket, RBracket,
-    Comma, Semi, Dot, Bang, Colon, Arrow, And, Or,
+    Comma, Semi, Dot, Bang, Question, Colon, Arrow, And, Or,
     If, Else, While, Fn, Return, True, False, Let,
     Print, In, For, Import, Match, Eof,
 }
