@@ -124,6 +124,47 @@ impl Checker {
                 }
                 crate::types::Type::Array(Box::new(first))
             }
+            Expr::Map(entries) => {
+                let mut key_ty = crate::types::Type::Any;
+                let mut value_ty = crate::types::Type::Any;
+                if let Some((first_key, first_value)) = entries.first() {
+                    key_ty = self.infer(first_key);
+                    value_ty = self.infer(first_value);
+                    for (key, value) in entries.iter().skip(1) {
+                        let kt = self.infer(key);
+                        let vt = self.infer(value);
+                        if !key_ty.compatible(&kt) { self.error("map keys have incompatible types"); }
+                        if !value_ty.compatible(&vt) { self.error("map values have incompatible types"); }
+                    }
+                }
+                crate::types::Type::Generic("Map".into(), vec![key_ty, value_ty])
+            }
+            Expr::Set(xs) => {
+                let mut item_ty = crate::types::Type::Any;
+                if let Some(first) = xs.first() {
+                    item_ty = self.infer(first);
+                    for value in xs.iter().skip(1) {
+                        let got = self.infer(value);
+                        if !item_ty.compatible(&got) { self.error("set elements have incompatible types"); }
+                    }
+                }
+                crate::types::Type::Generic("Set".into(), vec![item_ty])
+            }
+            Expr::Index(base, index) => {
+                let base_ty = self.infer(base);
+                let index_ty = self.infer(index);
+                match base_ty {
+                    crate::types::Type::Array(inner) => {
+                        if !index_ty.compatible(&crate::types::Type::Number) { self.error("array index expects a number"); }
+                        *inner
+                    }
+                    crate::types::Type::Generic(name, args) if name=="Map" && args.len()==2 => {
+                        if !args[0].compatible(&index_ty) && !matches!(index_ty, crate::types::Type::Any) { self.error("map index type mismatch"); }
+                        args[1].clone()
+                    }
+                    _ => { self.error("indexing requires an array or Map"); crate::types::Type::Unknown }
+                }
+            }
             Expr::Unary(op, x) => {
                 let t = self.infer(x);
                 match op {
