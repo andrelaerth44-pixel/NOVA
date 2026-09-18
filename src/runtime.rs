@@ -99,7 +99,7 @@ impl Vm {
                     Value::Enum { variant, value, .. } if variant == "Some" || variant == "Ok" => {
                         Ok(value.map(|v| *v).unwrap_or(Value::Null))
                     }
-                    v @ Value::Enum { ref variant, .. } if variant == "None" || variant == "Err" => {
+                    ref v @ Value::Enum { ref variant, .. } if variant == "None" || variant == "Err" => {
                         Err(RuntimeError::Propagate(v))
                     }
                     v => Err(RuntimeError::Failure(format!("try requires Option/Result, got {}", v))),
