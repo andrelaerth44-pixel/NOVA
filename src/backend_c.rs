@@ -72,7 +72,7 @@ fn emit_code(code: &[Instr], current_fn: Option<&Function>) -> Result<String, St
 ", expr));
             }
             Instr::Call { name, .. } if name == "try" => return Err("native C backend: Option/Result try propagation is currently VM/SSA only".into()),
-            Instr::Call { name, argc: 1, .. } if name == "print" => c.push_str(r#"  printf("%.15g\n", stack[--sp]);\n"#),
+            Instr::Call { name, argc: 1, .. } if name == "print" => c.push_str("  printf(\"%.15g\\n\", stack[--sp]);\n"),
             Instr::Call { name, argc, result } => {
                 if matches!(name.as_str(), "array" | "map" | "set" | "index" | "for_each" | "map_get" | "map_has" | "map_set" | "map_remove" | "set_add" | "set_has" | "set_remove") {
                     return Err(format!("native C backend does not support builtin {}", name));
