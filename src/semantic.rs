@@ -54,6 +54,8 @@ impl Checker {
                 }
                 crate::types::Type::Array(Box::new(first))
             }
+            Value::Map(_) => crate::types::Type::Generic("Map".into(), vec![crate::types::Type::Any, crate::types::Type::Any]),
+            Value::Set(_) => crate::types::Type::Generic("Set".into(), vec![crate::types::Type::Any]),
         }
     }
 
@@ -294,6 +296,12 @@ impl Checker {
                     "is_some" | "is_none" | "is_ok" | "is_err" => Some((vec![crate::types::Type::Any], crate::types::Type::Bool)),
                     "unwrap" => Some((vec![crate::types::Type::Any], crate::types::Type::Any)),
                     "unwrap_or" => Some((vec![crate::types::Type::Any, crate::types::Type::Any], crate::types::Type::Any)),
+                    "map_get" => Some((vec![crate::types::Type::Any, crate::types::Type::Any], crate::types::Type::Any)),
+                    "map_has" => Some((vec![crate::types::Type::Any, crate::types::Type::Any], crate::types::Type::Bool)),
+                    "map_set" => Some((vec![crate::types::Type::Any, crate::types::Type::Any, crate::types::Type::Any], crate::types::Type::Null)),
+                    "map_remove" => Some((vec![crate::types::Type::Any, crate::types::Type::Any], crate::types::Type::Null)),
+                    "set_add" | "set_remove" => Some((vec![crate::types::Type::Any, crate::types::Type::Any], crate::types::Type::Null)),
+                    "set_has" => Some((vec![crate::types::Type::Any, crate::types::Type::Any], crate::types::Type::Bool)),
                     _ => None,
                 };
                 if let Some((expected, ret)) = builtin {
