@@ -145,6 +145,7 @@ fn visit(
     active: &mut BTreeSet<PathBuf>,
     seen: &mut BTreeSet<PathBuf>,
     out: &mut Vec<ResolvedPackage>,
+    source: String,
 ) -> Result<(), String> {
     if active.contains(&manifest.path) {
         let mut cycle = stack.clone();
@@ -180,7 +181,14 @@ fn visit(
                     alias, dependency_manifest.name
                 ));
             }
-            visit(dependency_manifest, stack, active, seen, out)?;
+            visit(
+                dependency_manifest,
+                stack,
+                active,
+                seen,
+                out,
+                format!("path:{}", raw),
+            )?;
         }
     }
 
@@ -191,7 +199,7 @@ fn visit(
     out.push(ResolvedPackage {
         name: manifest.name,
         version: manifest.version,
-        source: "root".into(),
+        source,
         manifest: manifest.path,
     });
     Ok(())
@@ -203,7 +211,7 @@ pub fn resolve_manifest(path: &Path) -> Result<Vec<ResolvedPackage>, String> {
     let mut active = BTreeSet::new();
     let mut seen = BTreeSet::new();
     let mut packages = Vec::new();
-    visit(root, &mut stack, &mut active, &mut seen, &mut packages)?;
+    visit(root, &mut stack, &mut active, &mut seen, &mut packages, "root".into())?;
     packages.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(packages)
 }
