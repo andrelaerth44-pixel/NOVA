@@ -3,112 +3,123 @@ use crate::ir::{IrType, SsaBlock, SsaFunction, SsaInstr, SsaValue, Terminator, V
 use std::collections::HashMap;
 
 
-fn collect_expr_vars(
+fn collect_free_expr_vars(
     expr: &Expr,
-    bound: &mut std::collections::HashSet<String>,
+    bound: &std::collections::HashSet<String>,
+    outer: &std::collections::HashSet<String>,
     used: &mut std::collections::BTreeSet<String>,
 ) {
     match expr {
         Expr::Val(_) => {}
         Expr::Var(name) => {
-            if !bound.contains(name) { used.insert(name.clone()); }
+            if !bound.contains(name) && outer.contains(name) {
+                used.insert(name.clone());
+            }
         }
-        Expr::Unary(_, inner) | Expr::Try(inner) => collect_expr_vars(inner, bound, used),
+        Expr::Unary(_, inner) | Expr::Try(inner) => {
+            collect_free_expr_vars(inner, bound, outer, used);
+        }
         Expr::Binary(left, _, right) => {
-            collect_expr_vars(left, bound, used);
-            collect_expr_vars(right, bound, used);
+            collect_free_expr_vars(left, bound, outer, used);
+            collect_free_expr_vars(right, bound, outer, used);
         }
         Expr::Call(_, args) | Expr::Array(args) | Expr::Set(args) => {
-            for arg in args { collect_expr_vars(arg, bound, used); }
+            for arg in args {
+                collect_free_expr_vars(arg, bound, outer, used);
+            }
         }
         Expr::CallValue(callee, args) => {
-            collect_expr_vars(callee, bound, used);
-            for arg in args { collect_expr_vars(arg, bound, used); }
+            collect_free_expr_vars(callee, bound, outer, used);
+            for arg in args {
+                collect_free_expr_vars(arg, bound, outer, used);
+            }
         }
         Expr::Map(entries) => {
             for (key, value) in entries {
-                collect_expr_vars(key, bound, used);
-                collect_expr_vars(value, bound, used);
+                collect_free_expr_vars(key, bound, outer, used);
+                collect_free_expr_vars(value, bound, outer, used);
             }
         }
         Expr::Index(base, index) => {
-            collect_expr_vars(base, bound, used);
-            collect_expr_vars(index, bound, used);
+            collect_free_expr_vars(base, bound, outer, used);
+            collect_free_expr_vars(index, bound, outer, used);
         }
-        Expr::Field(base, _) => collect_expr_vars(base, bound, used),
+        Expr::Field(base, _) => collect_free_expr_vars(base, bound, outer, used),
         Expr::StructInit(_, fields) => {
-            for (_, value) in fields { collect_expr_vars(value, bound, used); }
+            for (_, value) in fields {
+                collect_free_expr_vars(value, bound, outer, used);
+            }
         }
         Expr::EnumInit(_, _, payload) => {
-            if let Some(value) = payload { collect_expr_vars(value, bound, used); }
+            if let Some(value) = payload {
+                collect_free_expr_vars(value, bound, outer, used);
+            }
         }
         Expr::Closure(params, body) => {
             let mut nested_bound = bound.clone();
-            for param in params { nested_bound.insert(param.clone()); }
-            collect_stmt_vars(body, &mut nested_bound, used);
+            for param in params {
+                nested_bound.insert(param.clone());
+            }
+            collect_free_stmt_vars(body, &nested_bound, outer, used);
         }
     }
 }
 
-fn collect_stmt_vars(
+fn collect_free_stmt_vars(
     stmts: &[Stmt],
-    bound: &mut std::collections::HashSet<String>,
+    bound: &std::collections::HashSet<String>,
+    outer: &std::collections::HashSet<String>,
     used: &mut std::collections::BTreeSet<String>,
 ) {
+    let mut local = bound.clone();
+
     for stmt in stmts {
         match stmt {
             Stmt::Expr(expr) | Stmt::Print(expr) | Stmt::Return(expr) => {
-                collect_expr_vars(expr, bound, used);
+                collect_free_expr_vars(expr, &local, outer, used);
             }
             Stmt::Let(name, _, expr) => {
-                collect_expr_vars(expr, bound, used);
-                bound.insert(name.clone());
+                collect_free_expr_vars(expr, &local, outer, used);
+                local.insert(name.clone());
             }
             Stmt::Assign(name, expr) => {
-                if !bound.contains(name) { used.insert(name.clone()); }
-                collect_expr_vars(expr, bound, used);
+                if !local.contains(name) && outer.contains(name) {
+                    used.insert(name.clone());
+                }
+                collect_free_expr_vars(expr, &local, outer, used);
             }
             Stmt::If(condition, then_body, else_body) => {
-                collect_expr_vars(condition, bound, used);
-                let mut then_bound = bound.clone();
-                collect_stmt_vars(then_body, &mut then_bound, used);
-                let mut else_bound = bound.clone();
-                collect_stmt_vars(else_body, &mut else_bound, used);
+                collect_free_expr_vars(condition, &local, outer, used);
+                collect_free_stmt_vars(then_body, &local, outer, used);
+                collect_free_stmt_vars(else_body, &local, outer, used);
             }
             Stmt::While(condition, body) => {
-                collect_expr_vars(condition, bound, used);
-                let mut loop_bound = bound.clone();
-                collect_stmt_vars(body, &mut loop_bound, used);
+                collect_free_expr_vars(condition, &local, outer, used);
+                collect_free_stmt_vars(body, &local, outer, used);
             }
             Stmt::For(name, iterable, body) => {
-                collect_expr_vars(iterable, bound, used);
-                let mut for_bound = bound.clone();
-                for_bound.insert(name.clone());
-                collect_stmt_vars(body, &mut for_bound, used);
+                collect_free_expr_vars(iterable, &local, outer, used);
+                let mut loop_bound = local.clone();
+                loop_bound.insert(name.clone());
+                collect_free_stmt_vars(body, &loop_bound, outer, used);
             }
             Stmt::Match(subject, arms, otherwise) => {
-                collect_expr_vars(subject, bound, used);
+                collect_free_expr_vars(subject, &local, outer, used);
                 for (pattern, body) in arms {
-                    let mut arm_bound = bound.clone();
+                    let mut arm_bound = local.clone();
                     if let Pattern::Enum { binding: Some(name), .. } = pattern {
                         arm_bound.insert(name.clone());
                     }
-                    collect_stmt_vars(body, &mut arm_bound, used);
+                    collect_free_stmt_vars(body, &arm_bound, outer, used);
                 }
-                let mut else_bound = bound.clone();
-                collect_stmt_vars(otherwise, &mut else_bound, used);
+                collect_free_stmt_vars(otherwise, &local, outer, used);
             }
-            Stmt::Fn(_, _, _, _, _) | Stmt::Import(_) | Stmt::StructDecl(_, _) | Stmt::EnumDecl(_, _) => {}
+            Stmt::Fn(_, _, _, _, _)
+            | Stmt::Import(_)
+            | Stmt::StructDecl(_, _)
+            | Stmt::EnumDecl(_, _) => {}
         }
     }
-}
-
-#[derive(Clone)]
-struct ClosureSpec {
-    function: String,
-    params: Vec<String>,
-    body: Vec<Stmt>,
-    captures: Vec<String>,
 }
 
 struct Builder {
@@ -227,9 +238,16 @@ impl Builder {
             }
             Expr::Closure(args, body) => {
                 let mut bound = std::collections::HashSet::new();
-                for arg in args { bound.insert(arg.clone()); }
+                for arg in args {
+                    bound.insert(arg.clone());
+                }
+                let outer = self
+                    .vars
+                    .iter()
+                    .flat_map(|scope| scope.keys().cloned())
+                    .collect::<std::collections::HashSet<_>>();
                 let mut used = std::collections::BTreeSet::new();
-                collect_stmt_vars(body, &mut bound, &mut used);
+                collect_free_stmt_vars(body, &bound, &outer, &mut used);
                 let capture_names = used.into_iter().collect::<Vec<_>>();
                 let captures = capture_names
                     .iter()
