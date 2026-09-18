@@ -299,8 +299,6 @@ impl Checker {
                 }
                 Stmt::Import(_) => {}
                 Stmt::Fn(n, args, ret, body) => {
-                    if self.fns.contains_key(n) { self.error(format!("duplicate function {}", n)); continue; }
-                    self.fns.insert(n.clone(), StaticFn { args: args.iter().map(|x| x.1.clone()).collect(), ret: ret.clone() });
                     self.push_scope();
                     for (a, t) in args { self.define(a.clone(), t.clone()); }
                     self.check_block(body, Some(ret.clone()));
@@ -311,6 +309,20 @@ impl Checker {
     }
 
     fn check(&mut self, program: &[Stmt]) -> Result<(), Vec<String>> {
+        // Register all function signatures before checking bodies so functions
+        // may be called before their declaration (and recursively).
+        for s in program {
+            if let Stmt::Fn(n, args, ret, _) = s {
+                if self.fns.contains_key(n) {
+                    self.error(format!("duplicate function {}", n));
+                } else {
+                    self.fns.insert(n.clone(), StaticFn {
+                        args: args.iter().map(|x| x.1.clone()).collect(),
+                        ret: ret.clone(),
+                    });
+                }
+            }
+        }
         self.check_block(program, None);
         if self.errors.is_empty() { Ok(()) } else { Err(self.errors.clone()) }
     }
