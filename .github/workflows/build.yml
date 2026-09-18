@@ -86,6 +86,34 @@ jobs:
           done
           fallback
           10'
+      - name: Closure capture smoke test
+        shell: bash
+        run: |
+          cargo run --release -- check examples/closures.nova
+          test "$(cargo run --release -- run examples/closures.nova)" = 
+        shell: bash
+        run: |
+          cargo run --release -- check examples/try.nova
+          test "$(cargo run --release -- run examples/try.nova)" = $'50
+          true
+          Hello NOVA
+          fallback'
+      - name: Module graph smoke test
+        shell: bash
+        run: |
+          cargo run --release -- check examples/modules/main.nova
+          test "$(cargo run --release -- run examples/modules/main.nova)" = "42"
+      - name: Module cycle diagnostic smoke test
+        shell: bash
+        run: |
+          if cargo run --release -- check examples/modules/cycle_a.nova >/tmp/nova-cycle.out 2>&1; then
+            echo "expected module cycle to fail"
+            exit 1
+          fi
+          grep -q "module import cycle" /tmp/nova-cycle.out
+1
+          2'
+
       - name: Try propagation smoke test
         shell: bash
         run: |
