@@ -85,7 +85,13 @@ impl Parser {
             },
             Token::LBracket=>{let mut a=vec![];if !self.eat(&Token::RBracket){loop{a.push(self.expr()?);if self.eat(&Token::RBracket){break}if !self.eat(&Token::Comma){return Err("expected ,".into())}}}Expr::Array(a)},
             Token::LParen=>{let x=self.expr()?;if !self.eat(&Token::RParen){return Err("expected )".into())}x},
-            t=>return Err(format!("unexpected token {:?}",t))};Ok(x)
+            t=>return Err(format!("unexpected token {:?}",t))};
+        let mut x = x;
+        while self.eat(&Token::Dot) {
+            let field = match self.take() { Token::Ident(n)=>n, _=>return Err("expected field name after .".into()) };
+            x = Expr::Field(Box::new(x), field);
+        }
+        Ok(x)
     }
 }
 
