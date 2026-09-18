@@ -1,0 +1,33 @@
+app "OBRA360" {
+    auth {
+        provider email_password
+        provider google
+    }
+
+    database supabase {
+        table users
+        table projects
+        table tasks
+        table posts
+        table messages
+    }
+
+    storage {
+        bucket photos
+        bucket videos
+        bucket documents
+    }
+
+    navigation {
+        home
+        community
+        create
+        projects
+        profile
+    }
+
+    screen "Projects" {
+        list projects
+        button "Nova obra" { create project }
+    }
+}
