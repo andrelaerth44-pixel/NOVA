@@ -20,7 +20,7 @@ pub fn emit_android_project(app: &AppDeclRoot) -> Result<String, String> {
         if let AppDecl::Navigation(r) = d { Some(r.clone()) } else { None }
     }).unwrap_or_default();
     let mut route_code = String::new();
-    for route in routes {
+    for route in &routes {
         route_code.push_str(&format!("    composable(\"{}\") {{ Text(\"{}\") }}\n", route.name, route.name));
     }
     let source = format!(r#"package {package}
