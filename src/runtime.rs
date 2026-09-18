@@ -184,10 +184,17 @@ impl Vm {
                 let base = self.eval(base)?;
                 let index = self.eval(index)?;
                 match base {
-                    Value::Array(values) => {
+                    Value::Array(values) {
                         let i = num(index)? as i64;
                         if i < 0 || i as usize >= values.len() { return Err("array index out of bounds".into()); }
                         Ok(values[i as usize].clone())
+                    }
+                    Value::Str(text) => {
+                        let i = num(index)? as i64;
+                        if i < 0 { return Err("string index out of bounds".into()); }
+                        text.chars().nth(i as usize)
+                            .map(|ch| Value::Str(ch.to_string()))
+                            .ok_or_else(|| "string index out of bounds".into())
                     }
                     Value::Map(map) => {
                         let key = to_map_key(&index).ok_or_else(|| "map key must be number, string, bool or null".to_string())?;
