@@ -276,6 +276,20 @@ impl Checker {
                     }
                     return ret;
                 }
+                if let Some((enum_name, payload_type)) = self.enums.iter().find_map(|(enum_name, variants)| {
+                    variants.get(name).map(|payload| (enum_name.clone(), payload.clone()))
+                }) {
+                    if args.len() != usize::from(payload_type.is_some()) {
+                        self.error(format!("{} expects {} arguments, got {}", name, usize::from(payload_type.is_some()), args.len()));
+                    }
+                    if let (Some(expected), Some(arg)) = (payload_type, args.first()) {
+                        let got = self.infer(arg);
+                        if !expected.compatible(&got) {
+                            self.error(format!("enum {}.{} expects {}, got {}", enum_name, name, expected.name(), got.name()));
+                        }
+                    }
+                    return crate::types::Type::Enum(enum_name);
+                }
                 if name=="None" { return crate::types::Type::Generic("Option".into(),vec![crate::types::Type::Any]); }
                 if name=="Some" || name=="Ok" || name=="Err" {
                     if args.len()!=1 { self.error(format!("{} expects 1 argument",name)); }
