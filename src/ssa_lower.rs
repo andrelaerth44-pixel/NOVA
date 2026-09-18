@@ -239,6 +239,15 @@ impl Builder {
                 self.emit(SsaInstr::Try { value, result: IrType::Any })
             }
             Expr::Call(name, args) => {
+                if let Some(callee) = self.lookup(name) {
+                    let values = args.iter().map(|x| self.expr(x)).collect();
+                    return self.emit(SsaInstr::CallIndirect {
+                        callee,
+                        args: values,
+                        result: IrType::Any,
+                    });
+                }
+
                 match name.as_str() {
                     "None" => self.emit(SsaInstr::EnumInit {
                         name: "Option".into(),
