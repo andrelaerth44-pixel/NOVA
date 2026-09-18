@@ -1,7 +1,7 @@
 #[derive(Clone, Debug)]
 pub enum Expr {
     Val(Value), Var(String), Unary(Token, Box<Expr>),
-    Binary(Box<Expr>, Token, Box<Expr>), Call(String, Vec<Expr>),
+    Binary(Box<Expr>, Token, Box<Expr>), Call(String, Vec<Expr>), CallValue(Box<Expr>, Vec<Expr>),
     Array(Vec<Expr>), Field(Box<Expr>, String),
     StructInit(String, Vec<(String, Expr)>),
     EnumInit(String, String, Option<Box<Expr>>),
@@ -26,6 +26,7 @@ pub enum Value {
     Num(f64), Str(String), Bool(bool), Array(Vec<Value>),
     Struct { name: String, fields: std::collections::HashMap<String, Value> },
     Enum { name: String, variant: String, value: Option<Box<Value>> },
+    Closure { args: Vec<String>, body: Vec<Stmt>, env: std::collections::HashMap<String, Value> },
     Null,
 }
 impl Value {
@@ -38,13 +39,14 @@ impl Value {
             (Value::Array(a),Value::Array(b))=>a.len()==b.len()&&a.iter().zip(b).all(|(x,y)|x.equals(y)),
             (Value::Struct{name:an,fields:af},Value::Struct{name:bn,fields:bf})=>an==bn&&af.len()==bf.len()&&af.iter().all(|(k,v)|bf.get(k).is_some_and(|x|v.equals(x))),
             (Value::Enum{name:an,variant:av,value:ax},Value::Enum{name:bn,variant:bv,value:bx})=>an==bn&&av==bv&&match (ax,bx){(None,None)=>true,(Some(a),Some(b))=>a.equals(b),_=>false},
+            (Value::Closure{..},Value::Closure{..})=>false,
             _=>false
         }
     }
     pub fn truth(&self)->bool {
         match self {
             Value::Bool(x)=>*x, Value::Num(x)=>*x!=0.0, Value::Str(x)=>!x.is_empty(),
-            Value::Array(x)=>!x.is_empty(), Value::Struct{..}=>true, Value::Enum{..}=>true, Value::Null=>false
+            Value::Array(x)=>!x.is_empty(), Value::Struct{..}=>true, Value::Enum{..}=>true, Value::Closure{..}=>true, Value::Null=>false
         }
     }
 }
@@ -56,6 +58,7 @@ impl std::fmt::Display for Value {
             Value::Array(x)=>{write!(f,"[")?;for(i,v) in x.iter().enumerate(){if i>0{write!(f,", ")?;}write!(f,"{}",v)?;}write!(f,"]")},
             Value::Struct{name,fields}=>{write!(f,"{} {{ ",name)?;let mut first=true;for(k,v)in fields{if !first{write!(f,", ")?;}first=false;write!(f,"{}: {}",k,v)?;}write!(f," }}")},
             Value::Enum{name,variant,value}=>match value{Some(v)=>write!(f,"{}.{}({})",name,variant,v),None=>write!(f,"{}.{}",name,variant)},
+            Value::Closure{..}=>write!(f,"<closure>"),
             Value::Null=>write!(f,"null")
         }
     }
