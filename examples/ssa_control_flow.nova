@@ -1,0 +1,21 @@
+# SSA control-flow conformance example
+x = 0
+
+if true {
+    x = 10
+} else {
+    x = 20
+}
+
+while x < 13 {
+    x = x + 1
+}
+
+match x {
+    13 {
+        print "ok"
+    }
+    else {
+        print "unexpected"
+    }
+}
