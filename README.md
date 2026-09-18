@@ -2,18 +2,53 @@
 
 Simple. Native. Fast. Universal. Beautiful.
 
-NOVA is a general-purpose programming language. It is designed to make applications, services, tools, games, graphics, automation, data systems, networking, native integrations and AI systems easier to build without removing access to the machine.
+NOVA is a general-purpose programming language designed to make applications, services, tools, games, graphics, automation, data systems, networking, native integrations and AI systems easier to build without removing access to the machine.
 
-Current development line: 1.3.0
+Current development line: **1.5.0**
 
-The repository is developed incrementally. Implemented features are documented separately from planned targets; unfinished backends are never presented as working.
+The implementation is deliberately honest: a capability is documented as implemented only after executable code and validation exist.
+
+## Current executable core
+
+- variables and assignment
+- numbers, strings, booleans and arrays
+- arithmetic, comparisons and boolean operators
+- functions and return
+- if / else
+- while
+- for / in
+- range
+- len
+- str
+- imports
+- match / else
+- CLI run/check/version
+
+The current 1.x line is still being hardened. Static typing, diagnostics, IR, native code generation, standard-library breadth, concurrency, package management, UI, graphics, GPU and platform backends remain separate implementation stages.
+
+NOVA does not claim to be universally native or faster than every other language until those backends are actually implemented and tested.
 
 ```nova
 fn add(a, b) {
     return a + b
 }
 
-name = "NOVA"
-print "Hello " + name
+values = [1, 2, 3, 4]
+total = 0
+
+for x in values {
+    total = total + x
+}
+
+print "sum=" + str(total)
 print add(20, 22)
+
+match total {
+    10 {
+        print "ten"
+    }
+    else {
+        print "other"
+    }
+}
 ```
