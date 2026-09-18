@@ -111,6 +111,7 @@ pub enum SsaInstr {
     Unary { op: String, value: ValueId, ty: IrType },
     Binary { op: String, left: ValueId, right: ValueId, ty: IrType },
     Call { name: String, args: Vec<ValueId>, result: IrType },
+    CallIndirect { callee: ValueId, args: Vec<ValueId>, result: IrType },
     StructInit { name: String, fields: Vec<(String, ValueId)> },
     FieldGet { base: ValueId, field: String, ty: IrType },
     EnumInit { name: String, variant: String, payload: Option<ValueId>, ty: IrType },
@@ -545,6 +546,10 @@ impl SsaFunction {
                         check_use(*right, block.id, idx, &defs, &dom)?;
                     }
                     SsaInstr::Call { args, .. } => {
+                        for value in args { check_use(*value, block.id, idx, &defs, &dom)?; }
+                    }
+                    SsaInstr::CallIndirect { callee, args, .. } => {
+                        check_use(*callee, block.id, idx, &defs, &dom)?;
                         for value in args { check_use(*value, block.id, idx, &defs, &dom)?; }
                     }
                     SsaInstr::StructInit { fields, .. } => {
