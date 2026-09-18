@@ -41,6 +41,7 @@ impl Builder {
             Value::Struct { name, .. } => SsaValue::Struct { name: name.clone() },
             Value::Enum { name, .. } => SsaValue::Struct { name: name.clone() },
             Value::Array(_) => SsaValue::Null,
+            Value::Closure { .. } => SsaValue::Null,
         };
         self.emit(SsaInstr::Const(sv))
     }
