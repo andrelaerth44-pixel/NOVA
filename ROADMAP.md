@@ -46,10 +46,13 @@ The roadmap is an implementation order, not a claim that unfinished features alr
 
 ## 2.x application stack
 - UI and platform bindings
+- declarative application syntax
+- Kotlin/Jetpack Compose Android backend
 - 2D/3D graphics and canvas
 - audio/video
 - database clients
 - mobile and desktop application targets
+- OBRA360 conformance application as a real end-to-end target
 
 ## 2.x acceleration
 - SIMD
