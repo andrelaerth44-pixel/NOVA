@@ -362,7 +362,7 @@ impl Checker {
                         self.error(format!("cannot assign {} to {} (expected {})", got.name(), name, old.name()));
                     }
                 } else {
-                    self.error(format!("assignment to undefined variable {}", name));
+                    self.define(name.clone(), got);
                 }
             }
             Stmt::Return(e) => {
