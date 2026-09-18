@@ -295,7 +295,7 @@ impl IrBuilder {
                 for x in otherwise { self.lower_stmt(x); }
             }
             crate::Stmt::StructDecl(_, _) | crate::Stmt::EnumDecl(_, _) => {}
-            crate::Stmt::Fn(n,args,ret,body) => {
+            crate::Stmt::Fn(n,_,args,ret,body) => {
                 let params=args.iter().map(|(name,t)| (name.clone(), match t {
                     crate::types::Type::Bool=>IrType::Bool,
                     crate::types::Type::String=>IrType::String,
