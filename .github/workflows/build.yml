@@ -128,7 +128,12 @@ jobs:
           grep -Fq 'Closure' /tmp/closures.ssa
           grep -Fq 'captures' /tmp/closures.ssa
           grep -Fq 'CallIndirect' /tmp/closures.ssa
+          grep -Fq 'make_counter__closure0' /tmp/closures.ssa
           grep -Fq 'value' /tmp/closures.ssa
+          cargo run --release -- abi examples/closures.nova > /tmp/closures.abi
+          grep -Fq 'NOVA ABI v1' /tmp/closures.abi
+          grep -Fq 'make_counter__closure0' /tmp/closures.abi
+          grep -Fq 'NovaEnv*' /tmp/closures.abi
           cargo run --release -- run examples/closures.nova > /tmp/closures.out
           grep -Fxq "1" /tmp/closures.out
           grep -Fxq "2" /tmp/closures.out
