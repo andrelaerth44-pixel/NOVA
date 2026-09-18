@@ -116,3 +116,22 @@ print add10(32)
 ```
 
 Closures are values and can be assigned to variables and called like functions. The runtime captures the environment at closure creation time.
+
+
+## Generics
+
+Generic functions use type parameters declared after the function name. Type arguments are inferred from the call, so callers normally do not need to write them explicitly:
+
+    fn identity<T>(value: T) -> T {
+        return value
+    }
+
+    print identity(42)
+    print identity("NOVA")
+
+Generic types use angle brackets:
+
+    choice: Option<i64> = Some(42)
+    result: Result<string, string> = Ok("done")
+
+The current compiler represents Option<T> and Result<T, E> as parameterized types and propagates their concrete payload types through type inference and pattern bindings.
