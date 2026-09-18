@@ -11,19 +11,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Capture cargo test
+      - name: Capture native backend
         shell: bash
         run: |
           set +e
-          cargo test --all-targets > /tmp/cargo-test.log 2>&1
-          status=$?
+          cargo build --release > /tmp/build.log 2>&1
+          build_status=$?
+          cargo run --release -- build-native-ssa examples/closures.nova /tmp/nova-ssa-native > /tmp/native.log 2>&1
+          native_status=$?
+          if [ -f /tmp/nova-ssa-native ]; then
+            /tmp/nova-ssa-native > /tmp/native-output.log 2>&1
+            exec_status=$?
+          else
+            exec_status=127
+          fi
           {
-            echo "exit_code=$status"
-            cat /tmp/cargo-test.log
+            echo "build_status=$build_status"
+            echo "native_status=$native_status"
+            echo "exec_status=$exec_status"
+            echo "===== cargo build ====="
+            cat /tmp/build.log
+            echo "===== build-native-ssa ====="
+            cat /tmp/native.log
+            echo "===== binary output ====="
+            cat /tmp/native-output.log 2>/dev/null || true
           } > /tmp/diagnostic.log
-          exit 0
+          if [ -f /tmp/nova-ssa-native ]; then
+            cp /tmp/nova-ssa-native /tmp/nova-ssa-native.bin
+          fi
       - name: Upload diagnostic
         uses: actions/upload-artifact@v4
         with:
-          name: nova-diagnostic
-          path: /tmp/diagnostic.log
+          name: nova-native-diagnostic
+          path: |
+            /tmp/diagnostic.log
+            /tmp/nova-ssa-native.bin
