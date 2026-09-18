@@ -2,6 +2,107 @@ use crate::{Expr, Stmt, Value, Token, Pattern};
 use crate::ir::{IrType, SsaBlock, SsaFunction, SsaInstr, SsaValue, Terminator, ValueId};
 use std::collections::HashMap;
 
+
+fn collect_expr_vars(
+    expr: &Expr,
+    bound: &mut std::collections::HashSet<String>,
+    used: &mut std::collections::BTreeSet<String>,
+) {
+    match expr {
+        Expr::Val(_) => {}
+        Expr::Var(name) => {
+            if !bound.contains(name) { used.insert(name.clone()); }
+        }
+        Expr::Unary(_, inner) | Expr::Try(inner) => collect_expr_vars(inner, bound, used),
+        Expr::Binary(left, _, right) => {
+            collect_expr_vars(left, bound, used);
+            collect_expr_vars(right, bound, used);
+        }
+        Expr::Call(_, args) | Expr::Array(args) | Expr::Set(args) => {
+            for arg in args { collect_expr_vars(arg, bound, used); }
+        }
+        Expr::CallValue(callee, args) => {
+            collect_expr_vars(callee, bound, used);
+            for arg in args { collect_expr_vars(arg, bound, used); }
+        }
+        Expr::Map(entries) => {
+            for (key, value) in entries {
+                collect_expr_vars(key, bound, used);
+                collect_expr_vars(value, bound, used);
+            }
+        }
+        Expr::Index(base, index) => {
+            collect_expr_vars(base, bound, used);
+            collect_expr_vars(index, bound, used);
+        }
+        Expr::Field(base, _) => collect_expr_vars(base, bound, used),
+        Expr::StructInit(_, fields) => {
+            for (_, value) in fields { collect_expr_vars(value, bound, used); }
+        }
+        Expr::EnumInit(_, _, payload) => {
+            if let Some(value) = payload { collect_expr_vars(value, bound, used); }
+        }
+        Expr::Closure(params, body) => {
+            let mut nested_bound = bound.clone();
+            for param in params { nested_bound.insert(param.clone()); }
+            collect_stmt_vars(body, &mut nested_bound, used);
+        }
+    }
+}
+
+fn collect_stmt_vars(
+    stmts: &[Stmt],
+    bound: &mut std::collections::HashSet<String>,
+    used: &mut std::collections::BTreeSet<String>,
+) {
+    for stmt in stmts {
+        match stmt {
+            Stmt::Expr(expr) | Stmt::Print(expr) | Stmt::Return(expr) => {
+                collect_expr_vars(expr, bound, used);
+            }
+            Stmt::Let(name, _, expr) => {
+                collect_expr_vars(expr, bound, used);
+                bound.insert(name.clone());
+            }
+            Stmt::Assign(name, expr) => {
+                if !bound.contains(name) { used.insert(name.clone()); }
+                collect_expr_vars(expr, bound, used);
+            }
+            Stmt::If(condition, then_body, else_body) => {
+                collect_expr_vars(condition, bound, used);
+                let mut then_bound = bound.clone();
+                collect_stmt_vars(then_body, &mut then_bound, used);
+                let mut else_bound = bound.clone();
+                collect_stmt_vars(else_body, &mut else_bound, used);
+            }
+            Stmt::While(condition, body) => {
+                collect_expr_vars(condition, bound, used);
+                let mut loop_bound = bound.clone();
+                collect_stmt_vars(body, &mut loop_bound, used);
+            }
+            Stmt::For(name, iterable, body) => {
+                collect_expr_vars(iterable, bound, used);
+                let mut for_bound = bound.clone();
+                for_bound.insert(name.clone());
+                collect_stmt_vars(body, &mut for_bound, used);
+            }
+            Stmt::Match(subject, arms, otherwise) => {
+                collect_expr_vars(subject, bound, used);
+                for (pattern, body) in arms {
+                    let mut arm_bound = bound.clone();
+                    if let Pattern::Enum { binding: Some(name), .. } = pattern {
+                        arm_bound.insert(name.clone());
+                    }
+                    collect_stmt_vars(body, &mut arm_bound, used);
+                }
+                let mut else_bound = bound.clone();
+                collect_stmt_vars(otherwise, &mut else_bound, used);
+            }
+            Stmt::Fn(_, _, _, _, _) | Stmt::Import(_) | Stmt::StructDecl(_, _) | Stmt::EnumDecl(_, _) => {}
+        }
+    }
+}
+
 struct Builder {
     blocks: Vec<SsaBlock>,
     current: usize,
@@ -105,7 +206,25 @@ impl Builder {
                 let fields = fields.iter().map(|(field, value)| (field.clone(), self.expr(value))).collect();
                 self.emit(SsaInstr::StructInit { name: name.clone(), fields })
             }
-            Expr::Closure(_args, _) => self.emit(SsaInstr::Call { name: "closure".into(), args: Vec::new(), result: IrType::Any }),
+            Expr::Closure(args, body) => {
+                let mut bound = std::collections::HashSet::new();
+                for arg in args { bound.insert(arg.clone()); }
+                let mut used = std::collections::BTreeSet::new();
+                collect_stmt_vars(body, &mut bound, &mut used);
+                let captures = used
+                    .into_iter()
+                    .filter_map(|name| self.lookup(&name).map(|value| (name, value)))
+                    .collect::<Vec<_>>();
+                let ty = IrType::Function(
+                    vec![IrType::Any; args.len()],
+                    Box::new(IrType::Any),
+                );
+                self.emit(SsaInstr::Closure {
+                    params: args.clone(),
+                    captures,
+                    ty,
+                })
+            },
             Expr::CallValue(callee, args) => {
                 let mut values=vec![self.expr(callee)];
                 values.extend(args.iter().map(|x| self.expr(x)));
