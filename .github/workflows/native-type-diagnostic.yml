@@ -11,13 +11,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Capture native type diagnostics
-        shell: bash
+
+      - name: Cargo test
+        continue-on-error: true
+        run: cargo test 2>&1 | tee /tmp/test.log
+
+      - name: Native struct build
+        continue-on-error: true
+        run: cargo run --release -- build-native-ssa examples/structs.nova /tmp/nova-struct-native 2>&1 | tee /tmp/struct-build.log
+
+      - name: Native struct execute
+        continue-on-error: true
         run: |
-          set +e
-          cargo test > /tmp/test.log 2>&1; a=$?
-          cargo run --release -- build-native-ssa examples/structs.nova /tmp/nova-struct-native > /tmp/struct.log 2>&1; b=$?
-          if [ -x /tmp/nova-struct-native ]; then /tmp/nova-struct-native > /tmp/struct.out 2>&1; c=$?; else c=127; fi
+          if [ -x /tmp/nova-struct-native ]; then
+            /tmp/nova-struct-native | tee /tmp/struct.out
+          else
+            echo "binary missing" | tee /tmp/struct.out
+          fi
+
+      - name: Native enum build
+        continue-on-error: true
+        run: |
           cat > /tmp/native_enum.nova <<'EOF'
           enum Status {
               Ready
@@ -35,21 +49,34 @@ jobs:
               }
           }
           EOF
-          cargo run --release -- check /tmp/native_enum.nova > /tmp/enum-check.log 2>&1; d=$?
-          cargo run --release -- ssa /tmp/native_enum.nova > /tmp/enum-ssa.log 2>&1; e=$?
-          cargo run --release -- build-native-ssa /tmp/native_enum.nova /tmp/nova-enum-native > /tmp/enum-build.log 2>&1; f=$?
-          if [ -x /tmp/nova-enum-native ]; then /tmp/nova-enum-native > /tmp/enum.out 2>&1; g=$?; else g=127; fi
+          cargo run --release -- check /tmp/native_enum.nova 2>&1 | tee /tmp/enum-check.log
+          cargo run --release -- ssa /tmp/native_enum.nova 2>&1 | tee /tmp/enum-ssa.log
+          cargo run --release -- build-native-ssa /tmp/native_enum.nova /tmp/nova-enum-native 2>&1 | tee /tmp/enum-build.log
+
+      - name: Native enum execute
+        continue-on-error: true
+        run: |
+          if [ -x /tmp/nova-enum-native ]; then
+            /tmp/nova-enum-native | tee /tmp/enum.out
+          else
+            echo "binary missing" | tee /tmp/enum.out
+          fi
+
+      - name: Collect diagnostics
+        if: always()
+        run: |
           {
-            echo "test=$a struct_build=$b struct_exec=$c enum_check=$d enum_ssa=$e enum_build=$f enum_exec=$g"
-            echo "===== test tail ====="; tail -n 60 /tmp/test.log
-            echo "===== struct build ====="; cat /tmp/struct.log
-            echo "===== struct output ====="; cat /tmp/struct.out
-            echo "===== enum check ====="; cat /tmp/enum-check.log
-            echo "===== enum ssa ====="; cat /tmp/enum-ssa.log
-            echo "===== enum build ====="; cat /tmp/enum-build.log
-            echo "===== enum output ====="; cat /tmp/enum.out
+            echo "===== cargo test ====="; cat /tmp/test.log 2>/dev/null || true
+            echo "===== struct build ====="; cat /tmp/struct-build.log 2>/dev/null || true
+            echo "===== struct output ====="; cat /tmp/struct.out 2>/dev/null || true
+            echo "===== enum check ====="; cat /tmp/enum-check.log 2>/dev/null || true
+            echo "===== enum SSA ====="; cat /tmp/enum-ssa.log 2>/dev/null || true
+            echo "===== enum build ====="; cat /tmp/enum-build.log 2>/dev/null || true
+            echo "===== enum output ====="; cat /tmp/enum.out 2>/dev/null || true
           } > /tmp/diagnostic.log
+
       - name: Upload diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: nova-native-type-diagnostic
