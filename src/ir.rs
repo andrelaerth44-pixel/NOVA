@@ -453,6 +453,12 @@ impl SsaFunction {
                     SsaInstr::Call { args, .. } => {
                         for value in args { check_use(*value, block.id, idx, &defs, &dom)?; }
                     }
+                    SsaInstr::StructInit { fields, .. } => {
+                        for (_, value) in fields { check_use(*value, block.id, idx, &defs, &dom)?; }
+                    }
+                    SsaInstr::FieldGet { base, .. } => {
+                        check_use(*base, block.id, idx, &defs, &dom)?;
+                    }
                     SsaInstr::Phi { incomings, .. } => {
                         let expected: std::collections::HashSet<_> = preds[block.id].iter().copied().collect();
                         let actual: std::collections::HashSet<_> = incomings.iter().map(|(p, _)| *p).collect();
