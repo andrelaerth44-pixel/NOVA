@@ -18,3 +18,8 @@ match result {
         print "other"
     }
 }
+
+print is_some(result)
+print unwrap_or(result, 0)
+print is_ok(ok)
+print unwrap(ok)
