@@ -487,7 +487,10 @@ typedef enum {
   NOVA_STRING,
   NOVA_STRUCT,
   NOVA_ENUM,
-  NOVA_CLOSURE
+  NOVA_CLOSURE,
+  NOVA_ARRAY,
+  NOVA_MAP,
+  NOVA_SET
 } NovaTag;
 
 typedef struct NovaValue NovaValue;
@@ -495,6 +498,9 @@ typedef struct NovaClosure NovaClosure;
 typedef struct NovaEnv NovaEnv;
 typedef struct NovaStruct NovaStruct;
 typedef struct NovaEnum NovaEnum;
+typedef struct NovaArray NovaArray;
+typedef struct NovaMap NovaMap;
+typedef struct NovaSet NovaSet;
 
 struct NovaValue {
   NovaTag tag;
@@ -503,6 +509,9 @@ struct NovaValue {
   NovaClosure* closure;
   NovaStruct* structure;
   NovaEnum* enumeration;
+  NovaArray* array;
+  NovaMap* map;
+  NovaSet* set;
 };
 
 typedef struct {
@@ -560,27 +569,27 @@ static char* nova_dup(const char* value) {
 }
 
 static NovaValue nova_null(void) {
-  NovaValue v = { NOVA_NULL, 0, NULL, NULL, NULL, NULL };
+  NovaValue v = { NOVA_NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
   return v;
 }
 
 static NovaValue nova_num(double x) {
-  NovaValue v = { NOVA_NUMBER, x, NULL, NULL, NULL, NULL };
+  NovaValue v = { NOVA_NUMBER, x, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
   return v;
 }
 
 static NovaValue nova_bool(int x) {
-  NovaValue v = { NOVA_BOOL, x ? 1.0 : 0.0, NULL, NULL, NULL, NULL };
+  NovaValue v = { NOVA_BOOL, x ? 1.0 : 0.0, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
   return v;
 }
 
 static NovaValue nova_string(const char* x) {
-  NovaValue v = { NOVA_STRING, 0, x, NULL, NULL, NULL };
+  NovaValue v = { NOVA_STRING, 0, x, NULL, NULL, NULL, NULL, NULL, NULL };
   return v;
 }
 
 static NovaValue nova_struct_value(NovaStruct* x) {
-  NovaValue v = { NOVA_STRUCT, 0, NULL, NULL, x, NULL };
+  NovaValue v = { NOVA_STRUCT, 0, NULL, NULL, x, NULL, NULL, NULL, NULL };
   return v;
 }
 
@@ -595,7 +604,7 @@ static NovaValue nova_enum_value(const char* name, const char* variant, NovaValu
 }
 
 static NovaValue nova_closure_value(NovaClosure* c) {
-  NovaValue v = { NOVA_CLOSURE, 0, NULL, c, NULL, NULL };
+  NovaValue v = { NOVA_CLOSURE, 0, NULL, c, NULL, NULL, NULL, NULL, NULL };
   return v;
 }
 
@@ -687,7 +696,9 @@ static NovaValue nova_add(NovaValue left, NovaValue right) {
     return nova_string(joined);
   }
   return nova_null();
-}\n\nstatic NovaValue nova_array_value(NovaArray* a) {
+}
+
+static NovaValue nova_array_value(NovaArray* a) {
   NovaValue v = { NOVA_ARRAY, 0, NULL, NULL, NULL, NULL, a, NULL, NULL };
   return v;
 }
