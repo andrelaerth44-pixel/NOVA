@@ -8,7 +8,7 @@ enum Token {
     LParen, RParen, LBrace, RBrace, LBracket, RBracket,
     Comma, Semi, Dot, Bang, And, Or,
     If, Else, While, Fn, Return, True, False, Let,
-    Print, In, For, Eof,
+    Print, In, For, Import, Eof,
 }
 
 fn lex(src: &str) -> Result<Vec<Token>, String> {
@@ -40,7 +40,7 @@ fn lex(src: &str) -> Result<Vec<Token>, String> {
                 out.push(match w {
                     "if"=>Token::If, "else"=>Token::Else, "while"=>Token::While,
                     "fn"=>Token::Fn, "return"=>Token::Return, "true"=>Token::True,
-                    "false"=>Token::False, "let"=>Token::Let, "print"=>Token::Print, "in"=>Token::In, "for"=>Token::For,
+                    "false"=>Token::False, "let"=>Token::Let, "print"=>Token::Print, "in"=>Token::In, "for"=>Token::For, "import"=>Token::Import,
                     "and"=>Token::And, "or"=>Token::Or, _=>Token::Ident(w.into())
                 });
             }
@@ -77,7 +77,7 @@ enum Expr {
 #[derive(Clone, Debug)]
 enum Stmt {
     Expr(Expr), Let(String, Expr), Assign(String, Expr), Print(Expr),
-    If(Expr, Vec<Stmt>, Vec<Stmt>), While(Expr, Vec<Stmt>), For(String, Expr, Vec<Stmt>),
+    If(Expr, Vec<Stmt>, Vec<Stmt>), While(Expr, Vec<Stmt>), For(String, Expr, Vec<Stmt>), Import(String),
     Fn(String, Vec<String>, Vec<Stmt>), Return(Expr),
 }
 #[derive(Clone, Debug)]
@@ -110,6 +110,7 @@ impl Parser {
             Token::If=>{self.take();let c=self.expr()?;let a=self.block()?;let b=if self.eat(&Token::Else){self.block()?}else{vec![]};Ok(Stmt::If(c,a,b))},
             Token::While=>{self.take();let c=self.expr()?;Ok(Stmt::While(c,self.block()?))},
             Token::For=>{self.take();let n=match self.take(){Token::Ident(x)=>x,_=>return Err("expected loop variable".into())};if !self.eat(&Token::In){return Err("expected in".into())}let it=self.expr()?;Ok(Stmt::For(n,it,self.block()?))},
+            Token::Import=>{self.take();match self.take(){Token::Str(x)=>Ok(Stmt::Import(x)),_=>Err("import expects a string path".into())}},
             Token::Fn=>{self.take();let n=match self.take(){Token::Ident(x)=>x,_=>return Err("expected function name".into())};if !self.eat(&Token::LParen){return Err("expected (".into())}let mut a=vec![];if !self.eat(&Token::RParen){loop{a.push(match self.take(){Token::Ident(x)=>x,_=>return Err("expected parameter".into())});if self.eat(&Token::RParen){break}if !self.eat(&Token::Comma){return Err("expected ,".into())}}}Ok(Stmt::Fn(n,a,self.block()?))},
             Token::Ident(n)=>{
                 let name=n.clone(); if self.p+1<self.t.len() && self.t[self.p+1]==Token::Eq {self.take();self.take();return Ok(Stmt::Assign(name,self.expr()?));}
@@ -137,9 +138,9 @@ impl Parser {
 
 #[derive(Clone)]
 struct Function { args:Vec<String>, body:Vec<Stmt> }
-struct Vm { vars:HashMap<String,Value>, fns:HashMap<String,Function> }
+struct Vm { vars:HashMap<String,Value>, fns:HashMap<String,Function>, modules:HashMap<String,bool> }
 impl Vm {
-    fn new()->Self{Self{vars:HashMap::new(),fns:HashMap::new()}}
+    fn new()->Self{Self{vars:HashMap::new(),fns:HashMap::new(),modules:HashMap::new()}}
     fn eval(&mut self,e:&Expr)->Result<Value,String>{
         match e {
             Expr::Val(v)=>Ok(v.clone()), Expr::Var(n)=>self.vars.get(n).cloned().ok_or_else(||format!("undefined variable {}",n)),
@@ -173,6 +174,7 @@ impl Vm {
             Stmt::If(c,a,b)=>{if self.eval(c)?.truth(){if let Some(v)=self.exec(a)?{return Ok(Some(v))}}else if let Some(v)=self.exec(b)?{return Ok(Some(v))}},
             Stmt::While(c,b)=>{while self.eval(c)?.truth(){if let Some(v)=self.exec(b)?{return Ok(Some(v))}}},
             Stmt::For(n,it,b)=>{let v=self.eval(it)?;match v{Value::Array(xs)=>{for x in xs{self.vars.insert(n.clone(),x);if let Some(v)=self.exec(b)?{return Ok(Some(v))}}},_=>return Err("for expects an array or range".into())}},
+            Stmt::Import(path)=>{if !self.modules.contains_key(path){let src=fs::read_to_string(path).map_err(|e|format!("cannot import {}: {}",path,e))?;let toks=lex(&src)?;let mut p=Parser::new(toks);let program=p.program()?;self.modules.insert(path.clone(),true);self.exec(&program)?;}},
             Stmt::Fn(n,a,b)=>{self.fns.insert(n.clone(),Function{args:a.clone(),body:b.clone()});}
         }}Ok(None)
     }
@@ -184,7 +186,7 @@ fn cmp2(a:Value,b:Value,f:fn(f64,f64)->bool)->Result<Value,String>{Ok(Value::Boo
 fn main(){
     let a:Vec<String>=env::args().collect();
     if a.len()<2 {eprintln!("NOVA 1.3.0\nusage: nova run <file> | nova check <file> | nova version");return}
-    if a[1]=="version"{println!("NOVA 1.3.0");return}
+    if a[1]=="version"{println!("NOVA 1.4.0");return}
     if a.len()<3 {eprintln!("missing file");std::process::exit(2)}
     let src=match fs::read_to_string(&a[2]){Ok(x)=>x,Err(e)=>{eprintln!("{}",e);std::process::exit(1)}};
     let t=match lex(&src){Ok(x)=>x,Err(e)=>{eprintln!("lex error: {}",e);std::process::exit(1)}};
