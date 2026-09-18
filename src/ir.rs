@@ -230,6 +230,7 @@ impl IrBuilder {
             }
             crate::Expr::Closure(args, _) => { self.push(Instr::Call { name: "closure".into(), argc: args.len(), result: IrType::Any }); IrType::Any }
             crate::Expr::CallValue(callee, args) => { self.lower_expr(callee); for a in args { self.lower_expr(a); } self.push(Instr::Call { name: "call_value".into(), argc: args.len()+1, result: IrType::Any }); IrType::Any }
+            crate::Expr::Try(inner) => { self.lower_expr(inner); self.push(Instr::Call { name: "try".into(), argc: 1, result: IrType::Any }); IrType::Any }
             crate::Expr::Call(n, args) => {
                 for a in args { self.lower_expr(a); }
                 self.push(Instr::Call { name: n.clone(), argc: args.len(), result: IrType::Any });
