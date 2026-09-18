@@ -1,4 +1,4 @@
-use crate::{Expr, Stmt, Token, Value, Pattern, Parser, lex, EnvFrame, EnvRef};
+use crate::{Expr, Stmt, Token, Value, Pattern, Parser, lex, EnvFrame, EnvRef, to_map_key, MapKey};
 use std::{collections::HashMap, fs};
 
 #[derive(Clone, Debug)]
@@ -154,6 +154,41 @@ impl Vm {
             }
             Expr::Var(n) => self.lookup(n).ok_or_else(|| format!("undefined variable {}", n).into()),
             Expr::Array(a) => Ok(Value::Array(a.iter().map(|x| self.eval(x)).collect::<Result<_, _>>()?)),
+            Expr::Map(entries) => {
+                let mut map = HashMap::new();
+                for (key_expr, value_expr) in entries {
+                    let key = to_map_key(&self.eval(key_expr)?)
+                        .ok_or_else(|| "map keys must be number, string, bool or null".to_string())?;
+                    let value = self.eval(value_expr)?;
+                    map.insert(key, value);
+                }
+                Ok(Value::Map(map))
+            }
+            Expr::Set(values) => {
+                let mut set = std::collections::HashSet::new();
+                for value_expr in values {
+                    let key = to_map_key(&self.eval(value_expr)?)
+                        .ok_or_else(|| "set values must be number, string, bool or null".to_string())?;
+                    set.insert(key);
+                }
+                Ok(Value::Set(set))
+            }
+            Expr::Index(base, index) => {
+                let base = self.eval(base)?;
+                let index = self.eval(index)?;
+                match base {
+                    Value::Array(values) => {
+                        let i = num(index)? as i64;
+                        if i < 0 || i as usize >= values.len() { return Err("array index out of bounds".into()); }
+                        Ok(values[i as usize].clone())
+                    }
+                    Value::Map(map) => {
+                        let key = to_map_key(&index).ok_or_else(|| "map key must be number, string, bool or null".to_string())?;
+                        Ok(map.get(&key).cloned().unwrap_or(Value::Null))
+                    }
+                    _ => Err("indexing requires an array or map".into()),
+                }
+            }
             Expr::Unary(op, x) => {
                 let v = self.eval(x)?;
                 match op {
@@ -206,7 +241,9 @@ impl Vm {
                     return Ok(Value::Num(match v {
                         Value::Str(x) => x.chars().count() as f64,
                         Value::Array(x) => x.len() as f64,
-                        _ => return Err("len expects string or array".into()),
+                        Value::Map(x) => x.len() as f64,
+                        Value::Set(x) => x.len() as f64,
+                        _ => return Err("len expects string, array, map or set".into()),
                     }));
                 }
                 if n == "abs" {
@@ -275,6 +312,48 @@ impl Vm {
                     let key = self.eval(&a[0])?;
                     let key = match key { Value::Str(x) => x, _ => return Err("env expects a string key".into()) };
                     return Ok(std::env::var(&key).map(Value::Str).unwrap_or(Value::Null));
+                }
+
+                if n == "map_get" || n == "map_has" || n == "map_set" || n == "map_remove" {
+                    if (n == "map_get" || n == "map_has") && a.len() != 2 { return Err(format!("{} expects 2 arguments", n).into()); }
+                    if (n == "map_set") && a.len() != 3 { return Err("map_set expects 3 arguments".into()); }
+                    if (n == "map_remove") && a.len() != 2 { return Err("map_remove expects 2 arguments".into()); }
+                    let map_value = self.eval(&a[0])?;
+                    let key_value = self.eval(&a[1])?;
+                    let key = to_map_key(&key_value).ok_or_else(|| "map key must be number, string, bool or null".to_string())?;
+                    match map_value {
+                        Value::Map(mut map) => {
+                            if n == "map_get" {
+                                return Ok(map.get(&key).cloned().unwrap_or(Value::Null));
+                            }
+                            if n == "map_has" {
+                                return Ok(Value::Bool(map.contains_key(&key)));
+                            }
+                            if n == "map_remove" {
+                                map.remove(&key);
+                                return Ok(Value::Null);
+                            }
+                            let value = self.eval(&a[2])?;
+                            map.insert(key, value);
+                            return Ok(Value::Null);
+                        }
+                        _ => return Err("map_* expects a Map value".into()),
+                    }
+                }
+                if n == "set_add" || n == "set_has" || n == "set_remove" {
+                    if a.len() != 2 { return Err(format!("{} expects 2 arguments", n).into()); }
+                    let set_value = self.eval(&a[0])?;
+                    let item_value = self.eval(&a[1])?;
+                    let item = to_map_key(&item_value).ok_or_else(|| "set values must be number, string, bool or null".to_string())?;
+                    match set_value {
+                        Value::Set(mut set) => {
+                            if n == "set_add" { set.insert(item); return Ok(Value::Null); }
+                            if n == "set_has" { return Ok(Value::Bool(set.contains(&item))); }
+                            set.remove(&item);
+                            return Ok(Value::Null);
+                        }
+                        _ => return Err("set_* expects a Set value".into()),
+                    }
                 }
 
                 let f = self.fns.get(n).cloned().ok_or_else(|| format!("undefined function {}", n))?;
