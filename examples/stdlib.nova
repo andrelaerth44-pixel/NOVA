@@ -1,0 +1,15 @@
+cwd = current_dir()
+joined = path_join(cwd, "main.nova")
+
+print path_basename(joined)
+print path_ext(joined)
+print path_stem(joined)
+print exists(cwd)
+
+payload = json_parse("{\"name\":\"NOVA\",\"value\":42}")
+print payload["name"]
+print payload["value"]
+print json_stringify(payload)
+
+print now_s() > 0
+sleep_ms(0)
