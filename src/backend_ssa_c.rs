@@ -20,21 +20,22 @@ fn v(id: ValueId) -> String {
 }
 
 fn c_string(value: &str) -> String {
-    let mut out = String::from("\"");
-    for ch in value.chars() {
-        match ch {
-            '\\' => out.push_str("\\\\"),
-            '"' => out.push_str("\\""),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            _ => out.push(ch),
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for byte in value.bytes() {
+        match byte {
+            b'\\' => out.push_str("\\\\"),
+            b'"' => out.push_str("\\\""),
+            0x0a => out.push_str("\\n"),
+            0x0d => out.push_str("\\r"),
+            0x09 => out.push_str("\\t"),
+            0x20..=0x7e => out.push(byte as char),
+            _ => out.push_str(&format!("\\x{:02x}", byte)),
         }
     }
     out.push('"');
     out
 }
-
 fn binary_expr(op: &str, left: &str, right: &str) -> Option<String> {
     Some(match op {
         "Plus" => format!("nova_num({}.number + {}.number)", left, right),
