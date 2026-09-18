@@ -225,7 +225,11 @@ impl Checker {
                             self.error(format!("argument {} of {} expects {}, got {}",i+1,name,expected.name(),got.name()));
                         }
                     }
-                    return Self::substitute(&f.ret,&bindings);
+                    let ret=Self::substitute(&f.ret,&bindings);
+                    if let crate::types::Type::Generic(ref n, ref aa)=ret {
+                        if n=="Option" && aa.len()==1 { return ret; }
+                    }
+                    return ret;
                 }
                 if name=="None" { return crate::types::Type::Generic("Option".into(),vec![crate::types::Type::Any]); }
                 if name=="Some" || name=="Ok" || name=="Err" {
