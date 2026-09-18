@@ -52,6 +52,8 @@ jobs:
           test -s /tmp/ssa.out
           cat /tmp/ssa.out
           grep -Fq 'fn <main>' /tmp/ssa.out
+          grep -Fq 'fn sum_to' /tmp/ssa.out
+          grep -Fq 'I64' /tmp/ssa.out
           grep -Fq 'Phi' /tmp/ssa.out
           cargo run --release -- check examples/ssa.nova
 
