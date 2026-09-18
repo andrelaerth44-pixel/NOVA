@@ -29,7 +29,6 @@ fn verify_code(code:&[Instr],label:&str)->Result<(),String>{
             Instr::Call{name,argc,result}=>{
                 let mut d=-(*argc as isize);
                 if !matches!(result,crate::ir::IrType::Null){d+=1;}
-                if name=="for_each"{d-=1;}
                 d
             }
             Instr::Jump(_)=>0,
