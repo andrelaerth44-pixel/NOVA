@@ -221,3 +221,32 @@ mod closure_ssa_tests {
         assert_eq!(closure[0].0, "value");
     }
 }
+
+
+#[cfg(test)]
+mod call_abi_tests {
+    use super::*;
+
+    #[test]
+    fn closure_calls_use_indirect_ssa_call() {
+        let source = r#"
+            fn make_counter() {
+                value = 0
+                return fn() {
+                    value = value + 1
+                    return value
+                }
+            }
+
+            counter = make_counter()
+            print counter()
+        "#;
+
+        let compilation = compile_source(source).expect("closure source should compile");
+        assert!(compilation.ssa_functions.iter().any(|function| {
+            function.blocks.iter().any(|block| {
+                block.instrs.iter().any(|(_, instr)| matches!(instr, crate::ir::SsaInstr::CallIndirect { .. }))
+            })
+        }));
+    }
+}
