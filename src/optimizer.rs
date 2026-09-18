@@ -55,10 +55,11 @@ fn optimize_block(code: Vec<Instr>) -> Vec<Instr> {
     }
     old_to_new[code.len()]=rewritten.len();
 
+    let new_len = rewritten.len();
     for ins in &mut rewritten {
         match ins {
             Instr::Jump(t)|Instr::JumpIfFalse(t) => {
-                *t=if *t<=code.len(){old_to_new[*t]}else{rewritten.len()};
+                *t=if *t<=code.len(){old_to_new[*t]}else{new_len};
             }
             _=>{}
         }
