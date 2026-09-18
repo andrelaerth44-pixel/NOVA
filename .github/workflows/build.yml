@@ -116,6 +116,19 @@ jobs:
           grep -Fxq "1" /tmp/closures.out
           grep -Fxq "2" /tmp/closures.out
 
+      - name: Standard library smoke test
+        shell: bash
+        run: |
+          cargo run --release -- check examples/stdlib.nova
+          cargo run --release -- run examples/stdlib.nova > /tmp/stdlib.out
+          grep -Fxq "main.nova" /tmp/stdlib.out
+          grep -Fxq "nova" /tmp/stdlib.out
+          grep -Fxq "main" /tmp/stdlib.out
+          grep -Fxq "true" /tmp/stdlib.out
+          grep -Fxq "NOVA" /tmp/stdlib.out
+          grep -Fxq "42" /tmp/stdlib.out
+          grep -Fq '{"name":"NOVA","value":42}' /tmp/stdlib.out
+
       - name: Iterator smoke test
         shell: bash
         run: |
