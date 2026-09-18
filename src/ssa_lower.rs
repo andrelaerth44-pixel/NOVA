@@ -298,14 +298,7 @@ pub fn lower_function(name: &str, args: &[(String, crate::types::Type)], ret: &c
 }
 
 fn type_to_ir(t: &crate::types::Type) -> IrType {
-    match t {
-        crate::types::Type::Bool => IrType::Bool,
-        crate::types::Type::String => IrType::String,
-        crate::types::Type::Null | crate::types::Type::Void => IrType::Null,
-        crate::types::Type::Struct(name) => IrType::Struct(name.clone()),
-        crate::types::Type::Enum(name) => IrType::Enum(name.clone()),
-        _ => IrType::Any,
-    }
+    IrType::from_type(t)
 }
 
 pub fn lower_program(program: &[Stmt]) -> SsaFunction {
