@@ -16,6 +16,7 @@ mod runtime;
 mod semantic;
 mod ssa_lower;
 mod module_loader;
+mod package;
 
 pub use token::Token;
 pub use ast::{Expr, Stmt, Value, Pattern, MapKey, EnvFrame, EnvRef, to_map_key};
@@ -39,10 +40,29 @@ fn load_program(path: &str) -> Result<Vec<Stmt>, String> {
 fn main(){
     let a:Vec<String>=env::args().collect();
     if a.len()<2 {
-        eprintln!("NOVA 1.7.0\nusage: nova run <file> | nova check <file> | nova ir <file> | nova build-c <file> [output.c] | nova build-native <file> [output] | nova app-check <file> | nova build-android <file> [MainActivity.kt] | nova version");
+        eprintln!("NOVA 1.7.0\nusage: nova run <file> | nova check <file> | nova ir <file> | nova build-c <file> [output.c] | nova build-native <file> [output] | nova app-check <file> | nova build-android <file> [MainActivity.kt] | nova package-check <manifest-or-dir> | nova package-lock <manifest-or-dir> | nova version");
         return
     }
     if a[1]=="version"{println!("NOVA 1.7.0");return}
+
+    if a[1]=="package-check" || a[1]=="package-lock" {
+        if a.len()<3 { eprintln!("missing manifest path"); std::process::exit(2); }
+        let path = std::path::Path::new(&a[2]);
+        let packages = match package::resolve_manifest(path) {
+            Ok(x) => x,
+            Err(e) => { eprintln!("package error: {}", e); std::process::exit(1); }
+        };
+        if a[1]=="package-lock" {
+            match package::write_lock(path) {
+                Ok(lock) => println!("{}", lock.display()),
+                Err(e) => { eprintln!("package error: {}", e); std::process::exit(1); }
+            }
+        } else {
+            for p in packages { println!("{} {} {}", p.name, p.version, p.source); }
+            println!("ok");
+        }
+        return
+    }
 
     if a[1]=="app-check" {
         let src=match fs::read_to_string(&a[2]){Ok(x)=>x,Err(e)=>{eprintln!("{}",e);std::process::exit(1)}};
