@@ -5,6 +5,7 @@ pub enum IrType {
     String,
     Null,
     Any,
+    Struct(String),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -18,6 +19,8 @@ pub enum Instr {
     Unary { op: String, ty: IrType },
     Binary { op: String, ty: IrType },
     Call { name: String, argc: usize, result: IrType },
+    StructInit { name: String, fields: Vec<String> },
+    FieldGet { field: String, ty: IrType },
     Jump(usize),
     JumpIfFalse(usize),
     Return(IrType),
@@ -54,6 +57,7 @@ pub enum SsaValue {
     String(String),
     Bool(bool),
     Null,
+    Struct { name: String },
     Param(ValueId),
     Instr(ValueId),
 }
@@ -66,6 +70,8 @@ pub enum SsaInstr {
     Unary { op: String, value: ValueId, ty: IrType },
     Binary { op: String, left: ValueId, right: ValueId, ty: IrType },
     Call { name: String, args: Vec<ValueId>, result: IrType },
+    StructInit { name: String, fields: Vec<(String, ValueId)> },
+    FieldGet { base: ValueId, field: String, ty: IrType },
     Phi { incomings: Vec<(usize, ValueId)>, ty: IrType },
 }
 
@@ -166,6 +172,7 @@ impl IrBuilder {
             crate::Value::Str(_) => IrType::String,
             crate::Value::Bool(_) => IrType::Bool,
             crate::Value::Array(_) => IrType::Any,
+            crate::Value::Struct { name, .. } => IrType::Struct(name.clone()),
             crate::Value::Null => IrType::Null,
         }
     }
@@ -180,6 +187,7 @@ impl IrBuilder {
                     crate::Value::Bool(b) => self.push(Instr::ConstBool(*b)),
                     crate::Value::Null => self.push(Instr::ConstNull),
                     crate::Value::Array(_) => self.push(Instr::Call { name: "array".into(), argc: 0, result: IrType::Any }),
+                    crate::Value::Struct { name, fields } => self.push(Instr::StructInit { name: name.clone(), fields: fields.keys().cloned().collect() }),
                 }
                 ty
             }
@@ -204,6 +212,16 @@ impl IrBuilder {
                 let ty = if matches!(op, crate::Token::EqEq | crate::Token::NotEq | crate::Token::Lt | crate::Token::Le | crate::Token::Gt | crate::Token::Ge | crate::Token::And | crate::Token::Or) { IrType::Bool } else { IrType::Number };
                 self.push(Instr::Binary { op: name, ty: ty.clone() });
                 ty
+            }
+            crate::Expr::Field(base, field) => {
+                let ty = self.lower_expr(base);
+                self.push(Instr::FieldGet { field: field.clone(), ty: ty.clone() });
+                IrType::Any
+            }
+            crate::Expr::StructInit(name, fields) => {
+                for (_, value) in fields { self.lower_expr(value); }
+                self.push(Instr::StructInit { name: name.clone(), fields: fields.iter().map(|(f, _)| f.clone()).collect() });
+                IrType::Struct(name.clone())
             }
             crate::Expr::Call(n, args) => {
                 for a in args { self.lower_expr(a); }
@@ -269,6 +287,7 @@ impl IrBuilder {
                 }
                 for x in otherwise { self.lower_stmt(x); }
             }
+            crate::Stmt::StructDecl(_, _) => {}
             crate::Stmt::Fn(n,args,ret,body) => {
                 let params=args.iter().map(|(name,t)| (name.clone(), match t {
                     crate::types::Type::Bool=>IrType::Bool,
