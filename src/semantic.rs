@@ -173,6 +173,9 @@ impl Checker {
                     "write_file" => Some((vec![crate::types::Type::String, crate::types::Type::String], crate::types::Type::Null)),
                     "exists" => Some((vec![crate::types::Type::String], crate::types::Type::Bool)),
                     "env" => Some((vec![crate::types::Type::String], crate::types::Type::String)),
+                    "is_some" | "is_none" | "is_ok" | "is_err" => Some((vec![crate::types::Type::Any], crate::types::Type::Bool)),
+                    "unwrap" => Some((vec![crate::types::Type::Any], crate::types::Type::Any)),
+                    "unwrap_or" => Some((vec![crate::types::Type::Any, crate::types::Type::Any], crate::types::Type::Any)),
                     _ => None,
                 };
                 if let Some((expected, ret)) = builtin {
