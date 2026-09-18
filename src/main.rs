@@ -9,6 +9,9 @@ mod diagnostics;
 mod lower;
 mod optimizer;
 mod backend_c;
+mod app_ast;
+mod app_parser;
+mod app_backend_android;
 
 pub use token::Token;
 pub use ast::{Expr, Stmt, Value};
@@ -309,8 +312,24 @@ fn run_semantic_check(program: &[Stmt]) -> Result<(), String> {
 
 fn main(){
     let a:Vec<String>=env::args().collect();
-    if a.len()<2 {eprintln!("NOVA 1.5.0\nusage: nova run <file> | nova check <file> | nova ir <file> | nova build-c <file> [output.c] | nova build-native <file> [output] | nova version");return}
+    if a.len()<2 {eprintln!("NOVA 1.5.0\nusage: nova run <file> | nova check <file> | nova ir <file> | nova build-c <file> [output.c] | nova build-native <file> [output] | nova app-check <file> | nova build-android <file> [MainActivity.kt] | nova version");return}
     if a[1]=="version"{println!("NOVA 1.5.0");return}
+    if a[1]=="app-check" {
+        let src=match fs::read_to_string(&a[2]){Ok(x)=>x,Err(e)=>{eprintln!("{}",e);std::process::exit(1)}};
+        let app=match app_parser::AppParser::new(&src).parse(){Ok(x)=>x,Err(e)=>{eprintln!("app parse error: {}",e);std::process::exit(1)}};
+        if let Err(e)=app_backend_android::validate_android_target(&app){eprintln!("Android target error: {}",e);std::process::exit(1)}
+        println!("ok: Android application target {}", app.name);
+        return
+    }
+    if a[1]=="build-android" {
+        let src=match fs::read_to_string(&a[2]){Ok(x)=>x,Err(e)=>{eprintln!("{}",e);std::process::exit(1)}};
+        let app=match app_parser::AppParser::new(&src).parse(){Ok(x)=>x,Err(e)=>{eprintln!("app parse error: {}",e);std::process::exit(1)}};
+        let kotlin=match app_backend_android::emit_android_project(&app){Ok(x)=>x,Err(e)=>{eprintln!("Android backend error: {}",e);std::process::exit(1)}};
+        let out=if a.len()>3{&a[3]}else{"MainActivity.kt"};
+        if let Err(e)=fs::write(out,kotlin){eprintln!("cannot write {}: {}",out,e);std::process::exit(1)}
+        println!("{}",out);
+        return
+    }
     if a.len()<3 {eprintln!("missing file");std::process::exit(2)}
     let src=match fs::read_to_string(&a[2]){Ok(x)=>x,Err(e)=>{eprintln!("{}",e);std::process::exit(1)}};
     let t=match lex(&src){Ok(x)=>x,Err(e)=>{eprintln!("lex error: {}",e);std::process::exit(1)}};
