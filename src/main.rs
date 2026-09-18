@@ -207,14 +207,19 @@ struct StaticFn {
 }
 
 struct Checker {
-    vars: HashMap<String, types::Type>,
+    scopes: Vec<HashMap<String, types::Type>>,
     fns: HashMap<String, StaticFn>,
     errors: Vec<String>,
 }
 
 impl Checker {
-    fn new() -> Self { Self { vars: HashMap::new(), fns: HashMap::new(), errors: Vec::new() } }
+    fn new() -> Self { Self { scopes: vec![HashMap::new()], fns: HashMap::new(), errors: Vec::new() } }
     fn error(&mut self, msg: impl Into<String>) { self.errors.push(msg.into()); }
+    fn push_scope(&mut self) { self.scopes.push(HashMap::new()); }
+    fn pop_scope(&mut self) { if self.scopes.len() > 1 { self.scopes.pop(); } }
+    fn lookup(&self, name: &str) -> Option<types::Type> { self.scopes.iter().rev().find_map(|s| s.get(name).cloned()) }
+    fn contains(&self, name: &str) -> bool { self.scopes.iter().rev().any(|s| s.contains_key(name)) }
+    fn define(&mut self, name: String, ty: types::Type) { if let Some(s) = self.scopes.last_mut() { s.insert(name, ty); } }
 
     fn infer(&mut self, e: &Expr) -> types::Type {
         match e {
@@ -231,7 +236,7 @@ impl Checker {
                 }
                 types::Type::Array(Box::new(first))
             }
-            Expr::Var(n) => self.vars.get(n).cloned().unwrap_or_else(|| {
+            Expr::Var(n) => self.lookup(n).unwrap_or_else(|| {
                 self.error(format!("undefined variable {}", n)); types::Type::Unknown
             }),
             Expr::Array(xs) => {
@@ -347,11 +352,11 @@ impl Checker {
             match s {
                 Stmt::Let(n, e) | Stmt::Assign(n, e) => {
                     let t = self.infer(e);
-                    if matches!(s, Stmt::Assign(_, _)) && !self.vars.contains_key(n) { self.error(format!("assignment to undefined variable {}", n)); }
-                    if let Some(old) = self.vars.get(n) {
+                    if matches!(s, Stmt::Assign(_, _)) && !self.contains(n) { self.error(format!("assignment to undefined variable {}", n)); }
+                    if let Some(old) = self.lookup(n) {
                         if !old.compatible(&t) { self.error(format!("cannot assign {} to {} (expected {})", t.name(), n, old.name())); }
                     }
-                    self.vars.insert(n.clone(), t);
+                    self.define(n.clone(), t);
                 }
                 Stmt::Print(e) | Stmt::Expr(e) => { self.infer(e); }
                 Stmt::Return(e) => {
@@ -364,8 +369,12 @@ impl Checker {
                 Stmt::If(c, a, b) => {
                     let t = self.infer(c);
                     if !t.compatible(&types::Type::Bool) && !t.compatible(&types::Type::Number) { self.error(format!("condition must be bool or number, got {}", t.name())); }
+                    self.push_scope();
                     self.check_block(a, expected_return.clone());
+                    self.pop_scope();
+                    self.push_scope();
                     self.check_block(b, expected_return.clone());
+                    self.pop_scope();
                 }
                 Stmt::While(c, b) => {
                     let t = self.infer(c);
@@ -374,8 +383,18 @@ impl Checker {
                 }
                 Stmt::For(n, it, b) => {
                     match self.infer(it) {
-                        types::Type::Array(inner) => { self.vars.insert(n.clone(), *inner); self.check_block(b, expected_return.clone()); }
-                        types::Type::Any | types::Type::Unknown => { self.vars.insert(n.clone(), types::Type::Any); self.check_block(b, expected_return.clone()); }
+                        types::Type::Array(inner) => {
+                            self.push_scope();
+                            self.define(n.clone(), *inner);
+                            self.check_block(b, expected_return.clone());
+                            self.pop_scope();
+                        }
+                        types::Type::Any | types::Type::Unknown => {
+                            self.push_scope();
+                            self.define(n.clone(), types::Type::Any);
+                            self.check_block(b, expected_return.clone());
+                            self.pop_scope();
+                        }
                         other => self.error(format!("for expects an array, got {}", other.name())),
                     }
                 }
@@ -392,10 +411,10 @@ impl Checker {
                 Stmt::Fn(n, args, body) => {
                     if self.fns.contains_key(n) { self.error(format!("duplicate function {}", n)); continue; }
                     self.fns.insert(n.clone(), StaticFn { args: args.iter().map(|_| types::Type::Any).collect(), ret: types::Type::Any });
-                    let saved = self.vars.clone();
-                    for a in args { self.vars.insert(a.clone(), types::Type::Any); }
+                    self.push_scope();
+                    for a in args { self.define(a.clone(), types::Type::Any); }
                     self.check_block(body, Some(types::Type::Any));
-                    self.vars = saved;
+                    self.pop_scope();
                 }
             }
         }
