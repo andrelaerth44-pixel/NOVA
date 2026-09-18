@@ -42,3 +42,45 @@ fn add(a: i64, b: i64) -> i64 {
 ```
 
 Supported primitive names currently include `i32`, `i64`, `f32`, `f64`, `bool`, `string`, `void`, and `any`. Array types use `T[]`.
+
+
+## Structs
+
+Structs declare named fields and can be constructed with field names:
+
+```nova
+struct User {
+    name: string
+    age: i64
+}
+
+user = User { name: "Laerth", age: 18 }
+print user.name
+```
+
+## Enums and pattern matching
+
+Enums can carry an optional payload. Option and Result are built-in enum families for nullable and fallible values.
+
+```nova
+enum State {
+    Ready
+    Failed(string)
+}
+
+state = Failed("network")
+
+match state {
+    Ready {
+        print "ready"
+    },
+    Failed(message) {
+        print message
+    },
+    _ {
+        print "unknown"
+    }
+}
+```
+
+Match patterns currently support literal values, `_` wildcard patterns, and enum variants with one binding. The checker validates enum variants and reports missing variants when a match has neither a wildcard nor an `else` arm.
