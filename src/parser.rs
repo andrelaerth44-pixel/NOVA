@@ -18,6 +18,7 @@ impl Parser {
                     "void"=>crate::types::Type::Void,"any"=>crate::types::Type::Any,
                     _=>crate::types::Type::Struct(n.clone())
                 };
+                let mut ty = base;
                 if self.eat(&Token::Lt){
                     let mut args=Vec::new();
                     if !self.eat(&Token::Gt){
@@ -27,10 +28,14 @@ impl Parser {
                             if !self.eat(&Token::Comma){return Err("expected , in generic type".into())}
                         }
                     }
-                    let name=match base { crate::types::Type::Struct(x)=>x, _=>base.name() };
-                    return Ok(crate::types::Type::Generic(name,args));
+                    let name=match ty { crate::types::Type::Struct(x)=>x, _=>ty.name() };
+                    ty = crate::types::Type::Generic(name,args);
                 }
-                Ok(base)
+                while self.eat(&Token::LBracket) {
+                    if !self.eat(&Token::RBracket) { return Err("expected ] in array type".into()); }
+                    ty = crate::types::Type::Array(Box::new(ty));
+                }
+                Ok(ty)
             },
             Token::LBracket=>{let t=self.type_name()?;if !self.eat(&Token::RBracket){return Err("expected ] in array type".into())}Ok(crate::types::Type::Array(Box::new(t)))},
             t=>Err(format!("expected type, got {:?}",t))
