@@ -88,3 +88,44 @@ pub fn format_ssa_module(functions: &[SsaFunction]) -> String {
     }
     out
 }
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compile_preserves_function_types_in_ssa() {
+        let source = r#"
+            fn identity<T>(value: T) -> T {
+                return value
+            }
+
+            fn sum(a: i64, b: i64) -> i64 {
+                return a + b
+            }
+
+            print sum(20, 22)
+        "#;
+
+        let compilation = compile_source(source).expect("source should compile");
+        assert_eq!(compilation.ssa_functions.len(), 3);
+        assert!(matches!(
+            compilation.ssa_functions[1].params[0].1,
+            crate::ir::IrType::TypeParam(ref name) if name == "T"
+        ));
+        assert!(matches!(
+            compilation.ssa_functions[1].return_type,
+            crate::ir::IrType::TypeParam(ref name) if name == "T"
+        ));
+        assert!(matches!(
+            compilation.ssa_functions[2].params[0].1,
+            crate::ir::IrType::I64
+        ));
+        assert!(matches!(
+            compilation.ssa_functions[2].return_type,
+            crate::ir::IrType::I64
+        ));
+    }
+}
