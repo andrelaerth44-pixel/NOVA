@@ -329,6 +329,88 @@ impl Vm {
                     return Ok(std::env::var(&key).map(Value::Str).unwrap_or(Value::Null));
                 }
 
+                if n == "now_ms" || n == "now_s" {
+                    if !a.is_empty() { return Err(format!("{} expects 0 arguments", n).into()); }
+                    let duration = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+                        .map_err(|e| format!("clock error: {}", e))?;
+                    let value = if n == "now_ms" {
+                        duration.as_secs_f64() * 1000.0
+                    } else {
+                        duration.as_secs_f64()
+                    };
+                    return Ok(Value::Num(value));
+                }
+                if n == "sleep_ms" {
+                    if a.len() != 1 { return Err("sleep_ms expects 1 argument".into()); }
+                    let ms = num(self.eval(&a[0])?)?;
+                    if ms < 0.0 { return Err("sleep_ms expects a non-negative number".into()); }
+                    std::thread::sleep(std::time::Duration::from_secs_f64(ms / 1000.0));
+                    return Ok(Value::Null);
+                }
+                if n == "current_dir" {
+                    if !a.is_empty() { return Err("current_dir expects 0 arguments".into()); }
+                    return Ok(Value::Str(std::env::current_dir().map_err(|e| format!("cannot read current directory: {}", e))?.display().to_string()));
+                }
+                if n == "path_join" {
+                    if a.len() != 2 { return Err("path_join expects 2 arguments".into()); }
+                    let left = self.eval(&a[0])?;
+                    let right = self.eval(&a[1])?;
+                    let left = match left { Value::Str(x) => x, _ => return Err("path_join expects string paths".into()) };
+                    let right = match right { Value::Str(x) => x, _ => return Err("path_join expects string paths".into()) };
+                    return Ok(Value::Str(std::path::Path::new(&left).join(&right).display().to_string()));
+                }
+                if n == "path_basename" || n == "path_dirname" || n == "path_ext" || n == "path_stem" {
+                    if a.len() != 1 { return Err(format!("{} expects 1 argument", n).into()); }
+                    let path = self.eval(&a[0])?;
+                    let path = match path { Value::Str(x) => x, _ => return Err(format!("{} expects a string path", n).into()) };
+                    let p = std::path::Path::new(&path);
+                    let out = match n {
+                        "path_basename" => p.file_name().and_then(|x| x.to_str()).map(str::to_owned).unwrap_or_default(),
+                        "path_dirname" => p.parent().map(|x| x.display().to_string()).unwrap_or_default(),
+                        "path_ext" => p.extension().and_then(|x| x.to_str()).map(str::to_owned).unwrap_or_default(),
+                        "path_stem" => p.file_stem().and_then(|x| x.to_str()).map(str::to_owned).unwrap_or_default(),
+                        _ => unreachable!(),
+                    };
+                    return Ok(Value::Str(out));
+                }
+                if n == "make_dir" {
+                    if a.len() != 1 { return Err("make_dir expects 1 argument".into()); }
+                    let path = self.eval(&a[0])?;
+                    let path = match path { Value::Str(x) => x, _ => return Err("make_dir expects a string path".into()) };
+                    std::fs::create_dir_all(&path).map_err(|e| format!("cannot create {}: {}", path, e))?;
+                    return Ok(Value::Null);
+                }
+                if n == "remove_file" {
+                    if a.len() != 1 { return Err("remove_file expects 1 argument".into()); }
+                    let path = self.eval(&a[0])?;
+                    let path = match path { Value::Str(x) => x, _ => return Err("remove_file expects a string path".into()) };
+                    std::fs::remove_file(&path).map_err(|e| format!("cannot remove {}: {}", path, e))?;
+                    return Ok(Value::Null);
+                }
+                if n == "list_dir" {
+                    if a.len() != 1 { return Err("list_dir expects 1 argument".into()); }
+                    let path = self.eval(&a[0])?;
+                    let path = match path { Value::Str(x) => x, _ => return Err("list_dir expects a string path".into()) };
+                    let mut entries = Vec::new();
+                    for entry in std::fs::read_dir(&path).map_err(|e| format!("cannot list {}: {}", path, e))? {
+                        let entry = entry.map_err(|e| format!("cannot read directory entry: {}", e))?;
+                        entries.push(Value::Str(entry.file_name().to_string_lossy().into_owned()));
+                    }
+                    entries.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+                    return Ok(Value::Array(entries));
+                }
+                if n == "json_parse" {
+                    if a.len() != 1 { return Err("json_parse expects 1 argument".into()); }
+                    let source = self.eval(&a[0])?;
+                    let source = match source { Value::Str(x) => x, _ => return Err("json_parse expects a string".into()) };
+                    return Ok(parse_json(&source)?);
+                }
+                if n == "json_stringify" {
+                    if a.len() != 1 { return Err("json_stringify expects 1 argument".into()); }
+                    let value = self.eval(&a[0])?;
+                    return Ok(Value::Str(stringify_json(&value)?));
+                }
+
                 if n == "map_get" || n == "map_has" || n == "map_set" || n == "map_remove" {
                     if (n == "map_get" || n == "map_has") && a.len() != 2 { return Err(format!("{} expects 2 arguments", n).into()); }
                     if (n == "map_set") && a.len() != 3 { return Err("map_set expects 3 arguments".into()); }
