@@ -122,14 +122,18 @@ jobs:
           cargo run --release -- check examples/stdlib.nova
           cargo run --release -- run examples/stdlib.nova > /tmp/stdlib.out
           cat /tmp/stdlib.out
-          grep -Fxq "main.nova" /tmp/stdlib.out
-          grep -Fxq "nova" /tmp/stdlib.out
-          grep -Fxq "main" /tmp/stdlib.out
-          grep -Fxq "O" /tmp/stdlib.out
-          grep -Fxq "true" /tmp/stdlib.out
-          grep -Fxq "NOVA" /tmp/stdlib.out
-          grep -Fxq "42" /tmp/stdlib.out
-          grep -Fq '{"name":"NOVA","value":42}' /tmp/stdlib.out
+          cat > /tmp/stdlib.expected <<'EOF'
+          main.nova
+          nova
+          main
+          O
+          true
+          NOVA
+          42
+          {"name":"NOVA","value":42}
+          true
+          EOF
+          diff -u /tmp/stdlib.expected /tmp/stdlib.out
 
       - name: Iterator smoke test
         shell: bash
