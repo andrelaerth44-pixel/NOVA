@@ -1,9 +1,13 @@
-use crate::ir::{Instr, Module};
+use crate::ir::{BasicBlock, Instr, IrType, Module};
 
 pub fn optimize(mut module: Module) -> Module {
-    module.code = fold(module.code);
+    for block in &mut module.blocks {
+        block.code = fold(std::mem::take(&mut block.code));
+    }
     for f in &mut module.functions {
-        f.code = fold(std::mem::take(&mut f.code));
+        for block in &mut f.blocks {
+            block.code = fold(std::mem::take(&mut block.code));
+        }
     }
     module
 }
@@ -13,7 +17,7 @@ fn fold(code: Vec<Instr>) -> Vec<Instr> {
     let mut i = 0;
     while i < code.len() {
         if i + 2 < code.len() {
-            if let (Instr::ConstNumber(a), Instr::ConstNumber(b), Instr::Binary(op)) =
+            if let (Instr::ConstNumber(a), Instr::ConstNumber(b), Instr::Binary { op, ty: IrType::Number }) =
                 (&code[i], &code[i + 1], &code[i + 2])
             {
                 let value = match op.as_str() {
@@ -36,3 +40,6 @@ fn fold(code: Vec<Instr>) -> Vec<Instr> {
     }
     out
 }
+
+#[allow(dead_code)]
+fn _keep_types(_: &BasicBlock) {}
