@@ -177,6 +177,7 @@ impl IrBuilder {
             crate::Value::Str(_) => IrType::String,
             crate::Value::Bool(_) => IrType::Bool,
             crate::Value::Array(_) => IrType::Any,
+            crate::Value::Map(_) | crate::Value::Set(_) => IrType::Any,
             crate::Value::Struct { name, .. } => IrType::Struct(name.clone()),
             crate::Value::Enum { name, .. } => IrType::Enum(name.clone()),
             crate::Value::Null => IrType::Null,
