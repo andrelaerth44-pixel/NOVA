@@ -26,7 +26,7 @@ pub enum Value {
     Num(f64), Str(String), Bool(bool), Array(Vec<Value>),
     Struct { name: String, fields: std::collections::HashMap<String, Value> },
     Enum { name: String, variant: String, value: Option<Box<Value>> },
-    Closure { args: Vec<String>, body: Vec<Stmt>, env: std::collections::HashMap<String, Value> },
+    Closure { args: Vec<String>, body: Vec<Stmt>, env: std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, Value>>> },
     Null,
 }
 impl Value {
