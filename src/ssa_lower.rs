@@ -1,4 +1,4 @@
-use crate::{Expr, Stmt, Value, Token};
+use crate::{Expr, Stmt, Value, Token, Pattern};
 use crate::ir::{IrType, SsaBlock, SsaFunction, SsaInstr, SsaValue, Terminator, ValueId};
 use std::collections::HashMap;
 
@@ -222,12 +222,25 @@ impl Builder {
                 let mut next = self.current;
                 for (pattern, body) in arms {
                     self.set_current(next);
-                    let p = self.expr(pattern);
-                    let test = self.emit(SsaInstr::Binary { op: "EqEq".into(), left: subject, right: p, ty: IrType::Bool });
+                    let test = match pattern {
+                        Pattern::Wildcard => self.emit(SsaInstr::Const(SsaValue::Bool(true))),
+                        Pattern::Literal(expr) => {
+                            let p = self.expr(expr);
+                            self.emit(SsaInstr::Binary { op: "EqEq".into(), left: subject, right: p, ty: IrType::Bool })
+                        }
+                        Pattern::Enum { variant, .. } => {
+                            let name = self.emit(SsaInstr::Const(SsaValue::String(variant.clone())));
+                            self.emit(SsaInstr::Call { name: "match_enum".into(), args: vec![subject, name], result: IrType::Bool })
+                        }
+                    };
                     let yes = self.new_block();
                     let no = self.new_block();
                     self.blocks[self.current].terminator = Some(Terminator::Branch { condition: test, then_block: yes, else_block: no });
                     self.set_current(yes);
+                    if let Pattern::Enum { binding: Some(name), .. } = pattern {
+                        let payload = self.emit(SsaInstr::Call { name: "enum_payload".into(), args: vec![subject], result: IrType::Any });
+                        self.bind(name, payload);
+                    }
                     self.stmt_list(body);
                     if self.blocks[self.current].terminator.is_none() { self.blocks[self.current].terminator = Some(Terminator::Jump(exit)); }
                     next = no;
