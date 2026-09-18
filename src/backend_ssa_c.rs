@@ -927,3 +927,90 @@ mod tests {
         assert_eq!(super::c_string("a\"b\n"), "\"a\\\"b\\n\"");
     }
 }
+
+
+#[cfg(test)]
+mod native_execution_tests {
+    use std::process::Command;
+
+    #[test]
+    fn native_option_result_try_executes_real_binary() {
+        let source = r#"
+            fn maybe_number(flag: bool) -> Option<i64> {
+                if flag {
+                    return Some(42)
+                }
+                return None
+            }
+
+            fn compute(flag: bool) -> Option<i64> {
+                value = maybe_number(flag)?
+                return Some(value + 8)
+            }
+
+            fn parse_name(ok: bool) -> Result<string, string> {
+                if ok {
+                    return Ok("NOVA")
+                }
+                return Err("name unavailable")
+            }
+
+            fn greet(ok: bool) -> Result<string, string> {
+                name = parse_name(ok)?
+                return Ok("Hello " + name)
+            }
+
+            print unwrap(compute(true))
+            print is_none(compute(false))
+            print unwrap(greet(true))
+            print unwrap_or(greet(false), "fallback")
+        "#;
+
+        let compilation = crate::compiler::compile_source(source)
+            .expect("Option/Result/Try source should compile");
+        let generated = crate::backend_ssa_c::emit_c(&compilation.ssa_functions)
+            .expect("SSA native backend should emit Option/Result/Try runtime");
+
+        assert!(generated.contains("nova_try"));
+        assert!(generated.contains("setjmp"));
+        assert!(generated.contains("longjmp"));
+        assert!(generated.contains("nova_unwrap_or"));
+
+        let dir = std::env::temp_dir().join(format!(
+            "nova-native-try-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("create native test directory");
+        let c_path = dir.join("try.c");
+        let bin_path = dir.join("try-bin");
+        std::fs::write(&c_path, generated).expect("write generated C");
+
+        let compile = Command::new("cc")
+            .args([
+                "-O2",
+                "-std=c11",
+                c_path.to_str().expect("C path"),
+                "-o",
+                bin_path.to_str().expect("binary path"),
+            ])
+            .status()
+            .expect("invoke C compiler");
+        assert!(compile.success(), "C compiler failed: {compile}");
+
+        let output = Command::new(&bin_path)
+            .output()
+            .expect("execute native Option/Result/Try binary");
+        assert!(
+            output.status.success(),
+            "native program failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            "50\ntrue\nHello NOVA\nfallback\n"
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
