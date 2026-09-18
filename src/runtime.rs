@@ -23,10 +23,10 @@ impl Vm {
                 for (field, expr) in fields { out.insert(field.clone(), self.eval(expr)?); }
                 Ok(Value::Struct{name:name.clone(),fields:out})
             }
-            Expr::Closure(args, body)=>Ok(Value::Closure{args:args.clone(),body:body.clone(),env:self.vars.clone()}),
+            Expr::Closure(args, body)=>Ok(Value::Closure{args:args.clone(),body:body.clone(),env:std::rc::Rc::new(std::cell::RefCell::new(self.vars.clone()))}),
             Expr::CallValue(callee,a)=>{
                 let v=self.eval(callee)?; let vals=a.iter().map(|e|self.eval(e)).collect::<Result<Vec<_>,_>>()?;
-                match v { Value::Closure{args,body,env}=>{ if args.len()!=vals.len(){return Err(format!("closure expects {} arguments",args.len()))} let old=self.vars.clone(); self.vars=env; for (k,v) in args.iter().zip(vals){self.vars.insert(k.clone(),v);} let r=self.exec(&body)?; self.vars=old; Ok(r.unwrap_or(Value::Null)) }, _=>Err("value is not callable".into()) }
+                match v { Value::Closure{args,body,env}=>{ if args.len()!=vals.len(){return Err(format!("closure expects {} arguments",args.len()))} let old=self.vars.clone(); self.vars=env.borrow().clone(); for (k,v) in args.iter().zip(vals){self.vars.insert(k.clone(),v);} let r=self.exec(&body)?; let captured=env.borrow().keys().cloned().collect::<Vec<_>>(); { let mut e=env.borrow_mut(); for k in captured { if let Some(v)=self.vars.get(&k).cloned(){e.insert(k,v);} } } self.vars=old; Ok(r.unwrap_or(Value::Null)) }, _=>Err("value is not callable".into()) }
             }
             Expr::Field(base, field)=>{
                 match self.eval(base)? {
