@@ -195,8 +195,18 @@ impl Builder {
         match e {
             Expr::Val(v) => self.const_value(v),
             Expr::Var(name) => {
-                if let Some(v) = self.lookup(name) { v }
-                else { self.emit(SsaInstr::Load { name: name.clone() }) }
+                if name == "None" {
+                    self.emit(SsaInstr::EnumInit {
+                        name: "Option".into(),
+                        variant: "None".into(),
+                        payload: None,
+                        ty: IrType::Generic("Option".into(), vec![IrType::Any]),
+                    })
+                } else if let Some(v) = self.lookup(name) {
+                    v
+                } else {
+                    self.emit(SsaInstr::Load { name: name.clone() })
+                }
             }
             Expr::Array(xs) => {
                 let args = xs.iter().map(|x| self.expr(x)).collect::<Vec<_>>();
