@@ -24,7 +24,9 @@ Implemented in the current 1.6 compiler line: structs, enums, pattern matching, 
 - first-class iterators
 
 ## 1.7 compiler
+- reusable deterministic compiler pipeline API
 - typed NOVA IR
+- SSA inspection tooling
 - control-flow lowering
 - optimization passes
 - C ABI and FFI
