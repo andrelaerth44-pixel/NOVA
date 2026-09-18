@@ -23,6 +23,8 @@ fn verify_code(code:&[Instr],label:&str)->Result<(),String>{
         depth+=match ins{
             Instr::ConstNumber(_)|Instr::ConstString(_)|Instr::ConstBool(_)|Instr::ConstNull|Instr::Load(_)=>1,
             Instr::Store(_)|Instr::Pop=>-1,
+            Instr::StructInit { fields, .. } => 1 - fields.len() as isize,
+            Instr::FieldGet { .. } => 0,
             Instr::Unary{..}=>0,
             Instr::Binary{..}=>-1,
             Instr::Call{name,argc,result}=>{
