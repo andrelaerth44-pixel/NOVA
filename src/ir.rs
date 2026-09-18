@@ -113,6 +113,10 @@ pub enum SsaInstr {
     Call { name: String, args: Vec<ValueId>, result: IrType },
     StructInit { name: String, fields: Vec<(String, ValueId)> },
     FieldGet { base: ValueId, field: String, ty: IrType },
+    EnumInit { name: String, variant: String, payload: Option<ValueId>, ty: IrType },
+    EnumTest { value: ValueId, variant: String },
+    EnumPayload { value: ValueId, ty: IrType },
+    Try { value: ValueId, result: IrType },
     Phi { incomings: Vec<(usize, ValueId)>, ty: IrType },
 }
 
@@ -547,6 +551,15 @@ impl SsaFunction {
                     }
                     SsaInstr::FieldGet { base, .. } => {
                         check_use(*base, block.id, idx, &defs, &dom)?;
+                    }
+                    SsaInstr::EnumInit { payload: Some(value), .. } => {
+                        check_use(*value, block.id, idx, &defs, &dom)?;
+                    }
+                    SsaInstr::EnumInit { payload: None, .. } => {}
+                    SsaInstr::EnumTest { value, .. } |
+                    SsaInstr::EnumPayload { value, .. } |
+                    SsaInstr::Try { value, .. } => {
+                        check_use(*value, block.id, idx, &defs, &dom)?;
                     }
                     SsaInstr::Phi { incomings, .. } => {
                         let expected: std::collections::HashSet<_> = preds[block.id].iter().copied().collect();
