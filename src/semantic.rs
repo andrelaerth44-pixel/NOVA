@@ -221,8 +221,10 @@ impl Checker {
                     let mut bindings=HashMap::new();
                     for (i,arg) in args.iter().enumerate() {
                         let got=self.infer(arg);
-                        if let Some(expected)=f.args.get(i) && !Self::unify(expected,&got,&mut bindings) {
-                            self.error(format!("argument {} of {} expects {}, got {}",i+1,name,expected.name(),got.name()));
+                        if let Some(expected)=f.args.get(i) {
+                            if !Self::unify(expected,&got,&mut bindings) {
+                                self.error(format!("argument {} of {} expects {}, got {}",i+1,name,expected.name(),got.name()));
+                            }
                         }
                     }
                     let ret=Self::substitute(&f.ret,&bindings);
@@ -255,7 +257,14 @@ impl Checker {
                 };
                 if let Some((expected, ret)) = builtin {
                     if expected.len()!=args.len(){self.error(format!("{} expects {} arguments, got {}",name,expected.len(),args.len()));}
-                    for (i,arg) in args.iter().enumerate(){let got=self.infer(arg);if let Some(want)=expected.get(i) && !want.compatible(&got){self.error(format!("argument {} of {} expects {}, got {}",i+1,name,want.name(),got.name()));}}
+                    for (i,arg) in args.iter().enumerate(){
+                        let got=self.infer(arg);
+                        if let Some(want)=expected.get(i) {
+                            if !want.compatible(&got) {
+                                self.error(format!("argument {} of {} expects {}, got {}",i+1,name,want.name(),got.name()));
+                            }
+                        }
+                    }
                     return ret;
                 }
                 for arg in args { self.infer(arg); }
