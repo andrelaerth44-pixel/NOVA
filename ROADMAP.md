@@ -1,27 +1,62 @@
 # NOVA roadmap
 
-## 1.3 Language core
-- modules and imports
-- richer static types
+The roadmap is an implementation order, not a claim that unfinished features already exist.
+
+## 1.5 hardening
+- source spans and line/column diagnostics
+- deterministic parser errors
+- static semantic checking
+- safe runtime error handling
+- module path resolution and cycle diagnostics
+- language conformance tests
+
+## 1.6 language system
+- explicit primitive types
+- arrays, maps and sets
 - structs and enums
-- pattern matching
-- Result and Option
+- Option and Result
+- pattern matching beyond literal equality
 - closures
 - iterators and generators
-- package manager and lockfile
-- diagnostics and source spans
 
-## 1.4 Standard library
-filesystem, paths, processes, environment, time, JSON, HTTP, sockets, crypto, compression and subprocesses.
+## 1.7 compiler
+- typed NOVA IR
+- control-flow lowering
+- optimization passes
+- C ABI and FFI
+- real x86-64 backend
+- ARM64 backend
+- WebAssembly backend
 
-## 1.5 Concurrency
-tasks, async/await, channels, atomics, thread pools and structured concurrency.
+## 1.8 standard library
+- filesystem and paths
+- environment and processes
+- time
+- JSON
+- HTTP and sockets
+- crypto and compression
+- databases
 
-## 1.6 Native compiler
-typed IR, optimization, x86-64, ARM64 and WebAssembly code generation.
+## 1.9 concurrency
+- threads
+- channels
+- atomics
+- async/await
+- structured concurrency
 
-## 1.7 Application stack
-UI, graphics, canvas, audio/video, databases, networking and native platform APIs.
+## 2.x application stack
+- UI and platform bindings
+- 2D/3D graphics and canvas
+- audio/video
+- database clients
+- mobile and desktop application targets
 
-## 2.x Acceleration
-SIMD, GPU abstraction, CUDA/Vulkan/Metal backends, tensor IR, kernel fusion, mixed precision, memory planning and distributed execution.
+## 2.x acceleration
+- SIMD
+- GPU abstraction
+- CUDA/Vulkan/Metal
+- tensor IR
+- kernel fusion
+- mixed precision
+- memory planning
+- distributed execution
