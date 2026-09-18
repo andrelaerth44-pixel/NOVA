@@ -426,7 +426,7 @@ impl Vm {
                     let path = self.eval(&a[0])?;
                     let path = match path { Value::Str(x) => x, _ => return Err(format!("{} expects a string path", n).into()) };
                     let p = std::path::Path::new(&path);
-                    let out = match n {
+                    let out = match n.as_str() {
                         "path_basename" => p.file_name().and_then(|x| x.to_str()).map(str::to_owned).unwrap_or_default(),
                         "path_dirname" => p.parent().map(|x| x.display().to_string()).unwrap_or_default(),
                         "path_ext" => p.extension().and_then(|x| x.to_str()).map(str::to_owned).unwrap_or_default(),
@@ -732,6 +732,101 @@ impl Vm {
         }
         Ok(None)
     }
+}
+
+fn json_to_value(value: serde_json::Value) -> Value {
+    match value {
+        serde_json::Value::Null => Value::Null,
+        serde_json::Value::Bool(v) => Value::Bool(v),
+        serde_json::Value::Number(v) => Value::Num(v.as_f64().unwrap_or(0.0)),
+        serde_json::Value::String(v) => Value::Str(v),
+        serde_json::Value::Array(values) => {
+            Value::Array(values.into_iter().map(json_to_value).collect())
+        }
+        serde_json::Value::Object(entries) => {
+            let mut map = HashMap::new();
+            for (key, value) in entries {
+                map.insert(MapKey::String(key), json_to_value(value));
+            }
+            Value::Map(std::rc::Rc::new(std::cell::RefCell::new(map)))
+        }
+    }
+}
+
+fn value_to_json(value: &Value) -> Result<serde_json::Value, RuntimeError> {
+    match value {
+        Value::Num(v) => serde_json::Number::from_f64(*v)
+            .map(serde_json::Value::Number)
+            .ok_or_else(|| "json_stringify cannot encode non-finite numbers".into()),
+        Value::Str(v) => Ok(serde_json::Value::String(v.clone())),
+        Value::Bool(v) => Ok(serde_json::Value::Bool(*v)),
+        Value::Null => Ok(serde_json::Value::Null),
+        Value::Array(values) => {
+            Ok(serde_json::Value::Array(
+                values.iter().map(value_to_json).collect::<Result<Vec<_>, _>>()?
+            ))
+        }
+        Value::Map(map) => {
+            let mut out = serde_json::Map::new();
+            for (key, value) in map.borrow().iter() {
+                let key = match key {
+                    MapKey::String(key) => key.clone(),
+                    _ => return Err("json_stringify requires string map keys".into()),
+                };
+                out.insert(key, value_to_json(value)?);
+            }
+            Ok(serde_json::Value::Object(out))
+        }
+        Value::Struct { fields, .. } => {
+            let mut out = serde_json::Map::new();
+            for (key, value) in fields {
+                out.insert(key.clone(), value_to_json(value)?);
+            }
+            Ok(serde_json::Value::Object(out))
+        }
+        Value::Enum { name, variant, value } => {
+            let mut out = serde_json::Map::new();
+            out.insert("type".into(), serde_json::Value::String(name.clone()));
+            out.insert("variant".into(), serde_json::Value::String(variant.clone()));
+            out.insert(
+                "value".into(),
+                match value {
+                    Some(value) => value_to_json(value)?,
+                    None => serde_json::Value::Null,
+                },
+            );
+            Ok(serde_json::Value::Object(out))
+        }
+        Value::Set(set) => {
+            let values = set.borrow().iter().map(|key| {
+                match key {
+                    MapKey::Number(bits) => {
+                        serde_json::Number::from_f64(f64::from_bits(*bits))
+                            .map(serde_json::Value::Number)
+                            .ok_or_else(|| "json_stringify cannot encode non-finite set values".into())
+                    }
+                    MapKey::String(value) => Ok(serde_json::Value::String(value.clone())),
+                    MapKey::Bool(value) => Ok(serde_json::Value::Bool(*value)),
+                    MapKey::Null => Ok(serde_json::Value::Null),
+                }
+            }).collect::<Result<Vec<_>, RuntimeError>>()?;
+            Ok(serde_json::Value::Array(values))
+        }
+        Value::Closure { .. } | Value::Iterator(_) => {
+            Err("json_stringify cannot encode closures or iterators".into())
+        }
+    }
+}
+
+fn parse_json(source: &str) -> Result<Value, RuntimeError> {
+    let value = serde_json::from_str::<serde_json::Value>(source)
+        .map_err(|e| format!("invalid JSON: {}", e))?;
+    Ok(json_to_value(value))
+}
+
+fn stringify_json(value: &Value) -> Result<String, RuntimeError> {
+    serde_json::to_string(&value_to_json(value)?)
+        .map_err(|e| format!("cannot encode JSON: {}", e).into())
 }
 
 fn num(v: Value) -> Result<f64, RuntimeError> {
