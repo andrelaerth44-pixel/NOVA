@@ -1,3 +1,8 @@
+mod span;
+mod types;
+mod ir;
+mod diagnostics;
+
 use std::{collections::HashMap, env, fs};
 
 #[derive(Clone, Debug, PartialEq)]
