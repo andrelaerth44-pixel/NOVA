@@ -184,7 +184,7 @@ impl Vm {
                 let base = self.eval(base)?;
                 let index = self.eval(index)?;
                 match base {
-                    Value::Array(values) {
+                    Value::Array(values) => {
                         let i = num(index)? as i64;
                         if i < 0 || i as usize >= values.len() { return Err("array index out of bounds".into()); }
                         Ok(values[i as usize].clone())
