@@ -1,0 +1,56 @@
+name: NOVA native type diagnostic
+
+on:
+  push:
+    branches:
+      - feat/native-closure-abi
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Capture native type diagnostics
+        shell: bash
+        run: |
+          set +e
+          cargo test > /tmp/test.log 2>&1; a=$?
+          cargo run --release -- build-native-ssa examples/structs.nova /tmp/nova-struct-native > /tmp/struct.log 2>&1; b=$?
+          if [ -x /tmp/nova-struct-native ]; then /tmp/nova-struct-native > /tmp/struct.out 2>&1; c=$?; else c=127; fi
+          cat > /tmp/native_enum.nova <<'EOF'
+          enum Status {
+              Ready
+              Running
+              Failed(string)
+          }
+
+          status = Status.Failed("oops")
+          match status {
+              Failed(message) {
+                  print message
+              },
+              else {
+                  print "other"
+              }
+          }
+          EOF
+          cargo run --release -- check /tmp/native_enum.nova > /tmp/enum-check.log 2>&1; d=$?
+          cargo run --release -- ssa /tmp/native_enum.nova > /tmp/enum-ssa.log 2>&1; e=$?
+          cargo run --release -- build-native-ssa /tmp/native_enum.nova /tmp/nova-enum-native > /tmp/enum-build.log 2>&1; f=$?
+          if [ -x /tmp/nova-enum-native ]; then /tmp/nova-enum-native > /tmp/enum.out 2>&1; g=$?; else g=127; fi
+          {
+            echo "test=$a struct_build=$b struct_exec=$c enum_check=$d enum_ssa=$e enum_build=$f enum_exec=$g"
+            echo "===== test tail ====="; tail -n 60 /tmp/test.log
+            echo "===== struct build ====="; cat /tmp/struct.log
+            echo "===== struct output ====="; cat /tmp/struct.out
+            echo "===== enum check ====="; cat /tmp/enum-check.log
+            echo "===== enum ssa ====="; cat /tmp/enum-ssa.log
+            echo "===== enum build ====="; cat /tmp/enum-build.log
+            echo "===== enum output ====="; cat /tmp/enum.out
+          } > /tmp/diagnostic.log
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: nova-native-type-diagnostic
+          path: /tmp/diagnostic.log
