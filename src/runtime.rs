@@ -1,4 +1,4 @@
-use crate::{Expr, Stmt, Token, Value, Parser, lex};
+use crate::{Expr, Stmt, Token, Value, Pattern, Parser, lex};
 use std::{collections::HashMap, fs};
 
 #[derive(Clone)]
@@ -54,8 +54,21 @@ impl Vm {
             }
         }
     }
+    fn matches_pattern(pattern:&Pattern,value:&Value,binding:&mut Option<Value>)->bool {
+        match pattern {
+            Pattern::Wildcard => true,
+            Pattern::Literal(expr) => match expr {
+                Expr::Val(v) => v.equals(value),
+                _ => false,
+            },
+            Pattern::Enum{variant,..} => match value {
+                Value::Enum{variant:actual,value:payload,..} if actual==variant => { *binding=payload.as_deref().cloned(); true },
+                _ => false,
+            }
+        }
+    }
     fn bin(&self,a:Value,o:&Token,b:Value)->Result<Value,String>{match o{Token::Plus=>match(a,b){(Value::Num(x),Value::Num(y))=>Ok(Value::Num(x+y)),(Value::Str(x),Value::Str(y))=>Ok(Value::Str(x+&y)),_=>Err("unsupported +".into())},Token::Minus=>num2(a,b,|x,y|x-y),Token::Star=>num2(a,b,|x,y|x*y),Token::Slash=>div2(a,b),Token::Percent=>mod2(a,b),Token::EqEq=>Ok(Value::Bool(a.equals(&b))),Token::Ne=>Ok(Value::Bool(!a.equals(&b))),Token::Lt=>cmp2(a,b,|x,y|x<y),Token::Le=>cmp2(a,b,|x,y|x<=y),Token::Gt=>cmp2(a,b,|x,y|x>y),Token::Ge=>cmp2(a,b,|x,y|x>=y),Token::And=>Ok(Value::Bool(a.truth()&&b.truth())),Token::Or=>Ok(Value::Bool(a.truth()||b.truth())),_=>Err("bad operator".into())}}
-    fn exec(&mut self,s:&[Stmt])->Result<Option<Value>,String>{for x in s{match x{Stmt::Expr(e)=>{self.eval(e)?;},Stmt::Let(n,_,e)|Stmt::Assign(n,e)=>{let v=self.eval(e)?;self.vars.insert(n.clone(),v);},Stmt::Print(e)=>println!("{}",self.eval(e)?),Stmt::Return(e)=>return Ok(Some(self.eval(e)?)),Stmt::If(c,a,b)=>{if self.eval(c)?.truth(){if let Some(v)=self.exec(a)?{return Ok(Some(v))}}else if let Some(v)=self.exec(b)?{return Ok(Some(v))}},Stmt::While(c,b)=>{while self.eval(c)?.truth(){if let Some(v)=self.exec(b)?{return Ok(Some(v))}}},Stmt::For(n,it,b)=>{let v=self.eval(it)?;match v{Value::Array(xs)=>{for x in xs{self.vars.insert(n.clone(),x);if let Some(v)=self.exec(b)?{return Ok(Some(v))}}},_=>return Err("for expects an array or range".into())}},Stmt::Match(value,arms,otherwise)=>{let v=self.eval(value)?;let mut done=false;for(pat,body)in arms{if self.eval(pat)?.equals(&v){if let Some(r)=self.exec(body)?{return Ok(Some(r))}done=true;break}}if !done{if let Some(r)=self.exec(otherwise)?{return Ok(Some(r))}}},Stmt::Import(path)=>{let resolved={let p=std::path::Path::new(path);if p.is_absolute(){p.to_path_buf()}else if let Some(base)=self.module_stack.last(){base.join(p)}else{p.to_path_buf()}};let key=resolved.to_string_lossy().to_string();if !self.modules.contains_key(&key){let src=fs::read_to_string(&resolved).map_err(|e|format!("cannot import {}: {}",resolved.display(),e))?;let toks=lex(&src)?;let mut p=Parser::new(toks);let program=p.program()?;self.modules.insert(key.clone(),true);let parent=resolved.parent().map(|x|x.to_path_buf()).unwrap_or_else(||std::path::PathBuf::from("."));self.module_stack.push(parent);let r=self.exec(&program);self.module_stack.pop();r?;}},Stmt::Fn(n,a,_,b)=>{self.fns.insert(n.clone(),Function{args:a.iter().map(|x|x.0.clone()).collect(),body:b.clone()});},Stmt::StructDecl(_,_)=>{},Stmt::EnumDecl(_,_)=>{}}}Ok(None)}
+    fn exec(&mut self,s:&[Stmt])->Result<Option<Value>,String>{for x in s{match x{Stmt::Expr(e)=>{self.eval(e)?;},Stmt::Let(n,_,e)|Stmt::Assign(n,e)=>{let v=self.eval(e)?;self.vars.insert(n.clone(),v);},Stmt::Print(e)=>println!("{}",self.eval(e)?),Stmt::Return(e)=>return Ok(Some(self.eval(e)?)),Stmt::If(c,a,b)=>{if self.eval(c)?.truth(){if let Some(v)=self.exec(a)?{return Ok(Some(v))}}else if let Some(v)=self.exec(b)?{return Ok(Some(v))}},Stmt::While(c,b)=>{while self.eval(c)?.truth(){if let Some(v)=self.exec(b)?{return Ok(Some(v))}}},Stmt::For(n,it,b)=>{let v=self.eval(it)?;match v{Value::Array(xs)=>{for x in xs{self.vars.insert(n.clone(),x);if let Some(v)=self.exec(b)?{return Ok(Some(v))}}},_=>return Err("for expects an array or range".into())}},Stmt::Match(value,arms,otherwise)=>{let v=self.eval(value)?;let mut done=false;for(pattern,body)in arms{let mut binding=None;if Self::matches_pattern(pattern,&v,&mut binding){if let Pattern::Enum{binding:Some(name),..}=pattern{if let Some(value)=binding{self.vars.insert(name.clone(),value);}}if let Some(r)=self.exec(body)?{return Ok(Some(r))}done=true;break}}if !done{if let Some(r)=self.exec(otherwise)?{return Ok(Some(r))}}},Stmt::Import(path)=>{let resolved={let p=std::path::Path::new(path);if p.is_absolute(){p.to_path_buf()}else if let Some(base)=self.module_stack.last(){base.join(p)}else{p.to_path_buf()}};let key=resolved.to_string_lossy().to_string();if !self.modules.contains_key(&key){let src=fs::read_to_string(&resolved).map_err(|e|format!("cannot import {}: {}",resolved.display(),e))?;let toks=lex(&src)?;let mut p=Parser::new(toks);let program=p.program()?;self.modules.insert(key.clone(),true);let parent=resolved.parent().map(|x|x.to_path_buf()).unwrap_or_else(||std::path::PathBuf::from("."));self.module_stack.push(parent);let r=self.exec(&program);self.module_stack.pop();r?;}},Stmt::Fn(n,a,_,b)=>{self.fns.insert(n.clone(),Function{args:a.iter().map(|x|x.0.clone()).collect(),body:b.clone()});},Stmt::StructDecl(_,_)=>{},Stmt::EnumDecl(_,_)=>{}}}Ok(None)}
 }
 fn num(v:Value)->Result<f64,String>{match v{Value::Num(n)=>Ok(n),_=>Err("number expected".into())}}
 fn num2(a:Value,b:Value,f:fn(f64,f64)->f64)->Result<Value,String>{Ok(Value::Num(f(num(a)?,num(b)?)))}
