@@ -311,3 +311,42 @@ pub fn format_module(m: &Module) -> String {
     }
     out
 }
+
+impl SsaFunction {
+    /// Verifies that every instruction operand is defined before use and that
+    /// every basic block has a terminator. This is the first strict SSA gate.
+    pub fn verify_operands(&self) -> Result<(), String> {
+        self.validate()?;
+        let mut defined = std::collections::HashSet::<ValueId>::new();
+        for (_, _, id) in &self.params { defined.insert(*id); }
+        for block in &self.blocks {
+            for id in &block.params { defined.insert(*id); }
+            for (id, instr) in &block.instrs {
+                let uses = match instr {
+                    SsaInstr::Const(_) => Vec::new(),
+                    SsaInstr::Load { .. } => Vec::new(),
+                    SsaInstr::Store { value, .. } => vec![*value],
+                    SsaInstr::Unary { value, .. } => vec![*value],
+                    SsaInstr::Binary { left, right, .. } => vec![*left, *right],
+                    SsaInstr::Call { args, .. } => args.clone(),
+                    SsaInstr::Phi { incomings, .. } => incomings.iter().map(|(_,v)| *v).collect(),
+                };
+                for value in uses {
+                    if !defined.contains(&value) {
+                        return Err(format!("SSA value {} is used before definition in block {}", value, block.id));
+                    }
+                }
+                defined.insert(*id);
+            }
+            match &block.terminator {
+                Some(Terminator::Branch { condition, .. }) if !defined.contains(condition) =>
+                    return Err(format!("SSA branch in block {} uses undefined value {}", block.id, condition)),
+                Some(Terminator::Return(Some(value))) if !defined.contains(value) =>
+                    return Err(format!("SSA return in block {} uses undefined value {}", block.id, value)),
+                None => return Err(format!("SSA block {} has no terminator", block.id)),
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+}
