@@ -247,7 +247,7 @@ impl Builder {
                     self.set_current(yes);
                     if let Pattern::Enum { binding: Some(name), .. } = pattern {
                         let payload = self.emit(SsaInstr::Call { name: "enum_payload".into(), args: vec![subject], result: IrType::Any });
-                        self.bind(name, payload);
+                        self.bind(name.to_string(), payload);
                     }
                     self.stmt_list(body);
                     if self.blocks[self.current].terminator.is_none() { self.blocks[self.current].terminator = Some(Terminator::Jump(exit)); }
