@@ -44,7 +44,7 @@ pub enum Pattern {
 #[derive(Clone, Debug)]
 pub enum Value {
     Num(f64), Str(String), Bool(bool), Array(Vec<Value>),
-    Map(HashMap<MapKey, Value>), Set(std::collections::HashSet<MapKey>),
+    Map(Rc<RefCell<HashMap<MapKey, Value>>>), Set(Rc<RefCell<std::collections::HashSet<MapKey>>>),
     Struct { name: String, fields: std::collections::HashMap<String, Value> },
     Enum { name: String, variant: String, value: Option<Box<Value>> },
     Closure { args: Vec<String>, body: Vec<Stmt>, env: EnvRef },
@@ -59,9 +59,10 @@ impl Value {
             (Value::Null,Value::Null)=>true,
             (Value::Array(a),Value::Array(b))=>a.len()==b.len()&&a.iter().zip(b).all(|(x,y)|x.equals(y)),
             (Value::Map(a),Value::Map(b)) => {
+                let a=a.borrow(); let b=b.borrow();
                 a.len()==b.len() && a.iter().all(|(k,v)| b.get(k).is_some_and(|x| v.equals(x)))
             },
-            (Value::Set(a),Value::Set(b)) => a == b,
+            (Value::Set(a),Value::Set(b)) => a.borrow().eq(&b.borrow()),
             (Value::Struct{name:an,fields:af},Value::Struct{name:bn,fields:bf})=>an==bn&&af.len()==bf.len()&&af.iter().all(|(k,v)|bf.get(k).is_some_and(|x|v.equals(x))),
             (Value::Enum{name:an,variant:av,value:ax},Value::Enum{name:bn,variant:bv,value:bx})=>an==bn&&av==bv&&match (ax,bx){(None,None)=>true,(Some(a),Some(b))=>a.equals(b),_=>false},
             (Value::Closure{..},Value::Closure{..})=>false,
@@ -71,7 +72,7 @@ impl Value {
     pub fn truth(&self)->bool {
         match self {
             Value::Bool(x)=>*x, Value::Num(x)=>*x!=0.0, Value::Str(x)=>!x.is_empty(),
-            Value::Array(x)=>!x.is_empty(), Value::Map(x)=>!x.is_empty(), Value::Set(x)=>!x.is_empty(), Value::Struct{..}=>true, Value::Enum{..}=>true, Value::Closure{..}=>true, Value::Null=>false
+            Value::Array(x)=>!x.is_empty(), Value::Map(x)=>!x.borrow().is_empty(), Value::Set(x)=>!x.borrow().is_empty(), Value::Struct{..}=>true, Value::Enum{..}=>true, Value::Closure{..}=>true, Value::Null=>false
         }
     }
 }
