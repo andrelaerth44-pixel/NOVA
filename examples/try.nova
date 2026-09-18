@@ -1,0 +1,28 @@
+fn maybe_number(flag: bool) -> Option<i64> {
+    if flag {
+        return Some(42)
+    }
+    return None
+}
+
+fn compute(flag: bool) -> Option<i64> {
+    value = maybe_number(flag)?
+    return Some(value + 8)
+}
+
+fn parse_name(ok: bool) -> Result<string, string> {
+    if ok {
+        return Ok("NOVA")
+    }
+    return Err("name unavailable")
+}
+
+fn greet(ok: bool) -> Result<string, string> {
+    name = parse_name(ok)?
+    return Ok("Hello " + name)
+}
+
+print unwrap(compute(true))
+print is_none(compute(false))
+print unwrap(greet(true))
+print unwrap_or(greet(false), "fallback")
