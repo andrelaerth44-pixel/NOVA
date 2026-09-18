@@ -117,6 +117,7 @@ pub enum SsaInstr {
     EnumTest { value: ValueId, variant: String },
     EnumPayload { value: ValueId, ty: IrType },
     Try { value: ValueId, result: IrType },
+    Closure { params: Vec<String>, captures: Vec<(String, ValueId)>, ty: IrType },
     Phi { incomings: Vec<(usize, ValueId)>, ty: IrType },
 }
 
@@ -560,6 +561,11 @@ impl SsaFunction {
                     SsaInstr::EnumPayload { value, .. } |
                     SsaInstr::Try { value, .. } => {
                         check_use(*value, block.id, idx, &defs, &dom)?;
+                    }
+                    SsaInstr::Closure { captures, .. } => {
+                        for (_, value) in captures {
+                            check_use(*value, block.id, idx, &defs, &dom)?;
+                        }
                     }
                     SsaInstr::Phi { incomings, .. } => {
                         let expected: std::collections::HashSet<_> = preds[block.id].iter().copied().collect();
