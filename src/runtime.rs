@@ -46,6 +46,21 @@ impl Vm {
                 if n=="read_file" {if a.len()!=1{return Err("read_file expects 1 argument".into())}let path=self.eval(&a[0])?;let path=match path{Value::Str(x)=>x,_=>return Err("read_file expects a string path".into())};return Ok(Value::Str(fs::read_to_string(&path).map_err(|e|format!("cannot read {}: {}",path,e))?));}
                 if n=="write_file" {if a.len()!=2{return Err("write_file expects 2 arguments".into())}let path=self.eval(&a[0])?;let data=self.eval(&a[1])?;let path=match path{Value::Str(x)=>x,_=>return Err("write_file expects a string path".into())};let data=match data{Value::Str(x)=>x,_=>return Err("write_file expects string data".into())};fs::write(&path,&data).map_err(|e|format!("cannot write {}: {}",path,e))?;return Ok(Value::Null);}
                 if n=="exists" {if a.len()!=1{return Err("exists expects 1 argument".into())}let path=self.eval(&a[0])?;let path=match path{Value::Str(x)=>x,_=>return Err("exists expects a string path".into())};return Ok(Value::Bool(std::path::Path::new(&path).exists()));}
+                if n=="is_some" || n=="is_none" || n=="is_ok" || n=="is_err" {
+                    if a.len()!=1{return Err(format!("{} expects 1 argument",n))}
+                    let v=self.eval(&a[0])?;
+                    let ok=match (&v,n.as_str()){(Value::Enum{variant,..},"is_some")=>variant=="Some",(Value::Enum{variant,..},"is_none")=>variant=="None",(Value::Enum{variant,..},"is_ok")=>variant=="Ok",(Value::Enum{variant,..},"is_err")=>variant=="Err",_=>false};
+                    return Ok(Value::Bool(ok));
+                }
+                if n=="unwrap" {
+                    if a.len()!=1{return Err("unwrap expects 1 argument".into())}
+                    return match self.eval(&a[0])? { Value::Enum{variant,value,..} if variant=="Some"||variant=="Ok" => Ok(value.map(|v|*v).unwrap_or(Value::Null)), Value::Enum{variant,..} if variant=="None"||variant=="Err" => Err(format!("unwrap called on {}",variant)), v=>Ok(v) };
+                }
+                if n=="unwrap_or" {
+                    if a.len()!=2{return Err("unwrap_or expects 2 arguments".into())}
+                    let v=self.eval(&a[0])?; let fallback=self.eval(&a[1])?;
+                    return match v { Value::Enum{variant,value,..} if variant=="Some"||variant=="Ok" => Ok(value.map(|v|*v).unwrap_or(fallback)), Value::Enum{variant,..} if variant=="None"||variant=="Err" => Ok(fallback), v=>Ok(v) };
+                }
                 if n=="env" {if a.len()!=1{return Err("env expects 1 argument".into())}let key=self.eval(&a[0])?;let key=match key{Value::Str(x)=>x,_=>return Err("env expects a string key".into())};return Ok(std::env::var(&key).map(Value::Str).unwrap_or(Value::Null));}
                 let f=self.fns.get(n).cloned().ok_or_else(||format!("undefined function {}",n))?;
                 if f.args.len()!=a.len(){return Err(format!("{} expects {} arguments",n,f.args.len()))}
