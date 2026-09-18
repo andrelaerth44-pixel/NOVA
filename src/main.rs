@@ -90,7 +90,7 @@ enum Stmt {
 #[derive(Clone, Debug)]
 enum Value { Num(f64), Str(String), Bool(bool), Array(Vec<Value>), Null }
 impl Value {
-    fn truth(&self)->bool { match self { Value::Bool(x)=>*x, Value::Num(x)=>*x!=0.0, Value::Str(x)=>!x.is_empty(), Value::Array(x)=>!x.is_empty(), Value::Null=>false } }
+    fn equals(&self, other:&Value)->bool { match (self, other) { (Value::Num(a),Value::Num(b))=>a==b,(Value::Str(a),Value::Str(b))=>a==b,(Value::Bool(a),Value::Bool(b))=>a==b,(Value::Null,Value::Null)=>true,(Value::Array(a),Value::Array(b))=>a.len()==b.len()&&a.iter().zip(b).all(|(x,y)|x.equals(y)), _=>false } }\n    fn truth(&self)->bool { match self { Value::Bool(x)=>*x, Value::Num(x)=>*x!=0.0, Value::Str(x)=>!x.is_empty(), Value::Array(x)=>!x.is_empty(), Value::Null=>false } }
 }
 impl std::fmt::Display for Value {
     fn fmt(&self,f:&mut std::fmt::Formatter<'_>)->std::fmt::Result {
@@ -146,9 +146,9 @@ impl Parser {
 
 #[derive(Clone)]
 struct Function { args:Vec<String>, body:Vec<Stmt> }
-struct Vm { vars:HashMap<String,Value>, fns:HashMap<String,Function>, modules:HashMap<String,bool> }
+struct Vm { vars:HashMap<String,Value>, fns:HashMap<String,Function>, modules:HashMap<String,bool>, module_stack:Vec<std::path::PathBuf> }
 impl Vm {
-    fn new()->Self{Self{vars:HashMap::new(),fns:HashMap::new(),modules:HashMap::new()}}
+    fn new()->Self{Self{vars:HashMap::new(),fns:HashMap::new(),modules:HashMap::new(),module_stack:Vec::new()}}
     fn eval(&mut self,e:&Expr)->Result<Value,String>{
         match e {
             Expr::Val(v)=>Ok(v.clone()), Expr::Var(n)=>self.vars.get(n).cloned().ok_or_else(||format!("undefined variable {}",n)),
@@ -176,7 +176,7 @@ impl Vm {
         match o {
             Token::Plus=>match(a,b){(Value::Num(x),Value::Num(y))=>Ok(Value::Num(x+y)),(Value::Str(x),Value::Str(y))=>Ok(Value::Str(x+&y)),_=>Err("unsupported +".into())},
             Token::Minus=>num2(a,b,|x,y|x-y),Token::Star=>num2(a,b,|x,y|x*y),Token::Slash=>div2(a,b),Token::Percent=>mod2(a,b),
-            Token::EqEq=>Ok(Value::Bool(a.to_string()==b.to_string())),Token::Ne=>Ok(Value::Bool(a.to_string()!=b.to_string())),
+            Token::EqEq=>Ok(Value::Bool(a.equals(&b))),Token::Ne=>Ok(Value::Bool(!a.equals(&b))),
             Token::Lt=>cmp2(a,b,|x,y|x<y),Token::Le=>cmp2(a,b,|x,y|x<=y),Token::Gt=>cmp2(a,b,|x,y|x>y),Token::Ge=>cmp2(a,b,|x,y|x>=y),
             Token::And=>Ok(Value::Bool(a.truth()&&b.truth())),Token::Or=>Ok(Value::Bool(a.truth()||b.truth())),_=>Err("bad operator".into())
         }
@@ -189,7 +189,7 @@ impl Vm {
             Stmt::While(c,b)=>{while self.eval(c)?.truth(){if let Some(v)=self.exec(b)?{return Ok(Some(v))}}},
             Stmt::For(n,it,b)=>{let v=self.eval(it)?;match v{Value::Array(xs)=>{for x in xs{self.vars.insert(n.clone(),x);if let Some(v)=self.exec(b)?{return Ok(Some(v))}}},_=>return Err("for expects an array or range".into())}},
             Stmt::Match(value,arms,otherwise)=>{let v=self.eval(value)?;let mut done=false;for (pat,body) in arms{if self.eval(pat)?.to_string()==v.to_string(){if let Some(r)=self.exec(body)?{return Ok(Some(r))}done=true;break}}if !done{if let Some(r)=self.exec(otherwise)?{return Ok(Some(r))}}},
-            Stmt::Import(path)=>{if !self.modules.contains_key(path){let src=fs::read_to_string(path).map_err(|e|format!("cannot import {}: {}",path,e))?;let toks=lex(&src)?;let mut p=Parser::new(toks);let program=p.program()?;self.modules.insert(path.clone(),true);self.exec(&program)?;}},
+            Stmt::Import(path)=>{ let resolved={let p=std::path::Path::new(path);if p.is_absolute(){p.to_path_buf()}else if let Some(base)=self.module_stack.last(){base.join(p)}else{p.to_path_buf()}}; let key=resolved.to_string_lossy().to_string(); if !self.modules.contains_key(&key){let src=fs::read_to_string(&resolved).map_err(|e|format!("cannot import {}: {}",resolved.display(),e))?;let toks=lex(&src)?;let mut p=Parser::new(toks);let program=p.program()?;self.modules.insert(key.clone(),true);let parent=resolved.parent().map(|x|x.to_path_buf()).unwrap_or_else(||std::path::PathBuf::from("."));self.module_stack.push(parent);let r=self.exec(&program);self.module_stack.pop();r?;}},
             Stmt::Fn(n,a,b)=>{self.fns.insert(n.clone(),Function{args:a.clone(),body:b.clone()});}
         }}Ok(None)
     }
@@ -433,7 +433,7 @@ fn run_semantic_check(program: &[Stmt]) -> Result<(), String> {
 
 fn main(){
     let a:Vec<String>=env::args().collect();
-    if a.len()<2 {eprintln!("NOVA 1.5.0\nusage: nova run <file> | nova check <file> | nova version");return}
+    if a.len()<2 {eprintln!("NOVA 1.5.0\nusage: nova run <file> | nova check <file> | nova ir <file> | nova version");return}
     if a[1]=="version"{println!("NOVA 1.5.0");return}
     if a.len()<3 {eprintln!("missing file");std::process::exit(2)}
     let src=match fs::read_to_string(&a[2]){Ok(x)=>x,Err(e)=>{eprintln!("{}",e);std::process::exit(1)}};
@@ -443,7 +443,7 @@ fn main(){
     if a[1]=="check"{if let Err(e)=run_semantic_check(&program){eprintln!("semantic error:\n{}",e);std::process::exit(1)}let m=optimizer::optimize(lower::lower(&program));if let Err(e)=lower::verify(&m){eprintln!("{}",e);std::process::exit(1)}println!("ok");return}
     if a[1]=="ir"{let m=optimizer::optimize(lower::lower(&program));if let Err(e)=lower::verify(&m){eprintln!("{}",e);std::process::exit(1)}print!("{}",ir::format_module(&m));return}
     if a[1]!="run"{eprintln!("unknown command {}",a[1]);std::process::exit(2)}
-    if let Err(e)=Vm::new().exec(&program){eprintln!("runtime error: {}",e);std::process::exit(1)}
+    let mut vm=Vm::new();let file_path=std::path::Path::new(&a[2]);let abs=fs::canonicalize(file_path).unwrap_or_else(|_|file_path.to_path_buf());vm.modules.insert(abs.to_string_lossy().to_string(),true);vm.module_stack.push(abs.parent().map(|x|x.to_path_buf()).unwrap_or_else(||std::path::PathBuf::from(".")));if let Err(e)=vm.exec(&program){eprintln!("runtime error: {}",e);std::process::exit(1)}
 }
 
 
