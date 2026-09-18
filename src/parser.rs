@@ -185,6 +185,8 @@ impl Parser {
                 let mut args=vec![];
                 if !self.eat(&Token::RParen) { loop { args.push(self.expr()?); if self.eat(&Token::RParen){break} if !self.eat(&Token::Comma){return Err("expected , in call".into())} } }
                 x = match x { Expr::Var(n)=>Expr::Call(n,args), other=>Expr::CallValue(Box::new(other),args) };
+            } else if self.eat(&Token::Question) {
+                x = Expr::Try(Box::new(x));
             } else { break; }
         }
         Ok(x)
