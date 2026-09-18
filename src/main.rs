@@ -14,6 +14,7 @@ mod app_parser;
 mod app_backend_android;
 mod runtime;
 mod semantic;
+mod ssa_lower;
 
 pub use token::Token;
 pub use ast::{Expr, Stmt, Value};
@@ -48,7 +49,7 @@ fn main(){
     let t=match lex(&src){Ok(x)=>x,Err(e)=>{eprintln!("lex error: {}",e);std::process::exit(1)}};
     let mut p=Parser::new(t);
     let program=match p.program(){Ok(x)=>x,Err(e)=>{eprintln!("parse error: {}",e);std::process::exit(1)}};
-    if a[1]=="check"{if let Err(e)=run_semantic_check(&program){eprintln!("semantic error:\n{}",e);std::process::exit(1)}let m=optimizer::optimize(lower::lower(&program));if let Err(e)=lower::verify(&m){eprintln!("{}",e);std::process::exit(1)}println!("ok");return}
+    if a[1]=="check"{if let Err(e)=run_semantic_check(&program){eprintln!("semantic error:\n{}",e);std::process::exit(1)}let m=optimizer::optimize(lower::lower(&program));if let Err(e)=lower::verify(&m){eprintln!("{}",e);std::process::exit(1)}if let Err(e)=ssa_lower::verify_program(&program){eprintln!("SSA error: {}",e);std::process::exit(1)}println!("ok");return}
     if a[1]=="ir"{let m=optimizer::optimize(lower::lower(&program));if let Err(e)=lower::verify(&m){eprintln!("{}",e);std::process::exit(1)}print!("{}",ir::format_module(&m));return}
     if a[1]=="build-c"||a[1]=="build-native"{let m=optimizer::optimize(lower::lower(&program));if let Err(e)=lower::verify(&m){eprintln!("{}",e);std::process::exit(1)}let out=if a.len()>3{&a[3]}else{"a.out"};let c=match backend_c::emit_c(&m){Ok(x)=>x,Err(e)=>{eprintln!("native backend error: {}",e);std::process::exit(1)}};if a[1]=="build-c"{if let Err(e)=fs::write(out,&c){eprintln!("cannot write {}: {}",out,e);std::process::exit(1)}println!("{}",out);return}let status=std::process::Command::new("cc").args(["-O3","-std=c11","-x","c","-","-o",out]).stdin(std::process::Stdio::piped()).spawn().and_then(|mut child|{use std::io::Write;if let Some(mut stdin)=child.stdin.take(){stdin.write_all(c.as_bytes())?;}child.wait()});match status{Ok(s) if s.success()=>println!("{}",out),Ok(s)=>{eprintln!("C compiler exited with {}",s);std::process::exit(1)},Err(e)=>{eprintln!("cannot invoke cc: {}",e);std::process::exit(1)}}return}
     if a[1]!="run"{eprintln!("unknown command {}",a[1]);std::process::exit(2)}
