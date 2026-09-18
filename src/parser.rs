@@ -114,6 +114,19 @@ impl Parser {
             },
             Token::LBracket=>{let mut a=vec![];if !self.eat(&Token::RBracket){loop{a.push(self.expr()?);if self.eat(&Token::RBracket){break}if !self.eat(&Token::Comma){return Err("expected ,".into())}}}Expr::Array(a)},
             Token::LParen=>{let x=self.expr()?;if !self.eat(&Token::RParen){return Err("expected )".into())}x},
+            Token::Fn=>{
+                if !self.eat(&Token::LParen){return Err("expected ( after fn in closure".into())}
+                let mut args=vec![];
+                if !self.eat(&Token::RParen){loop{
+                    let n=match self.take(){Token::Ident(x)=>x,_=>return Err("expected closure parameter".into())};
+                    if self.eat(&Token::Colon){let _=self.type_name()?;}
+                    args.push(n);
+                    if self.eat(&Token::RParen){break}
+                    if !self.eat(&Token::Comma){return Err("expected , in closure parameters".into())}
+                }}
+                let _ret=if self.eat(&Token::Arrow){Some(self.type_name()?)}else{None};
+                Expr::Closure(args,self.block()?)
+            },
             t=>return Err(format!("unexpected token {:?}",t))};
         let mut x = x;
         while self.eat(&Token::Dot) {
