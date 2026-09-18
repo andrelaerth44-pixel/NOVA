@@ -44,6 +44,98 @@ pub struct Module {
     pub functions: Vec<Function>,
 }
 
+/// SSA-ready control-flow representation. The legacy stack IR above remains
+/// available while the compiler migrates lowering/backend code to SSA.
+pub type ValueId = u32;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SsaValue {
+    Number(f64),
+    String(String),
+    Bool(bool),
+    Null,
+    Param(ValueId),
+    Instr(ValueId),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SsaInstr {
+    Const(SsaValue),
+    Load { name: String },
+    Store { name: String, value: ValueId },
+    Unary { op: String, value: ValueId, ty: IrType },
+    Binary { op: String, left: ValueId, right: ValueId, ty: IrType },
+    Call { name: String, args: Vec<ValueId>, result: IrType },
+    Phi { incomings: Vec<(usize, ValueId)>, ty: IrType },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Terminator {
+    Jump(usize),
+    Branch { condition: ValueId, then_block: usize, else_block: usize },
+    Return(Option<ValueId>),
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SsaBlock {
+    pub id: usize,
+    pub params: Vec<ValueId>,
+    pub instrs: Vec<(ValueId, SsaInstr)>,
+    pub terminator: Option<Terminator>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SsaFunction {
+    pub name: String,
+    pub params: Vec<(String, IrType, ValueId)>,
+    pub return_type: IrType,
+    pub blocks: Vec<SsaBlock>,
+}
+
+impl SsaFunction {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.blocks.is_empty() {
+            return Err(format!("SSA function {} has no blocks", self.name));
+        }
+        let n = self.blocks.len();
+        let mut defined = std::collections::HashSet::<ValueId>::new();
+
+        for block in &self.blocks {
+            if block.id >= n {
+                return Err(format!("SSA function {} has invalid block {}", self.name, block.id));
+            }
+            for &v in &block.params {
+                if !defined.insert(v) {
+                    return Err(format!("SSA value {} is defined more than once", v));
+                }
+            }
+            for &(v, ref instr) in &block.instrs {
+                if !defined.insert(v) {
+                    return Err(format!("SSA value {} is defined more than once", v));
+                }
+                if let SsaInstr::Phi { incomings, .. } = instr {
+                    for (pred, _) in incomings {
+                        if *pred >= n {
+                            return Err(format!("SSA phi in block {} references invalid predecessor {}", block.id, pred));
+                        }
+                    }
+                }
+            }
+            match &block.terminator {
+                Some(Terminator::Jump(t)) if *t >= n =>
+                    return Err(format!("SSA block {} jumps to invalid block {}", block.id, t)),
+                Some(Terminator::Branch { then_block, else_block, .. }) => {
+                    if *then_block >= n || *else_block >= n {
+                        return Err(format!("SSA branch in block {} has invalid target", block.id));
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+}
+
 impl Module {
     pub fn new_block(&mut self) -> usize {
         let id = self.blocks.len();
