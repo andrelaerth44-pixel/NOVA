@@ -303,8 +303,10 @@ impl Checker {
                             if params.len()!=args.len() { self.error(format!("{} expects {} arguments, got {}", name, params.len(), args.len())); }
                             for (i,arg) in args.iter().enumerate() {
                                 let got=self.infer(arg);
-                                if let Some(want)=params.get(i) && !want.compatible(&got) {
-                                    self.error(format!("argument {} of {} expects {}, got {}",i+1,name,want.name(),got.name()));
+                                if let Some(want)=params.get(i) {
+                                    if !want.compatible(&got) {
+                                        self.error(format!("argument {} of {} expects {}, got {}",i+1,name,want.name(),got.name()));
+                                    }
                                 }
                             }
                             return *ret;
