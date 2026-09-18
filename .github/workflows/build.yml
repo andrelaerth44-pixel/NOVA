@@ -27,3 +27,15 @@ jobs:
           EOF
           cargo run --release -- check /tmp/hello.nova
           cargo run --release -- run /tmp/hello.nova
+      - name: Native backend smoke test
+        shell: bash
+        run: |
+          cat > /tmp/native.nova <<'EOF'
+          fn add(a, b) {
+              return a + b
+          }
+          print add(20, 22)
+          EOF
+          cargo run --release -- build-native /tmp/native.nova /tmp/nova-native
+          test -x /tmp/nova-native
+          test "$(/tmp/nova-native)" = "42"
