@@ -42,6 +42,17 @@ jobs:
           test "$(/tmp/nova-native)" = "42"
 
 
+      - name: SSA loop smoke test
+        shell: bash
+        run: |
+          cat > /tmp/ssa_loop.nova <<'EOF'
+          x = 0
+          while x < 3 {
+              x = x + 1
+          }
+          print x
+          EOF
+          cargo run --release -- check /tmp/ssa_loop.nova
       - name: Explicit type smoke test
         shell: bash
         run: |
