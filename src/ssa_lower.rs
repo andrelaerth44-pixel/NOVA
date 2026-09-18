@@ -57,6 +57,22 @@ impl Builder {
                 let args = xs.iter().map(|x| self.expr(x)).collect::<Vec<_>>();
                 self.emit(SsaInstr::Call { name: "array".into(), args, result: IrType::Any })
             }
+            Expr::Map(entries) => {
+                let mut args = Vec::with_capacity(entries.len() * 2);
+                for (key, value) in entries {
+                    args.push(self.expr(key));
+                    args.push(self.expr(value));
+                }
+                self.emit(SsaInstr::Call { name: "map".into(), args, result: IrType::Any })
+            }
+            Expr::Set(values) => {
+                let args = values.iter().map(|x| self.expr(x)).collect::<Vec<_>>();
+                self.emit(SsaInstr::Call { name: "set".into(), args, result: IrType::Any })
+            }
+            Expr::Index(base, index) => {
+                let args = vec![self.expr(base), self.expr(index)];
+                self.emit(SsaInstr::Call { name: "index".into(), args, result: IrType::Any })
+            }
             Expr::Unary(op, x) => {
                 let value = self.expr(x);
                 let ty = if *op == Token::Bang { IrType::Bool } else { IrType::Number };
