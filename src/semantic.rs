@@ -56,6 +56,7 @@ impl Checker {
             }
             Value::Map(_) => crate::types::Type::Generic("Map".into(), vec![crate::types::Type::Any, crate::types::Type::Any]),
             Value::Set(_) => crate::types::Type::Generic("Set".into(), vec![crate::types::Type::Any]),
+            Value::Iterator(_) => crate::types::Type::Generic("Iterator".into(), vec![crate::types::Type::Any]),
         }
     }
 
@@ -326,6 +327,42 @@ impl Checker {
                            else if name=="Ok" { crate::types::Type::Generic("Result".into(),vec![got,crate::types::Type::Any]) }
                            else { crate::types::Type::Generic("Result".into(),vec![crate::types::Type::Any,got]) };
                 }
+                let iterator_builtin = match name.as_str() {
+                    "iter" => {
+                        if args.len()!=1 { self.error("iter expects 1 argument"); return crate::types::Type::Generic("Iterator".into(), vec![crate::types::Type::Any]); }
+                        let input = self.infer(&args[0]);
+                        let item = match input {
+                            crate::types::Type::Array(inner) => *inner,
+                            crate::types::Type::String => crate::types::Type::String,
+                            crate::types::Type::Generic(n, args) if n=="Iterator" && args.len()==1 => args[0].clone(),
+                            _ => { self.error(format!("iter expects an array, string or iterator, got {}", input.name())); crate::types::Type::Any }
+                        };
+                        return crate::types::Type::Generic("Iterator".into(), vec![item]);
+                    }
+                    "next" => {
+                        if args.len()!=1 { self.error("next expects 1 argument"); return crate::types::Type::Generic("Option".into(), vec![crate::types::Type::Any]); }
+                        let input=self.infer(&args[0]);
+                        return match input {
+                            crate::types::Type::Generic(n, mut aa) if n=="Iterator" && aa.len()==1 => crate::types::Type::Generic("Option".into(), vec![aa.remove(0)]),
+                            other => { self.error(format!("next expects Iterator<T>, got {}", other.name())); crate::types::Type::Generic("Option".into(), vec![crate::types::Type::Any]) }
+                        };
+                    }
+                    "has_next" => {
+                        if args.len()!=1 { self.error("has_next expects 1 argument"); }
+                        let input=self.infer(&args[0]);
+                        if !matches!(input, crate::types::Type::Generic(n, _) if n=="Iterator") { self.error("has_next expects Iterator<T>"); }
+                        return crate::types::Type::Bool;
+                    }
+                    "collect" => {
+                        if args.len()!=1 { self.error("collect expects 1 argument"); return crate::types::Type::Array(Box::new(crate::types::Type::Any)); }
+                        let input=self.infer(&args[0]);
+                        return match input {
+                            crate::types::Type::Generic(n, mut aa) if n=="Iterator" && aa.len()==1 => crate::types::Type::Array(Box::new(aa.remove(0))),
+                            other => { self.error(format!("collect expects Iterator<T>, got {}", other.name())); crate::types::Type::Array(Box::new(crate::types::Type::Any)) }
+                        };
+                    }
+                    _ => {}
+                };
                 let builtin = match name.as_str() {
                     "range" => Some((vec![crate::types::Type::Number], crate::types::Type::Array(Box::new(crate::types::Type::Number)))),
                     "str" => Some((vec![crate::types::Type::Any], crate::types::Type::String)),
@@ -449,6 +486,7 @@ impl Checker {
                 let t = self.infer(iterable);
                 let item = match t {
                     crate::types::Type::Array(inner) => *inner,
+                    crate::types::Type::Generic(name, args) if name=="Iterator" && args.len()==1 => args[0].clone(),
                     _ => crate::types::Type::Any,
                 };
                 self.push_scope();
