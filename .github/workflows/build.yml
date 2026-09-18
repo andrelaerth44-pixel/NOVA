@@ -39,3 +39,9 @@ jobs:
           cargo run --release -- build-native /tmp/native.nova /tmp/nova-native
           test -x /tmp/nova-native
           test "$(/tmp/nova-native)" = "42"
+
+
+      - name: Explicit type smoke test
+        shell: bash
+        run: |
+          cargo run --release -- check examples/typed.nova
