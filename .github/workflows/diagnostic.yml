@@ -11,43 +11,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Run exact closure smoke
+      - name: Capture workflow preflight
         shell: bash
         run: |
           set +e
-          cargo run --release -- check examples/closures.nova > /tmp/check.log 2>&1
-          a=$?
-          cargo run --release -- ssa examples/closures.nova > /tmp/ssa.log 2>&1
-          b=$?
-          grep -Fq 'Closure' /tmp/ssa.log; c1=$?
-          grep -Fq 'captures' /tmp/ssa.log; c2=$?
-          grep -Fq 'CallIndirect' /tmp/ssa.log; c3=$?
-          grep -Fq 'make_counter__closure0' /tmp/ssa.log; c4=$?
-          grep -Fq 'value' /tmp/ssa.log; c5=$?
-          cargo run --release -- abi examples/closures.nova > /tmp/abi.log 2>&1
-          d=$?
-          grep -Fq 'NOVA ABI v1' /tmp/abi.log; d1=$?
-          grep -Fq 'make_counter__closure0' /tmp/abi.log; d2=$?
-          grep -Fq 'NovaEnv*' /tmp/abi.log; d3=$?
-          cargo run --release -- build-native-ssa examples/closures.nova /tmp/nova-ssa-native > /tmp/build-native.log 2>&1
-          e=$?
-          test -x /tmp/nova-ssa-native; e1=$?
-          /tmp/nova-ssa-native > /tmp/native.out 2>&1
-          e2=$?
-          test "$(< /tmp/native.out)" = $'1\n2'; e3=$?
-          cargo run --release -- run examples/closures.nova > /tmp/vm.out 2>&1
-          f1=$?
-          grep -Fxq "1" /tmp/vm.out; f2=$?
-          grep -Fxq "2" /tmp/vm.out; f3=$?
+          cargo fmt -- --check > /tmp/fmt.log 2>&1; a=$?
+          cargo test > /tmp/test.log 2>&1; b=$?
+          cargo build --release > /tmp/build.log 2>&1; c=$?
+          cargo run --release -- version > /tmp/version.log 2>&1; d=$?
           {
-            echo "check=$a ssa=$b closure=$c1 captures=$c2 indirect=$c3 symbol=$c4 value=$c5 abi=$d abi_header=$d1 abi_symbol=$d2 abi_env=$d3 native=$e native_exec=$e2 native_output=$e3 vm=$f1 vm1=$f2 vm2=$f3"
-            echo "===== native output ====="
-            cat /tmp/native.out
-            echo "===== native build log tail ====="
-            tail -n 80 /tmp/build-native.log
+            echo "fmt=$a test=$b build=$c version=$d"
+            echo "===== fmt ====="
+            cat /tmp/fmt.log
+            echo "===== test tail ====="
+            tail -n 40 /tmp/test.log
+            echo "===== build tail ====="
+            tail -n 30 /tmp/build.log
+            echo "===== version ====="
+            cat /tmp/version.log
           } > /tmp/diagnostic.log
       - name: Upload diagnostic
         uses: actions/upload-artifact@v4
         with:
-          name: nova-closure-smoke
+          name: nova-preflight
           path: /tmp/diagnostic.log
