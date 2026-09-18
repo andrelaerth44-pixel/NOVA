@@ -327,6 +327,7 @@ impl Vm {
                         Value::Array(x) => x.len() as f64,
                         Value::Map(x) => x.borrow().len() as f64,
                         Value::Set(x) => x.borrow().len() as f64,
+                        Value::Iterator(x) => x.borrow().values.len().saturating_sub(x.borrow().index) as f64,
                         _ => return Err("len expects string, array, map or set".into()),
                     }));
                 }
@@ -519,29 +520,6 @@ impl Vm {
                             return Ok(Value::Null);
                         }
                         _ => return Err("set_* expects a Set value".into()),
-                    }
-                }
-
-                if let Some(callable) = self.lookup(n) {
-                    if let Value::Closure { args, body, env } = callable {
-                        if args.len() != a.len() {
-                            return Err(format!("closure expects {} arguments", args.len()).into());
-                        }
-                        let vals = a.iter().map(|e| self.eval(e)).collect::<Result<Vec<_>, _>>()?;
-                        let old_env = self.env.clone();
-                        self.env = std::rc::Rc::new(std::cell::RefCell::new(EnvFrame {
-                            values: HashMap::new(),
-                            parent: Some(env.clone()),
-                        }));
-                        for (k, v) in args.iter().zip(vals) { self.define(k.clone(), v); }
-                        let result = self.exec(&body);
-                        self.env = old_env;
-                        return match result {
-                            Ok(Some(v)) => Ok(v),
-                            Ok(None) => Ok(Value::Null),
-                            Err(RuntimeError::Propagate(v)) => Ok(v),
-                            Err(e) => Err(e),
-                        };
                     }
                 }
 
