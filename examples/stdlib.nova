@@ -4,6 +4,7 @@ joined = path_join(cwd, "main.nova")
 print path_basename(joined)
 print path_ext(joined)
 print path_stem(joined)
+print "NOVA"[1]
 print exists(cwd)
 
 payload = json_parse("{\"name\":\"NOVA\",\"value\":42}")
