@@ -178,7 +178,7 @@ jobs:
           EOF
           cargo run --release -- package-check /tmp/nova-packages/app > /tmp/nova-package.out
           grep -Fxq "app 0.1.0 root" /tmp/nova-package.out
-          grep -Fxq "util 0.2.0 root" /tmp/nova-package.out
+          grep -Fxq "util 0.2.0 path:../util" /tmp/nova-package.out
           grep -Fxq "ok" /tmp/nova-package.out
           cargo run --release -- package-lock /tmp/nova-packages/app > /tmp/nova-lock-path.out
           test -f /tmp/nova-packages/app/nova.lock
