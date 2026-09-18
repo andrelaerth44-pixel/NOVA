@@ -124,6 +124,7 @@ jobs:
           grep -Fxq "main.nova" /tmp/stdlib.out
           grep -Fxq "nova" /tmp/stdlib.out
           grep -Fxq "main" /tmp/stdlib.out
+          grep -Fxq "O" /tmp/stdlib.out
           grep -Fxq "true" /tmp/stdlib.out
           grep -Fxq "NOVA" /tmp/stdlib.out
           grep -Fxq "42" /tmp/stdlib.out
