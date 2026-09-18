@@ -71,7 +71,7 @@ fn emit_code(code: &[Instr], current_fn: Option<&Function>) -> Result<String, St
 ", expr));
             }
             Instr::Call { name, .. } if name == "try" => return Err("native C backend: Option/Result try propagation is currently VM/SSA only".into()),
-            Instr::Call { name, argc: 1, .. } if name == "print" => c.push_str("  printf(\\\"%.15g\\\\n\\\", stack[--sp]);\\n"),
+            Instr::Call { name, argc: 1, .. } if name == "print" => c.push_str(r#"  printf("%.15g\n", stack[--sp]);\n"#),
             Instr::Call { name, argc, result } => {
                 if name == "array" || name == "for_each" { return Err(format!("native C backend does not support builtin {}", name)); }
                 let args: Vec<String> = (0..*argc).map(|i| format!("stack[sp-{}]", argc-i)).collect();
