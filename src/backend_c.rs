@@ -60,7 +60,7 @@ fn emit_code(code: &[Instr], current_fn: Option<&Function>) -> Result<String, St
             }
             Instr::Call(name, argc) if name == "print" && *argc == 1 => c.push_str("  printf("%.15g\\n", stack[--sp]);\n"),
             Instr::Call(name, argc) => {
-                let args: Vec<String> = (0..*argc).rev().map(|i| format!("stack[sp-{}]", i+1)).collect();
+                let args: Vec<String> = (0..*argc).map(|i| format!("stack[sp-{}]", argc-i)).collect();
                 c.push_str(&format!("  {{ double r = {}({}); sp -= {}; stack[sp++] = r; }}\n", c_ident(name), args.join(", "), argc));
             }
             Instr::Jump(t) => c.push_str(&format!("  goto L{};\n", t)),
