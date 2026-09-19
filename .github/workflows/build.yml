@@ -188,6 +188,14 @@ jobs:
           test -x /tmp/nova-loop-native
           test "$(/tmp/nova-loop-native)" = "15"
 
+      - name: Native for-loop smoke test
+        shell: bash
+        run: |
+          cargo run --release -- check examples/native_for.nova
+          cargo run --release -- build-native-ssa examples/native_for.nova /tmp/nova-for-native
+          test -x /tmp/nova-for-native
+          test "$(/tmp/nova-for-native)" = "60"
+
       - name: Native structured mutation smoke test
         shell: bash
         run: |
