@@ -6,6 +6,8 @@ print read_file(path)
 print path_basename(path)
 print path_ext(path)
 print path_stem(path)
+print "NOVA"[1]
+print len("NOVA")
 print str(42)
 print abs(-7)
 print sqrt(49)
