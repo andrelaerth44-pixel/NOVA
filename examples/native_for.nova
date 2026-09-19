@@ -1,0 +1,8 @@
+values = [10, 20, 30]
+sum = 0
+
+for value in values {
+    sum = sum + value
+}
+
+print sum
