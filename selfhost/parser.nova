@@ -198,19 +198,25 @@ fn parse_postfix(state: any) -> Node {
             }
             expect(state, ")")
             node = call
-        } else if accept(state, "[") {
-            index = make_node("index", "")
-            index = add_child(index, node)
-            index = add_child(index, parse_expression(state, 1))
-            expect(state, "]")
-            node = index
-        } else if accept(state, ".") {
-            field = take_token(state)
-            access = make_node("field", field.lexeme)
-            access = add_child(access, node)
-            node = access
         } else {
-            done = true
+            index_open = accept(state, "[")
+            if index_open {
+                index = make_node("index", "")
+                index = add_child(index, node)
+                index = add_child(index, parse_expression(state, 1))
+                expect(state, "]")
+                node = index
+            } else {
+                dot_open = accept(state, ".")
+                if dot_open {
+                    field = take_token(state)
+                    access = make_node("field", field.lexeme)
+                    access = add_child(access, node)
+                    node = access
+                } else {
+                    done = true
+                }
+            }
         }
     }
 
