@@ -49,8 +49,8 @@ fn binary_expr(op: &str, left: &str, right: &str) -> Option<String> {
         "Le" => format!("nova_bool({}.number <= {}.number)", left, right),
         "Gt" => format!("nova_bool({}.number > {}.number)", left, right),
         "Ge" => format!("nova_bool({}.number >= {}.number)", left, right),
-        "And" => format!("nova_bool({}.number != 0 && {}.number != 0)", left, right),
-        "Or" => format!("nova_bool({}.number != 0 || {}.number != 0)", left, right),
+        "And" => format!("nova_bool(nova_truthy({}) && nova_truthy({}))", left, right),
+        "Or" => format!("nova_bool(nova_truthy({}) || nova_truthy({}))", left, right),
         _ => return None,
     })
 }
