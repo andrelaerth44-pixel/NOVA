@@ -41,7 +41,13 @@ fn emit_expr(node: Node) -> string {
     if node.kind == "binary" {
         left = emit_expr(node.children[0])
         right = emit_expr(node.children[1])
-        return "(" + left + " " + node.text + " " + right + ")"
+        op = node.text
+        if op == "and" {
+            op = "&&"
+        } else if op == "or" {
+            op = "||"
+        }
+        return "(" + left + " " + op + " " + right + ")"
     }
 
     if node.kind == "call" {
@@ -60,6 +66,19 @@ fn emit_expr(node: Node) -> string {
     }
 
     return "0"
+}
+
+fn emit_block(node: Node) -> string {
+    out = ""
+    i = 0
+    while i < len(node.children) {
+        code = emit_statement(node.children[i])
+        if code != "" {
+            out = out + " " + code
+        }
+        i = i + 1
+    }
+    return out
 }
 
 fn emit_statement(node: Node) -> string {
@@ -82,6 +101,19 @@ fn emit_statement(node: Node) -> string {
             return "printf(\"%s\\n\", " + expr + ");"
         }
         return "printf(\"%.17g\\n\", " + expr + ");"
+    }
+
+    if node.kind == "if" {
+        out = "if (" + emit_expr(node.children[0]) + ") {"
+        out = out + emit_block(node.children[1]) + " }"
+        if len(node.children) > 2 {
+            out = out + " else {" + emit_block(node.children[2]) + " }"
+        }
+        return out
+    }
+
+    if node.kind == "while" {
+        return "while (" + emit_expr(node.children[0]) + ") {" + emit_block(node.children[1]) + " }"
     }
 
     if node.kind == "expr" {
