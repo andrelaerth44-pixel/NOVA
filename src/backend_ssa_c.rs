@@ -1519,6 +1519,8 @@ static NovaValue nova_json_stringify(NovaValue value) {
   return nova_string(buf.data ? buf.data : nova_dup(""));
 }
 
+static NovaValue nova_array(NovaValue* args, size_t argc);
+
 static NovaValue nova_read_file(NovaValue path) {
   if (path.tag != NOVA_STRING || !path.string) return nova_null();
   FILE* file = fopen(path.string, "rb");
