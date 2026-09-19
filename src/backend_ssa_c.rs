@@ -311,6 +311,28 @@ fn emit_function(
                             v(args[0]),
                             v(args[1])
                         ));
+                    } else if name == "index_set" {
+                        if args.len() != 3 {
+                            return Err("SSA C backend: index_set expects three arguments".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_index_set({}, {}, {});\n",
+                            v(*id),
+                            v(args[0]),
+                            v(args[1]),
+                            v(args[2])
+                        ));
+                    } else if name == "field_set" {
+                        if args.len() != 3 {
+                            return Err("SSA C backend: field_set expects three arguments".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_field_set({}, {}.string, {});\n",
+                            v(*id),
+                            v(args[0]),
+                            v(args[1]),
+                            v(args[2])
+                        ));
                     } else if matches!(name.as_str(), "len" | "unwrap" | "unwrap_or" | "is_none" | "is_some" | "is_ok" | "is_err") {
                         let expected = if name == "unwrap_or" { 2 } else { 1 };
                         if args.len() != expected {
@@ -849,6 +871,35 @@ static NovaValue nova_index(NovaValue base, NovaValue index) {
   return nova_null();
 }
 
+static NovaValue nova_index_set(NovaValue base, NovaValue index, NovaValue value) {
+  if (base.tag == NOVA_ARRAY && base.array && index.tag == NOVA_NUMBER) {
+    size_t i = (size_t)index.number;
+    if (index.number >= 0 && (double)i == index.number && i < base.array->len) {
+      base.array->items[i] = value;
+      return base;
+    }
+  }
+  if (base.tag == NOVA_MAP && base.map) {
+    for (size_t i = 0; i < base.map->len; i++) {
+      if (nova_equal(base.map->keys[i], index)) {
+        base.map->values[i] = value;
+        return base;
+      }
+    }
+    size_t next = base.map->len + 1;
+    NovaValue* keys = (NovaValue*)realloc(base.map->keys, next * sizeof(NovaValue));
+    NovaValue* values = (NovaValue*)realloc(base.map->values, next * sizeof(NovaValue));
+    if (!keys || !values) return nova_null();
+    base.map->keys = keys;
+    base.map->values = values;
+    base.map->keys[base.map->len] = index;
+    base.map->values[base.map->len] = value;
+    base.map->len = next;
+    return base;
+  }
+  return nova_null();
+}
+
 static int nova_truthy(NovaValue v) {
   switch (v.tag) {
     case NOVA_BOOL: return v.number != 0;
@@ -916,6 +967,18 @@ static NovaValue nova_field_get(NovaValue base, const char* field) {
     if (base.structure->fields[i].name
         && strcmp(base.structure->fields[i].name, field) == 0) {
       return base.structure->fields[i].value;
+    }
+  }
+  return nova_null();
+}
+
+static NovaValue nova_field_set(NovaValue base, const char* field, NovaValue value) {
+  if (base.tag != NOVA_STRUCT || !base.structure || !field) return nova_null();
+  for (size_t i = 0; i < base.structure->len; i++) {
+    if (base.structure->fields[i].name
+        && strcmp(base.structure->fields[i].name, field) == 0) {
+      base.structure->fields[i].value = value;
+      return base;
     }
   }
   return nova_null();
@@ -1095,6 +1158,65 @@ mod native_execution_tests {
             .expect("execute native load/store binary");
         assert!(output.status.success(), "native program failed");
         assert_eq!(String::from_utf8_lossy(&output.stdout), "7\n");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn native_struct_array_map_mutation_executes_real_binary() {
+        let source = r#"
+            struct Person {
+                name: string
+                age: i64
+            }
+
+            person = Person { name: "Laerth", age: 18 }
+            person.age = 21
+
+            values = [1, 2, 3]
+            values[1] = 9
+
+            scores = map{"x": 10}
+            scores["x"] = 42
+            scores["y"] = 7
+
+            print person.age
+            print values[1]
+            print scores["x"]
+            print scores["y"]
+        "#;
+
+        let compilation = crate::compiler::compile_source(source)
+            .expect("structured mutation source should compile");
+        let generated = crate::backend_ssa_c::emit_c(&compilation.ssa_functions)
+            .expect("SSA native backend should emit structured mutation");
+
+        let dir = std::env::temp_dir().join(format!(
+            "nova-native-mutation-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("create native test directory");
+        let c_path = dir.join("mutation.c");
+        let bin_path = dir.join("mutation-bin");
+        std::fs::write(&c_path, generated).expect("write generated C");
+
+        let compile = Command::new("cc")
+            .args([
+                "-O2",
+                "-std=c11",
+                c_path.to_str().expect("C path"),
+                "-o",
+                bin_path.to_str().expect("binary path"),
+            ])
+            .status()
+            .expect("invoke C compiler");
+        assert!(compile.success(), "C compiler failed: {compile}");
+
+        let output = Command::new(&bin_path)
+            .output()
+            .expect("execute native structured mutation binary");
+        assert!(output.status.success(), "native program failed");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "21\n9\n42\n7\n");
 
         let _ = std::fs::remove_dir_all(dir);
     }
