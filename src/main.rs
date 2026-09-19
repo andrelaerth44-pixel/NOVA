@@ -43,7 +43,7 @@ fn load_program(path: &str) -> Result<Vec<Stmt>, String> {
 fn main(){
     let a:Vec<String>=env::args().collect();
     if a.len()<2 {
-        eprintln!("NOVA 1.7.0\nusage: nova run <file> | nova check <file> | nova ir <file> | nova ssa <file> | nova abi <file> | nova build-native-ssa <file> [output] | nova build-c <file> [output.c] | nova build-native <file> [output] | nova app-check <file> | nova build-android <file> [MainActivity.kt] | nova package-check <manifest-or-dir> | nova package-lock <manifest-or-dir> | nova version");
+        eprintln!("NOVA 1.7.0\nusage: nova run <file> | nova check <file> | nova ir <file> | nova ssa <file> | nova abi <file> | nova build-native-ssa <file> [output] | nova build-native-ssa-c <file> [output.c] | nova build-c <file> [output.c] | nova build-native <file> [output] | nova app-check <file> | nova build-android <file> [MainActivity.kt] | nova package-check <manifest-or-dir> | nova package-lock <manifest-or-dir> | nova version");
         return
     }
     if a[1]=="version"{println!("NOVA 1.7.0");return}
@@ -107,6 +107,24 @@ fn main(){
             Err(e)=>{eprintln!("compile error:\n{}",e);std::process::exit(1)}
         };
         print!("{}", abi::format_module(&compiled.ssa_functions));
+        return
+    }
+
+    if a[1]=="build-native-ssa-c"{
+        let compiled=match compiler::compile_program(program.clone()){
+            Ok(x)=>x,
+            Err(e)=>{eprintln!("compile error:\n{}",e);std::process::exit(1)}
+        };
+        let output=if a.len()>3{&a[3]}else{"nova-native.c"};
+        let c_source=match backend_ssa_c::emit_c(&compiled.ssa_functions){
+            Ok(x)=>x,
+            Err(e)=>{eprintln!("SSA native backend error: {}",e);std::process::exit(1)}
+        };
+        if let Err(e)=fs::write(output,&c_source){
+            eprintln!("cannot write {}: {}",output,e);
+            std::process::exit(1)
+        }
+        println!("{}",output);
         return
     }
 
