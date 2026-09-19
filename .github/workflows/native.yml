@@ -139,6 +139,19 @@ jobs:
           EOF
           diff -u /tmp/nova-selfhost-parser.expected /tmp/nova-selfhost-parser.out
 
+      - name: Self-hosted compiler bootstrap
+        shell: bash
+        run: |
+          rm -f /tmp/nova-selfhost-generated.c /tmp/nova-selfhost-generated
+          cargo run --release -- check examples/selfhost_compile.nova
+          cargo run --release -- build-native-ssa examples/selfhost_compile.nova /tmp/nova-selfhost-compiler
+          test -x /tmp/nova-selfhost-compiler
+          /tmp/nova-selfhost-compiler > /tmp/nova-selfhost-compiler.out
+          test -s /tmp/nova-selfhost-generated.c
+          cc -O2 -std=c11 /tmp/nova-selfhost-generated.c -o /tmp/nova-selfhost-generated
+          test -x /tmp/nova-selfhost-generated
+          test "$(/tmp/nova-selfhost-generated)" = "42"
+
       - name: Self-hosted lexer
         shell: bash
         run: |
