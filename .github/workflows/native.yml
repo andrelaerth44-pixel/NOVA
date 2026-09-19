@@ -116,6 +116,8 @@ jobs:
           NOVA-native-test.txt
           txt
           NOVA-native-test
+          O
+          4
           42
           7
           7
