@@ -367,9 +367,9 @@ impl Builder {
         }
     }
 
-    fn update_target(&mut self, target: &Expr, value: ValueId) -> Result<(String, ValueId), String> {
+    fn update_target(&mut self, target: &Expr, value: ValueId) -> (String, ValueId) {
         match target {
-            Expr::Var(name) => Ok((name.clone(), value)),
+            Expr::Var(name) => (name.clone(), value),
             Expr::Field(base, field) => {
                 let base_value = self.expr(base);
                 let field_value = self.emit(SsaInstr::Const(SsaValue::String(field.clone())));
@@ -390,19 +390,18 @@ impl Builder {
                 });
                 self.update_target(base, updated_base)
             }
-            _ => Err("assignment target must resolve to a variable".into()),
+            _ => panic!("invalid structured assignment target"),
         }
     }
 
-    fn stmt_list(&mut self, body: &[Stmt]) -> Result<(), String> {
+    fn stmt_list(&mut self, body: &[Stmt]) {
         for stmt in body {
             if self.blocks[self.current].terminator.is_some() { break; }
-            self.stmt(stmt)?;
+            self.stmt(stmt);
         }
-        Ok(())
     }
 
-    fn stmt(&mut self, stmt: &Stmt) -> Result<(), String> {
+    fn stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::Expr(e) | Stmt::Print(e) => { let v = self.expr(e); if matches!(stmt, Stmt::Print(_)) { self.emit(SsaInstr::Call { name: "print".into(), args: vec![v], result: IrType::Null }); } }
             Stmt::Let(name, _, e) | Stmt::Assign(name, e) => {
@@ -412,7 +411,7 @@ impl Builder {
             }
             Stmt::AssignTarget(target, e) => {
                 let value = self.expr(e);
-                let (root, updated) = self.update_target(target, value)?;
+                let (root, updated) = self.update_target(target, value);
                 self.bind(root.clone(), updated);
                 self.emit(SsaInstr::Store { name: root, value: updated });
             }
@@ -431,7 +430,7 @@ impl Builder {
 
                 self.set_current(then_id);
                 self.push_scope();
-                self.stmt_list(then_body)?;
+                self.stmt_list(then_body;
                 let then_vars = self.vars.last().cloned().unwrap_or_default();
                 if self.blocks[self.current].terminator.is_none() { self.blocks[self.current].terminator = Some(Terminator::Jump(merge_id)); }
                 self.pop_scope();
@@ -439,7 +438,7 @@ impl Builder {
                 self.set_current(else_id);
                 self.vars.last_mut().unwrap().clone_from(&incoming);
                 self.push_scope();
-                self.stmt_list(else_body)?;
+                self.stmt_list(else_body;
                 let else_vars = self.vars.last().cloned().unwrap_or_default();
                 if self.blocks[self.current].terminator.is_none() { self.blocks[self.current].terminator = Some(Terminator::Jump(merge_id)); }
                 self.pop_scope();
@@ -492,7 +491,7 @@ impl Builder {
 
                 self.set_current(loop_body);
                 self.push_scope();
-                self.stmt_list(body)?;
+                self.stmt_list(body;
                 let body_vars = self.vars.last().cloned().unwrap_or_default();
                 let loops_back = self.blocks[self.current].terminator.is_none();
                 if loops_back {
@@ -560,13 +559,12 @@ impl Builder {
                     next = no;
                 }
                 self.set_current(next);
-                self.stmt_list(otherwise)?;
+                self.stmt_list(otherwise;
                 if self.blocks[self.current].terminator.is_none() { self.blocks[self.current].terminator = Some(Terminator::Jump(exit)); }
                 self.set_current(exit);
             }
             Stmt::Import(_) | Stmt::StructDecl(_, _) | Stmt::EnumDecl(_, _) | Stmt::Fn(..) => {}
         }
-        Ok(())
     }
 }
 
@@ -594,7 +592,7 @@ fn lower_function_tree_with_captures(
         params.push((arg.clone(), type_to_ir(ty), id));
     }
 
-    b.stmt_list(body)?;
+    b.stmt_list(body);
     if b.blocks.iter().any(|x| x.terminator.is_none()) {
         for block in &mut b.blocks {
             if block.terminator.is_none() {
