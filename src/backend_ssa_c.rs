@@ -301,6 +301,42 @@ fn emit_function(
                             args_expr,
                             args.len()
                         ));
+                    } else if name == "iter" {
+                        if (args.len() != 1) {
+                            return Err("SSA C backend: iter expects one argument".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_iter({});\\n",
+                            v(*id),
+                            v(args[0])
+                        ));
+                    } else if name == "next" {
+                        if (args.len() != 1) {
+                            return Err("SSA C backend: next expects one argument".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_next({});\\n",
+                            v(*id),
+                            v(args[0])
+                        ));
+                    } else if name == "has_next" {
+                        if (args.len() != 1) {
+                            return Err("SSA C backend: has_next expects one argument".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_has_next({});\\n",
+                            v(*id),
+                            v(args[0])
+                        ));
+                    } else if name == "collect" {
+                        if (args.len() != 1) {
+                            return Err("SSA C backend: collect expects one argument".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_collect({});\\n",
+                            v(*id),
+                            v(args[0])
+                        ));
                     } else if name == "index" {
                         if args.len() != 2 {
                             return Err("SSA C backend: index expects two arguments".into());
@@ -594,7 +630,8 @@ typedef enum {
   NOVA_CLOSURE,
   NOVA_ARRAY,
   NOVA_MAP,
-  NOVA_SET
+  NOVA_SET,
+  NOVA_ITERATOR
 } NovaTag;
 
 typedef struct NovaValue NovaValue;
@@ -605,6 +642,7 @@ typedef struct NovaEnum NovaEnum;
 typedef struct NovaArray NovaArray;
 typedef struct NovaMap NovaMap;
 typedef struct NovaSet NovaSet;
+typedef struct NovaIterator NovaIterator;
 
 struct NovaValue {
   NovaTag tag;
@@ -616,6 +654,7 @@ struct NovaValue {
   NovaArray* array;
   NovaMap* map;
   NovaSet* set;
+  NovaIterator* iterator;
 };
 
 typedef struct {
@@ -651,6 +690,12 @@ struct NovaSet {
   NovaValue* items;
 };
 
+struct NovaIterator {
+  size_t len;
+  size_t index;
+  NovaValue* items;
+};
+
 struct NovaEnv {
   size_t len;
   NovaValue slots[32];
@@ -673,27 +718,27 @@ static char* nova_dup(const char* value) {
 }
 
 static NovaValue nova_null(void) {
-  NovaValue v = { NOVA_NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
+  NovaValue v = { NOVA_NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
   return v;
 }
 
 static NovaValue nova_num(double x) {
-  NovaValue v = { NOVA_NUMBER, x, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
+  NovaValue v = { NOVA_NUMBER, x, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
   return v;
 }
 
 static NovaValue nova_bool(int x) {
-  NovaValue v = { NOVA_BOOL, x ? 1.0 : 0.0, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
+  NovaValue v = { NOVA_BOOL, x ? 1.0 : 0.0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
   return v;
 }
 
 static NovaValue nova_string(const char* x) {
-  NovaValue v = { NOVA_STRING, 0, x, NULL, NULL, NULL, NULL, NULL, NULL };
+  NovaValue v = { NOVA_STRING, 0, x, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
   return v;
 }
 
 static NovaValue nova_struct_value(NovaStruct* x) {
-  NovaValue v = { NOVA_STRUCT, 0, NULL, NULL, x, NULL, NULL, NULL, NULL };
+  NovaValue v = { NOVA_STRUCT, 0, NULL, NULL, x, NULL, NULL, NULL, NULL, NULL };
   return v;
 }
 
@@ -703,12 +748,12 @@ static NovaValue nova_enum_value(const char* name, const char* variant, NovaValu
   e->name = nova_dup(name);
   e->variant = nova_dup(variant);
   e->payload = payload;
-  NovaValue v = { NOVA_ENUM, 0, NULL, NULL, NULL, e, NULL, NULL, NULL };
+  NovaValue v = { NOVA_ENUM, 0, NULL, NULL, NULL, e, NULL, NULL, NULL, NULL };
   return v;
 }
 
 static NovaValue nova_closure_value(NovaClosure* c) {
-  NovaValue v = { NOVA_CLOSURE, 0, NULL, c, NULL, NULL, NULL, NULL, NULL };
+  NovaValue v = { NOVA_CLOSURE, 0, NULL, c, NULL, NULL, NULL, NULL, NULL, NULL };
   return v;
 }
 
@@ -782,6 +827,7 @@ static NovaValue nova_len(NovaValue value) {
     case NOVA_ARRAY: return nova_num(value.array ? (double)value.array->len : 0.0);
     case NOVA_MAP: return nova_num(value.map ? (double)value.map->len : 0.0);
     case NOVA_SET: return nova_num(value.set ? (double)value.set->len : 0.0);
+    case NOVA_ITERATOR: return nova_num(value.iterator ? (double)(value.iterator->len - value.iterator->index) : 0.0);
     default: return nova_num(0.0);
   }
 }
@@ -803,17 +849,22 @@ static NovaValue nova_add(NovaValue left, NovaValue right) {
 }
 
 static NovaValue nova_array_value(NovaArray* a) {
-  NovaValue v = { NOVA_ARRAY, 0, NULL, NULL, NULL, NULL, a, NULL, NULL };
+  NovaValue v = { NOVA_ARRAY, 0, NULL, NULL, NULL, NULL, a, NULL, NULL, NULL };
   return v;
 }
 
 static NovaValue nova_map_value(NovaMap* m) {
-  NovaValue v = { NOVA_MAP, 0, NULL, NULL, NULL, NULL, NULL, m, NULL };
+  NovaValue v = { NOVA_MAP, 0, NULL, NULL, NULL, NULL, NULL, m, NULL, NULL };
   return v;
 }
 
 static NovaValue nova_set_value(NovaSet* s) {
-  NovaValue v = { NOVA_SET, 0, NULL, NULL, NULL, NULL, NULL, NULL, s };
+  NovaValue v = { NOVA_SET, 0, NULL, NULL, NULL, NULL, NULL, NULL, s, NULL };
+  return v;
+}
+
+static NovaValue nova_iterator_value(NovaIterator* iterator) {
+  NovaValue v = { NOVA_ITERATOR, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, iterator };
   return v;
 }
 
@@ -855,6 +906,88 @@ static NovaValue nova_set(NovaValue* args, size_t argc) {
     if (!duplicate) set->items[set->len++] = args[i];
   }
   return nova_set_value(set);
+}
+
+static size_t nova_utf8_width(unsigned char c) {
+  if ((c & 0x80u) == 0) return 1;
+  if ((c & 0xe0u) == 0xc0u) return 2;
+  if ((c & 0xf0u) == 0xe0u) return 3;
+  if ((c & 0xf8u) == 0xf0u) return 4;
+  return 1;
+}
+
+static NovaValue nova_iter(NovaValue value) {
+  NovaIterator* out = (NovaIterator*)calloc(1, sizeof(NovaIterator));
+  if (!out) return nova_null();
+
+  if (value.tag == NOVA_ITERATOR && value.iterator) {
+    size_t remaining = value.iterator->len - value.iterator->index;
+    out->len = remaining;
+    out->items = remaining ? (NovaValue*)calloc(remaining, sizeof(NovaValue)) : NULL;
+    if (remaining && !out->items) return nova_null();
+    for (size_t i = 0; i < remaining; i++) {
+      out->items[i] = value.iterator->items[value.iterator->index + i];
+    }
+    value.iterator->index = value.iterator->len;
+    return nova_iterator_value(out);
+  }
+
+  if (value.tag == NOVA_ARRAY && value.array) {
+    out->len = value.array->len;
+    out->items = out->len ? (NovaValue*)calloc(out->len, sizeof(NovaValue)) : NULL;
+    if (out->len && !out->items) return nova_null();
+    for (size_t i = 0; i < out->len; i++) out->items[i] = value.array->items[i];
+    return nova_iterator_value(out);
+  }
+
+  if (value.tag == NOVA_STRING && value.string) {
+    size_t bytes = strlen(value.string);
+    out->items = bytes ? (NovaValue*)calloc(bytes, sizeof(NovaValue)) : NULL;
+    if (bytes && !out->items) return nova_null();
+    size_t offset = 0;
+    while (offset < bytes) {
+      size_t width = nova_utf8_width((unsigned char)value.string[offset]);
+      if (offset + width > bytes) width = 1;
+      char* ch = (char*)calloc(width + 1, 1);
+      if (!ch) return nova_null();
+      memcpy(ch, value.string + offset, width);
+      out->items[out->len++] = nova_string(ch);
+      offset += width;
+    }
+    return nova_iterator_value(out);
+  }
+
+  return nova_null();
+}
+
+static NovaValue nova_next(NovaValue value) {
+  if (value.tag != NOVA_ITERATOR || !value.iterator) return nova_null();
+  if (value.iterator->index >= value.iterator->len) {
+    return nova_enum_value("Option", "None", nova_null());
+  }
+  NovaValue item = value.iterator->items[value.iterator->index++];
+  return nova_enum_value("Option", "Some", item);
+}
+
+static NovaValue nova_has_next(NovaValue value) {
+  if (value.tag != NOVA_ITERATOR || !value.iterator) return nova_bool(0);
+  return nova_bool(value.iterator->index < value.iterator->len);
+}
+
+static NovaValue nova_collect(NovaValue value) {
+  if (value.tag != NOVA_ITERATOR || !value.iterator) return nova_null();
+  size_t remaining = value.iterator->len - value.iterator->index;
+  NovaValue* items = remaining ? (NovaValue*)calloc(remaining, sizeof(NovaValue)) : NULL;
+  if (remaining && !items) return nova_null();
+  for (size_t i = 0; i < remaining; i++) {
+    items[i] = value.iterator->items[value.iterator->index + i];
+  }
+  value.iterator->index = value.iterator->len;
+  NovaArray* array = (NovaArray*)calloc(1, sizeof(NovaArray));
+  if (!array) return nova_null();
+  array->len = remaining;
+  array->items = items;
+  return nova_array_value(array);
 }
 
 static NovaValue nova_index(NovaValue base, NovaValue index) {
@@ -911,6 +1044,7 @@ static int nova_truthy(NovaValue v) {
     case NOVA_ARRAY: return 1;
     case NOVA_MAP: return 1;
     case NOVA_SET: return 1;
+    case NOVA_ITERATOR: return v.iterator && v.iterator->index < v.iterator->len;
     default: return 0;
   }
 }
@@ -935,6 +1069,8 @@ static int nova_equal(NovaValue a, NovaValue b) {
       return a.map == b.map;
     case NOVA_SET:
       return a.set == b.set;
+    case NOVA_ITERATOR:
+      return a.iterator == b.iterator;
     default: return 0;
   }
 }
