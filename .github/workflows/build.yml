@@ -208,6 +208,7 @@ jobs:
           true
           N
           3
+          9
           EOF
           diff -u /tmp/nova-iterator.expected /tmp/nova-iterator.out
 
