@@ -91,6 +91,10 @@ jobs:
           2
           3
           100
+          true
+          true
+          true
+          true
           EOF
           diff -u /tmp/nova-collections.expected /tmp/nova-collections.out
 
