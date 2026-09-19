@@ -301,6 +301,16 @@ fn emit_function(
                             args_expr,
                             args.len()
                         ));
+                    } else if name == "range" {
+                        if (args.len() != 2) {
+                            return Err("SSA C backend: range expects two arguments".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_range({}, {});\n",
+                            v(*id),
+                            v(args[0]),
+                            v(args[1])
+                        ));
                     } else if name == "iter" {
                         if (args.len() != 1) {
                             return Err("SSA C backend: iter expects one argument".into());
@@ -876,6 +886,25 @@ static NovaValue nova_array(NovaValue* args, size_t argc) {
   if (argc && !a->items) return nova_null();
   for (size_t i = 0; i < argc; i++) a->items[i] = args[i];
   return nova_array_value(a);
+}
+
+static NovaValue nova_range(NovaValue start, NovaValue end) {
+  if (start.tag != NOVA_NUMBER || end.tag != NOVA_NUMBER) return nova_null();
+  int64_t first = (int64_t)start.number;
+  int64_t last = (int64_t)end.number;
+  if ((double)first != start.number || (double)last != end.number) return nova_null();
+  if (last <= first) return nova_array(NULL, 0);
+
+  size_t len = (size_t)(last - first);
+  NovaArray* array = (NovaArray*)calloc(1, sizeof(NovaArray));
+  if (!array) return nova_null();
+  array->len = len;
+  array->items = (NovaValue*)calloc(len, sizeof(NovaValue));
+  if (!array->items) return nova_null();
+  for (size_t i = 0; i < len; i++) {
+    array->items[i] = nova_num((double)(first + (int64_t)i));
+  }
+  return nova_array_value(array);
 }
 
 static NovaValue nova_map(NovaValue* args, size_t argc) {
