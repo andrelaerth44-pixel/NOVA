@@ -347,6 +347,29 @@ fn emit_function(
                             v(*id),
                             v(args[0])
                         ));
+                    } else if matches!(name.as_str(), "map_get" | "map_has" | "map_set" | "map_remove" | "set_add" | "set_has" | "set_remove") {
+                        let expected = match name.as_str() {
+                            "map_set" => 3,
+                            _ => 2,
+                        };
+                        if args.len() != expected {
+                            return Err(format!("SSA C backend: {} expects {} arguments", name, expected));
+                        }
+                        let helper = match name.as_str() {
+                            "map_get" => "nova_map_get",
+                            "map_has" => "nova_map_has",
+                            "map_set" => "nova_map_set",
+                            "map_remove" => "nova_map_remove",
+                            "set_add" => "nova_set_add",
+                            "set_has" => "nova_set_has",
+                            _ => "nova_set_remove",
+                        };
+                        out.push_str(&format!(
+                            "  {} = {}({});\n",
+                            v(*id),
+                            helper,
+                            args.iter().map(|a| v(*a)).collect::<Vec<_>>().join(", ")
+                        ));
                     } else if name == "index" {
                         if args.len() != 2 {
                             return Err("SSA C backend: index expects two arguments".into());
@@ -1058,6 +1081,97 @@ static NovaValue nova_index_set(NovaValue base, NovaValue index, NovaValue value
     base.map->values[base.map->len] = value;
     base.map->len = next;
     return base;
+  }
+  return nova_null();
+}
+
+static NovaValue nova_map_get(NovaValue map, NovaValue key) {
+  if (map.tag != NOVA_MAP || !map.map) return nova_null();
+  for (size_t i = 0; i < map.map->len; i++) {
+    if (nova_equal(map.map->keys[i], key)) return map.map->values[i];
+  }
+  return nova_null();
+}
+
+static NovaValue nova_map_has(NovaValue map, NovaValue key) {
+  if (map.tag != NOVA_MAP || !map.map) return nova_bool(0);
+  for (size_t i = 0; i < map.map->len; i++) {
+    if (nova_equal(map.map->keys[i], key)) return nova_bool(1);
+  }
+  return nova_bool(0);
+}
+
+static NovaValue nova_map_set(NovaValue map, NovaValue key, NovaValue value) {
+  if (map.tag != NOVA_MAP || !map.map) return nova_null();
+  for (size_t i = 0; i < map.map->len; i++) {
+    if (nova_equal(map.map->keys[i], key)) {
+      map.map->values[i] = value;
+      return nova_null();
+    }
+  }
+  size_t next = map.map->len + 1;
+  NovaValue* keys = (NovaValue*)realloc(map.map->keys, next * sizeof(NovaValue));
+  if (!keys) return nova_null();
+  NovaValue* values = (NovaValue*)realloc(map.map->values, next * sizeof(NovaValue));
+  if (!values) {
+    map.map->keys = keys;
+    return nova_null();
+  }
+  map.map->keys = keys;
+  map.map->values = values;
+  map.map->keys[map.map->len] = key;
+  map.map->values[map.map->len] = value;
+  map.map->len = next;
+  return nova_null();
+}
+
+static NovaValue nova_map_remove(NovaValue map, NovaValue key) {
+  if (map.tag != NOVA_MAP || !map.map) return nova_null();
+  for (size_t i = 0; i < map.map->len; i++) {
+    if (nova_equal(map.map->keys[i], key)) {
+      for (size_t j = i + 1; j < map.map->len; j++) {
+        map.map->keys[j - 1] = map.map->keys[j];
+        map.map->values[j - 1] = map.map->values[j];
+      }
+      map.map->len--;
+      return nova_null();
+    }
+  }
+  return nova_null();
+}
+
+static NovaValue nova_set_add(NovaValue set, NovaValue item) {
+  if (set.tag != NOVA_SET || !set.set) return nova_null();
+  for (size_t i = 0; i < set.set->len; i++) {
+    if (nova_equal(set.set->items[i], item)) return nova_null();
+  }
+  size_t next = set.set->len + 1;
+  NovaValue* items = (NovaValue*)realloc(set.set->items, next * sizeof(NovaValue));
+  if (!items) return nova_null();
+  set.set->items = items;
+  set.set->items[set.set->len] = item;
+  set.set->len = next;
+  return nova_null();
+}
+
+static NovaValue nova_set_has(NovaValue set, NovaValue item) {
+  if (set.tag != NOVA_SET || !set.set) return nova_bool(0);
+  for (size_t i = 0; i < set.set->len; i++) {
+    if (nova_equal(set.set->items[i], item)) return nova_bool(1);
+  }
+  return nova_bool(0);
+}
+
+static NovaValue nova_set_remove(NovaValue set, NovaValue item) {
+  if (set.tag != NOVA_SET || !set.set) return nova_null();
+  for (size_t i = 0; i < set.set->len; i++) {
+    if (nova_equal(set.set->items[i], item)) {
+      for (size_t j = i + 1; j < set.set->len; j++) {
+        set.set->items[j - 1] = set.set->items[j];
+      }
+      set.set->len--;
+      return nova_null();
+    }
   }
   return nova_null();
 }
