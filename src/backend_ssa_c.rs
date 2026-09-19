@@ -306,7 +306,7 @@ fn emit_function(
                             return Err("SSA C backend: iter expects one argument".into());
                         }
                         out.push_str(&format!(
-                            "  {} = nova_iter({});\\n",
+                            "  {} = nova_iter({});\n",
                             v(*id),
                             v(args[0])
                         ));
@@ -315,7 +315,7 @@ fn emit_function(
                             return Err("SSA C backend: next expects one argument".into());
                         }
                         out.push_str(&format!(
-                            "  {} = nova_next({});\\n",
+                            "  {} = nova_next({});\n",
                             v(*id),
                             v(args[0])
                         ));
@@ -324,7 +324,7 @@ fn emit_function(
                             return Err("SSA C backend: has_next expects one argument".into());
                         }
                         out.push_str(&format!(
-                            "  {} = nova_has_next({});\\n",
+                            "  {} = nova_has_next({});\n",
                             v(*id),
                             v(args[0])
                         ));
@@ -333,7 +333,7 @@ fn emit_function(
                             return Err("SSA C backend: collect expects one argument".into());
                         }
                         out.push_str(&format!(
-                            "  {} = nova_collect({});\\n",
+                            "  {} = nova_collect({});\n",
                             v(*id),
                             v(args[0])
                         ));
