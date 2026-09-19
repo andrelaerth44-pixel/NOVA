@@ -522,16 +522,22 @@ impl Builder {
                 }
             }
             Stmt::For(name, iterable, body) => {
-                // Lower a for-loop to ordinary SSA control flow.
-                let iterable_v = self.expr(iterable);
+                // Normalize every supported iterable through the native
+                // Iterator abstraction. The body then consumes one item per
+                // iteration via has_next/next instead of knowing the concrete
+                // collection representation.
+                let source = self.expr(iterable);
+                let iterator = self.emit(SsaInstr::Call {
+                    name: "iter".into(),
+                    args: vec![source],
+                    result: IrType::Generic("Iterator".into(), vec![IrType::Any]),
+                });
                 let preheader = self.current;
                 let header = self.new_block();
                 let loop_body = self.new_block();
                 let exit = self.new_block();
                 let incoming = self.vars.last().cloned().unwrap_or_default();
 
-                self.set_current(preheader);
-                let zero = self.emit(SsaInstr::Const(SsaValue::Number(0.0)));
                 self.blocks[preheader].terminator = Some(Terminator::Jump(header));
                 self.set_current(header);
 
@@ -546,22 +552,10 @@ impl Builder {
                     phis.push((var_name.clone(), phi));
                 }
 
-                let index_phi = self.fresh();
-                self.blocks[header].instrs.push((index_phi, SsaInstr::Phi {
-                    incomings: vec![(preheader, zero)],
-                    ty: IrType::Number,
-                }));
-
-                let length = self.emit(SsaInstr::Call {
-                    name: "len".into(),
-                    args: vec![iterable_v],
-                    result: IrType::Number,
-                });
-                let condition = self.emit(SsaInstr::Binary {
-                    op: "Lt".into(),
-                    left: index_phi,
-                    right: length,
-                    ty: IrType::Bool,
+                let condition = self.emit(SsaInstr::Call {
+                    name: "has_next".into(),
+                    args: vec![iterator],
+                    result: IrType::Bool,
                 });
                 self.blocks[header].terminator = Some(Terminator::Branch {
                     condition,
@@ -571,9 +565,14 @@ impl Builder {
 
                 self.set_current(loop_body);
                 self.push_scope();
+                let next_value = self.emit(SsaInstr::Call {
+                    name: "next".into(),
+                    args: vec![iterator],
+                    result: IrType::Generic("Option".into(), vec![IrType::Any]),
+                });
                 let item = self.emit(SsaInstr::Call {
-                    name: "index".into(),
-                    args: vec![iterable_v, index_phi],
+                    name: "unwrap".into(),
+                    args: vec![next_value],
                     result: IrType::Any,
                 });
                 self.bind(name.clone(), item);
@@ -582,25 +581,8 @@ impl Builder {
                 let loops_back = self.blocks[self.current].terminator.is_none();
 
                 if loops_back {
-                    let one = self.emit(SsaInstr::Const(SsaValue::Number(1.0)));
-                    let next_index = self.emit(SsaInstr::Binary {
-                        op: "Plus".into(),
-                        left: index_phi,
-                        right: one,
-                        ty: IrType::Number,
-                    });
                     self.blocks[self.current].terminator = Some(Terminator::Jump(header));
                     let backedge = self.current;
-
-                    if let Some((_, instr)) = self.blocks[header]
-                        .instrs
-                        .iter_mut()
-                        .find(|(id, _)| *id == index_phi)
-                    {
-                        if let SsaInstr::Phi { incomings, .. } = instr {
-                            incomings.push((backedge, next_index));
-                        }
-                    }
 
                     for (var_name, phi) in &phis {
                         let initial = incoming.get(var_name).copied().unwrap();
