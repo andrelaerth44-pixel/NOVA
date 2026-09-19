@@ -177,6 +177,17 @@ jobs:
           test -x /tmp/nova-enum-native
           test "$(/tmp/nova-enum-native)" = "oops"
 
+      - name: Native SSA control-flow smoke test
+        shell: bash
+        run: |
+          cargo run --release -- build-native-ssa examples/ssa_control_flow.nova /tmp/nova-cfg-native
+          test -x /tmp/nova-cfg-native
+          test "$(/tmp/nova-cfg-native)" = "ok"
+
+          cargo run --release -- build-native-ssa examples/ssa.nova /tmp/nova-loop-native
+          test -x /tmp/nova-loop-native
+          test "$(/tmp/nova-loop-native)" = "15"
+
       - name: Standard library smoke test
         shell: bash
         run: |
