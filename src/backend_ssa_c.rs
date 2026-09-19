@@ -301,6 +301,25 @@ fn emit_function(
                             args_expr,
                             args.len()
                         ));
+                    } else if name == "push" {
+                        if (args.len() != 2) {
+                            return Err("SSA C backend: push expects two arguments".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_push({}, {});\n",
+                            v(*id),
+                            v(args[0]),
+                            v(args[1])
+                        ));
+                    } else if name == "pop" {
+                        if (args.len() != 1) {
+                            return Err("SSA C backend: pop expects one argument".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_pop({});\n",
+                            v(*id),
+                            v(args[0])
+                        ));
                     } else if name == "str" {
                         if (args.len() != 1) {
                             return Err("SSA C backend: str expects one argument".into());
@@ -1249,6 +1268,26 @@ static NovaValue nova_sleep_ms(NovaValue value) {
   ts.tv_nsec = (long)((value.number - (double)ts.tv_sec * 1000.0) * 1000000.0);
   nanosleep(&ts, NULL);
   return nova_null();
+}
+
+static NovaValue nova_push(NovaValue array, NovaValue item) {
+  if (array.tag != NOVA_ARRAY || !array.array) return nova_null();
+  size_t next = array.array->len + 1;
+  NovaValue* items = (NovaValue*)realloc(array.array->items, next * sizeof(NovaValue));
+  if (!items) return nova_null();
+  array.array->items = items;
+  array.array->items[array.array->len] = item;
+  array.array->len = next;
+  return array;
+}
+
+static NovaValue nova_pop(NovaValue array) {
+  if (array.tag != NOVA_ARRAY || !array.array || array.array->len == 0) {
+    return nova_enum_value("Option", "None", nova_null());
+  }
+  NovaValue item = array.array->items[array.array->len - 1];
+  array.array->len--;
+  return nova_enum_value("Option", "Some", item);
 }
 
 static NovaValue nova_array(NovaValue* args, size_t argc) {
