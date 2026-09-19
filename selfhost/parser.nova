@@ -59,8 +59,29 @@ fn precedence(kind: string) -> f64 {
     return 0
 }
 
-fn parse_primary(state: any) -> Node {
+fn parse_list(state: any, closing: string) -> Node[] {
+    items = []
+    more = true
+
+    while more and peek_kind(state) != closing and peek_kind(state) != "eof" {
+        items = push(items, parse_expression(state, 1))
+        if !accept(state, ",") {
+            more = false
+        }
+    }
+
+    expect(state, closing)
+    return items
+}
+
+fn parse_atom(state: any) -> Node {
     kind = peek_kind(state)
+
+    if kind == "-" or kind == "!" {
+        op = take_token(state)
+        unary = make_node("unary", op.lexeme)
+        return add_child(unary, parse_atom(state))
+    }
 
     if kind == "number" {
         token = take_token(state)
@@ -77,20 +98,72 @@ fn parse_primary(state: any) -> Node {
         return make_node("bool", token.lexeme)
     }
 
+    if kind == "[" {
+        take_token(state)
+        node = make_node("array", "")
+        values = parse_list(state, "]")
+        i = 0
+        while i < len(values) {
+            node = add_child(node, values[i])
+            i = i + 1
+        }
+        return node
+    }
+
     if kind == "ident" {
         token = take_token(state)
         node = make_node("ident", token.lexeme)
-        if accept(state, "(") {
-            node.kind = "call"
+
+        if token.lexeme == "map" and peek_kind(state) == "{" {
+            take_token(state)
+            node.kind = "map"
             more = true
-            while more and peek_kind(state) != ")" and peek_kind(state) != "eof" {
-                node = add_child(node, parse_expression(state, 1))
+            while more and peek_kind(state) != "}" and peek_kind(state) != "eof" {
+                key = parse_expression(state, 1)
+                expect(state, ":")
+                value = parse_expression(state, 1)
+                pair = make_node("pair", "")
+                pair = add_child(pair, key)
+                pair = add_child(pair, value)
+                node = add_child(node, pair)
                 if !accept(state, ",") {
                     more = false
                 }
             }
-            expect(state, ")")
+            expect(state, "}")
+            return node
         }
+
+        if token.lexeme == "set" and peek_kind(state) == "{" {
+            take_token(state)
+            node.kind = "set"
+            values = parse_list(state, "}")
+            i = 0
+            while i < len(values) {
+                node = add_child(node, values[i])
+                i = i + 1
+            }
+            return node
+        }
+
+        if peek_kind(state) == "{" {
+            take_token(state)
+            node.kind = "struct"
+            more = true
+            while more and peek_kind(state) != "}" and peek_kind(state) != "eof" {
+                field = take_token(state)
+                field_node = make_node("field_init", field.lexeme)
+                expect(state, ":")
+                field_node = add_child(field_node, parse_expression(state, 1))
+                node = add_child(node, field_node)
+                if !accept(state, ",") {
+                    more = false
+                }
+            }
+            expect(state, "}")
+            return node
+        }
+
         return node
     }
 
@@ -102,6 +175,50 @@ fn parse_primary(state: any) -> Node {
 
     token = take_token(state)
     return make_node("unknown", token.lexeme)
+}
+
+fn parse_postfix(state: any) -> Node {
+    node = parse_atom(state)
+    done = false
+
+    while !done and peek_kind(state) != "eof" {
+        if accept(state, "(") {
+            call = make_node("call", node.text)
+            more = true
+            if node.kind != "ident" {
+                call.kind = "call_value"
+                call = add_child(call, node)
+            }
+
+            while more and peek_kind(state) != ")" and peek_kind(state) != "eof" {
+                call = add_child(call, parse_expression(state, 1))
+                if !accept(state, ",") {
+                    more = false
+                }
+            }
+            expect(state, ")")
+            node = call
+        } else if accept(state, "[") {
+            index = make_node("index", "")
+            index = add_child(index, node)
+            index = add_child(index, parse_expression(state, 1))
+            expect(state, "]")
+            node = index
+        } else if accept(state, ".") {
+            field = take_token(state)
+            access = make_node("field", field.lexeme)
+            access = add_child(access, node)
+            node = access
+        } else {
+            done = true
+        }
+    }
+
+    return node
+}
+
+fn parse_primary(state: any) -> Node {
+    return parse_postfix(state)
 }
 
 fn parse_expression(state: any, min_prec: f64) -> Node {
@@ -130,7 +247,8 @@ fn parse_block(state: any) -> Node {
     block = make_node("block", "")
     expect(state, "{")
     done = false
-    while !done && peek_kind(state) != "eof" {
+
+    while !done and peek_kind(state) != "eof" {
         if peek_kind(state) == "}" {
             done = true
         } else {
@@ -138,12 +256,19 @@ fn parse_block(state: any) -> Node {
             accept(state, ";")
         }
     }
+
     expect(state, "}")
     return block
 }
 
 fn parse_statement(state: any) -> Node {
     kind = peek_kind(state)
+
+    if kind == "import" {
+        take_token(state)
+        path = take_token(state)
+        return make_node("import", path.lexeme)
+    }
 
     if kind == "fn" {
         take_token(state)
@@ -181,6 +306,44 @@ fn parse_statement(state: any) -> Node {
         return fn_node
     }
 
+    if kind == "struct" {
+        take_token(state)
+        name = take_token(state)
+        node = make_node("struct_decl", name.lexeme)
+        body = parse_block(state)
+        i = 0
+        while i < len(body.children) {
+            node = add_child(node, body.children[i])
+            i = i + 1
+        }
+        return node
+    }
+
+    if kind == "enum" {
+        take_token(state)
+        name = take_token(state)
+        node = make_node("enum_decl", name.lexeme)
+        expect(state, "{")
+        done = false
+        while !done and peek_kind(state) != "eof" {
+            if peek_kind(state) == "}" {
+                done = true
+            } else {
+                variant = take_token(state)
+                variant_node = make_node("variant", variant.lexeme)
+                if accept(state, "(") {
+                    type_token = take_token(state)
+                    variant_node = add_child(variant_node, make_node("type", type_token.lexeme))
+                    expect(state, ")")
+                }
+                node = add_child(node, variant_node)
+                accept(state, ",")
+            }
+        }
+        expect(state, "}")
+        return node
+    }
+
     if kind == "if" {
         take_token(state)
         node = make_node("if", "")
@@ -201,18 +364,52 @@ fn parse_statement(state: any) -> Node {
         return node
     }
 
+    if kind == "for" {
+        take_token(state)
+        name = take_token(state)
+        node = make_node("for", name.lexeme)
+        expect(state, "in")
+        node = add_child(node, parse_expression(state, 1))
+        node = add_child(node, parse_block(state))
+        return node
+    }
+
+    if kind == "match" {
+        take_token(state)
+        node = make_node("match", "")
+        node = add_child(node, parse_expression(state, 1))
+        expect(state, "{")
+        done = false
+        while !done and peek_kind(state) != "eof" {
+            if peek_kind(state) == "}" {
+                done = true
+            } else {
+                pattern = take_token(state)
+                arm = make_node("arm", pattern.lexeme)
+                if accept(state, "(") {
+                    binding = take_token(state)
+                    arm = add_child(arm, make_node("binding", binding.lexeme))
+                    expect(state, ")")
+                }
+                arm = add_child(arm, parse_block(state))
+                node = add_child(node, arm)
+                accept(state, ",")
+            }
+        }
+        expect(state, "}")
+        return node
+    }
+
     if kind == "return" {
         take_token(state)
         result = make_node("return", "")
-        result = add_child(result, parse_expression(state, 1))
-        return result
+        return add_child(result, parse_expression(state, 1))
     }
 
     if kind == "print" {
         take_token(state)
         result = make_node("print", "")
-        result = add_child(result, parse_expression(state, 1))
-        return result
+        return add_child(result, parse_expression(state, 1))
     }
 
     if kind == "let" {
@@ -224,20 +421,22 @@ fn parse_statement(state: any) -> Node {
             take_token(state)
         }
         expect(state, "=")
-        let_node = add_child(let_node, parse_expression(state, 1))
-        return let_node
+        return add_child(let_node, parse_expression(state, 1))
     }
 
     if kind == "ident" {
         expr = parse_expression(state, 1)
         if expr.kind == "ident" and accept(state, "=") {
             assign = make_node("assign", expr.text)
-            assign = add_child(assign, parse_expression(state, 1))
-            return assign
+            return add_child(assign, parse_expression(state, 1))
+        }
+        if (expr.kind == "field" or expr.kind == "index") and accept(state, "=") {
+            assign = make_node("assign_target", "")
+            assign = add_child(assign, expr)
+            return add_child(assign, parse_expression(state, 1))
         }
         expr_node = make_node("expr", "")
-        expr_node = add_child(expr_node, expr)
-        return expr_node
+        return add_child(expr_node, expr)
     }
 
     token = take_token(state)
