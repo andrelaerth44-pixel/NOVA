@@ -1008,7 +1008,7 @@ static NovaValue nova_is_err(NovaValue value) {
 
 static NovaValue nova_len(NovaValue value) {
   switch (value.tag) {
-    case NOVA_STRING: return nova_num(value.string ? (double)strlen(value.string) : 0.0);
+    case NOVA_STRING: return nova_num(value.string ? (double)nova_utf8_length(value.string) : 0.0);
     case NOVA_ARRAY: return nova_num(value.array ? (double)value.array->len : 0.0);
     case NOVA_MAP: return nova_num(value.map ? (double)value.map->len : 0.0);
     case NOVA_SET: return nova_num(value.set ? (double)value.set->len : 0.0);
@@ -1403,6 +1403,43 @@ static size_t nova_utf8_width(unsigned char c) {
   return 1;
 }
 
+static size_t nova_utf8_length(const char* text) {
+  if (!text) return 0;
+  size_t len = strlen(text);
+  size_t count = 0;
+  size_t offset = 0;
+  while (offset < len) {
+    size_t width = nova_utf8_width((unsigned char)text[offset]);
+    if (offset + width > len) width = 1;
+    offset += width;
+    count++;
+  }
+  return count;
+}
+
+static NovaValue nova_string_index(NovaValue value, NovaValue index) {
+  if (value.tag != NOVA_STRING || !value.string || index.tag != NOVA_NUMBER) return nova_null();
+  if (index.number < 0 || floor(index.number) != index.number) return nova_null();
+
+  size_t target = (size_t)index.number;
+  size_t byte_len = strlen(value.string);
+  size_t offset = 0;
+  size_t current = 0;
+  while (offset < byte_len) {
+    size_t width = nova_utf8_width((unsigned char)value.string[offset]);
+    if (offset + width > byte_len) width = 1;
+    if (current == target) {
+      char* out = (char*)calloc(width + 1, 1);
+      if (!out) return nova_null();
+      memcpy(out, value.string + offset, width);
+      return nova_string(out);
+    }
+    offset += width;
+    current++;
+  }
+  return nova_null();
+}
+
 static NovaValue nova_iter(NovaValue value) {
   NovaIterator* out = (NovaIterator*)calloc(1, sizeof(NovaIterator));
   if (!out) return nova_null();
@@ -1478,6 +1515,7 @@ static NovaValue nova_collect(NovaValue value) {
 }
 
 static NovaValue nova_index(NovaValue base, NovaValue index) {
+  if (base.tag == NOVA_STRING) return nova_string_index(base, index);
   if (base.tag == NOVA_ARRAY && base.array && index.tag == NOVA_NUMBER) {
     size_t i = (size_t)index.number;
     if (index.number >= 0 && (double)i == index.number && i < base.array->len)
