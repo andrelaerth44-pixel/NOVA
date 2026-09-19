@@ -301,6 +301,107 @@ fn emit_function(
                             args_expr,
                             args.len()
                         ));
+                    } else if name == "str" {
+                        if (args.len() != 1) {
+                            return Err("SSA C backend: str expects one argument".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_str({});\n",
+                            v(*id),
+                            v(args[0])
+                        ));
+                    } else if matches!(name.as_str(), "abs" | "sqrt") {
+                        if args.len() != 1 {
+                            return Err(format!("SSA C backend: {} expects one argument", name));
+                        }
+                        let helper = if name == "abs" { "nova_abs" } else { "nova_sqrt" };
+                        out.push_str(&format!(
+                            "  {} = {}({});\n",
+                            v(*id),
+                            helper,
+                            v(args[0])
+                        ));
+                    } else if name == "read_file" {
+                        if args.len() != 1 {
+                            return Err("SSA C backend: read_file expects one argument".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_read_file({});\n",
+                            v(*id),
+                            v(args[0])
+                        ));
+                    } else if name == "write_file" {
+                        if args.len() != 2 {
+                            return Err("SSA C backend: write_file expects two arguments".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_write_file({}, {});\n",
+                            v(*id),
+                            v(args[0]),
+                            v(args[1])
+                        ));
+                    } else if name == "exists" {
+                        if args.len() != 1 {
+                            return Err("SSA C backend: exists expects one argument".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_exists({});\n",
+                            v(*id),
+                            v(args[0])
+                        ));
+                    } else if name == "current_dir" {
+                        if !args.is_empty() {
+                            return Err("SSA C backend: current_dir expects zero arguments".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_current_dir();\n",
+                            v(*id)
+                        ));
+                    } else if name == "path_join" {
+                        if args.len() != 2 {
+                            return Err("SSA C backend: path_join expects two arguments".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_path_join({}, {});\n",
+                            v(*id),
+                            v(args[0]),
+                            v(args[1])
+                        ));
+                    } else if name == "path_basename" || name == "path_dirname" || name == "path_ext" || name == "path_stem" {
+                        if args.len() != 1 {
+                            return Err(format!("SSA C backend: {} expects one argument", name));
+                        }
+                        let helper = match name.as_str() {
+                            "path_basename" => "nova_path_basename",
+                            "path_dirname" => "nova_path_dirname",
+                            "path_ext" => "nova_path_ext",
+                            _ => "nova_path_stem",
+                        };
+                        out.push_str(&format!(
+                            "  {} = {}({});\n",
+                            v(*id),
+                            helper,
+                            v(args[0])
+                        ));
+                    } else if matches!(name.as_str(), "now_ms" | "now_s") {
+                        if !args.is_empty() {
+                            return Err(format!("SSA C backend: {} expects zero arguments", name));
+                        }
+                        let helper = if name == "now_ms" { "nova_now_ms" } else { "nova_now_s" };
+                        out.push_str(&format!(
+                            "  {} = {}();\n",
+                            v(*id),
+                            helper
+                        ));
+                    } else if name == "sleep_ms" {
+                        if args.len() != 1 {
+                            return Err("SSA C backend: sleep_ms expects one argument".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_sleep_ms({});\n",
+                            v(*id),
+                            v(args[0])
+                        ));
                     } else if name == "range" {
                         if (args.len() != 2) {
                             return Err("SSA C backend: range expects two arguments".into());
@@ -652,6 +753,9 @@ pub fn emit_c(functions: &[SsaFunction]) -> Result<String, String> {
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <time.h>
+#include <unistd.h>
 
 typedef enum {
   NOVA_NULL,
@@ -899,6 +1003,159 @@ static NovaValue nova_set_value(NovaSet* s) {
 static NovaValue nova_iterator_value(NovaIterator* iterator) {
   NovaValue v = { NOVA_ITERATOR, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, iterator };
   return v;
+}
+
+static NovaValue nova_str(NovaValue value) {
+  char buffer[64];
+  switch (value.tag) {
+    case NOVA_STRING:
+      return nova_string(value.string ? value.string : "");
+    case NOVA_BOOL:
+      return nova_string(value.number != 0 ? "true" : "false");
+    case NOVA_NULL:
+      return nova_string("null");
+    case NOVA_NUMBER:
+      snprintf(buffer, sizeof(buffer), "%.17g", value.number);
+      if (strchr(buffer, '.')) {
+        size_t len = strlen(buffer);
+        while (len > 0 && buffer[len - 1] == '0') buffer[--len] = '\0';
+        if (len > 0 && buffer[len - 1] == '.') buffer[--len] = '\0';
+      }
+      return nova_string(nova_dup(buffer));
+    default:
+      return nova_string("<value>");
+  }
+}
+
+static NovaValue nova_abs(NovaValue value) {
+  return value.tag == NOVA_NUMBER ? nova_num(fabs(value.number)) : nova_null();
+}
+
+static NovaValue nova_sqrt(NovaValue value) {
+  if (value.tag != NOVA_NUMBER || value.number < 0) return nova_null();
+  return nova_num(sqrt(value.number));
+}
+
+static NovaValue nova_read_file(NovaValue path) {
+  if (path.tag != NOVA_STRING || !path.string) return nova_null();
+  FILE* file = fopen(path.string, "rb");
+  if (!file) return nova_null();
+  if (fseek(file, 0, SEEK_END) != 0) { fclose(file); return nova_null(); }
+  long size = ftell(file);
+  if (size < 0) { fclose(file); return nova_null(); }
+  rewind(file);
+  char* data = (char*)calloc((size_t)size + 1, 1);
+  if (!data) { fclose(file); return nova_null(); }
+  size_t read = fread(data, 1, (size_t)size, file);
+  fclose(file);
+  data[read] = '\0';
+  return nova_string(data);
+}
+
+static NovaValue nova_write_file(NovaValue path, NovaValue data) {
+  if (path.tag != NOVA_STRING || data.tag != NOVA_STRING || !path.string || !data.string) return nova_null();
+  FILE* file = fopen(path.string, "wb");
+  if (!file) return nova_null();
+  size_t len = strlen(data.string);
+  size_t written = fwrite(data.string, 1, len, file);
+  int ok = written == len && fflush(file) == 0;
+  fclose(file);
+  return nova_null();
+}
+
+static NovaValue nova_exists(NovaValue path) {
+  if (path.tag != NOVA_STRING || !path.string) return nova_bool(0);
+  FILE* file = fopen(path.string, "rb");
+  if (!file) return nova_bool(0);
+  fclose(file);
+  return nova_bool(1);
+}
+
+static NovaValue nova_current_dir(void) {
+  size_t size = 256;
+  for (;;) {
+    char* buffer = (char*)calloc(size, 1);
+    if (!buffer) return nova_null();
+    if (getcwd(buffer, size)) return nova_string(buffer);
+    free(buffer);
+    if (errno != ERANGE || size > (1u << 20)) return nova_null();
+    size *= 2;
+  }
+}
+
+static NovaValue nova_path_join(NovaValue left, NovaValue right) {
+  if (left.tag != NOVA_STRING || right.tag != NOVA_STRING) return nova_null();
+  const char* a = left.string ? left.string : "";
+  const char* b = right.string ? right.string : "";
+  size_t alen = strlen(a);
+  size_t blen = strlen(b);
+  int slash = alen > 0 && a[alen - 1] != '/';
+  char* out = (char*)calloc(alen + blen + (size_t)slash + 1, 1);
+  if (!out) return nova_null();
+  memcpy(out, a, alen);
+  if (slash) out[alen++] = '/';
+  memcpy(out + alen, b, blen);
+  return nova_string(out);
+}
+
+static NovaValue nova_path_basename(NovaValue path) {
+  if (path.tag != NOVA_STRING || !path.string) return nova_null();
+  const char* slash = strrchr(path.string, '/');
+  return nova_string(nova_dup(slash ? slash + 1 : path.string));
+}
+
+static NovaValue nova_path_dirname(NovaValue path) {
+  if (path.tag != NOVA_STRING || !path.string) return nova_null();
+  const char* slash = strrchr(path.string, '/');
+  if (!slash) return nova_string(nova_dup(""));
+  size_t len = (size_t)(slash - path.string);
+  if (len == 0) len = 1;
+  char* out = (char*)calloc(len + 1, 1);
+  if (!out) return nova_null();
+  memcpy(out, path.string, len);
+  return nova_string(out);
+}
+
+static NovaValue nova_path_ext(NovaValue path) {
+  if (path.tag != NOVA_STRING || !path.string) return nova_null();
+  const char* base = strrchr(path.string, '/');
+  base = base ? base + 1 : path.string;
+  const char* dot = strrchr(base, '.');
+  if (!dot || dot == base) return nova_string(nova_dup(""));
+  return nova_string(nova_dup(dot + 1));
+}
+
+static NovaValue nova_path_stem(NovaValue path) {
+  if (path.tag != NOVA_STRING || !path.string) return nova_null();
+  const char* base = strrchr(path.string, '/');
+  base = base ? base + 1 : path.string;
+  const char* dot = strrchr(base, '.');
+  size_t len = dot && dot != base ? (size_t)(dot - base) : strlen(base);
+  char* out = (char*)calloc(len + 1, 1);
+  if (!out) return nova_null();
+  memcpy(out, base, len);
+  return nova_string(out);
+}
+
+static NovaValue nova_now_ms(void) {
+  struct timespec ts;
+  if (clock_gettime(CLOCK_REALTIME, &ts) != 0) return nova_null();
+  return nova_num((double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1000000.0);
+}
+
+static NovaValue nova_now_s(void) {
+  struct timespec ts;
+  if (clock_gettime(CLOCK_REALTIME, &ts) != 0) return nova_null();
+  return nova_num((double)ts.tv_sec + (double)ts.tv_nsec / 1000000000.0);
+}
+
+static NovaValue nova_sleep_ms(NovaValue value) {
+  if (value.tag != NOVA_NUMBER || value.number < 0) return nova_null();
+  struct timespec ts;
+  ts.tv_sec = (time_t)(value.number / 1000.0);
+  ts.tv_nsec = (long)((value.number - (double)ts.tv_sec * 1000.0) * 1000000.0);
+  nanosleep(&ts, NULL);
+  return nova_null();
 }
 
 static NovaValue nova_array(NovaValue* args, size_t argc) {
