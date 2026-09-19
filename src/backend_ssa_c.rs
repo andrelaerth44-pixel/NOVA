@@ -383,6 +383,21 @@ fn emit_function(
                             helper,
                             v(args[0])
                         ));
+                    } else if matches!(name.as_str(), "make_dir" | "remove_file" | "list_dir") {
+                        if args.len() != 1 {
+                            return Err(format!("SSA C backend: {} expects one argument", name));
+                        }
+                        let helper = match name.as_str() {
+                            "make_dir" => "nova_make_dir",
+                            "remove_file" => "nova_remove_file",
+                            _ => "nova_list_dir",
+                        };
+                        out.push_str(&format!(
+                            "  {} = {}({});\n",
+                            v(*id),
+                            helper,
+                            v(args[0])
+                        ));
                     } else if matches!(name.as_str(), "now_ms" | "now_s") {
                         if !args.is_empty() {
                             return Err(format!("SSA C backend: {} expects zero arguments", name));
@@ -756,6 +771,8 @@ pub fn emit_c(functions: &[SsaFunction]) -> Result<String, String> {
 #include <errno.h>
 #include <time.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <sys/stat.h>
 
 typedef enum {
   NOVA_NULL,
@@ -1135,6 +1152,81 @@ static NovaValue nova_path_stem(NovaValue path) {
   if (!out) return nova_null();
   memcpy(out, base, len);
   return nova_string(out);
+}
+
+static NovaValue nova_make_dir(NovaValue path) {
+  if (path.tag != NOVA_STRING || !path.string) return nova_null();
+  if (mkdir(path.string, 0777) == 0 || errno == EEXIST) return nova_null();
+  return nova_null();
+}
+
+static NovaValue nova_remove_file(NovaValue path) {
+  if (path.tag != NOVA_STRING || !path.string) return nova_null();
+  remove(path.string);
+  return nova_null();
+}
+
+static int nova_string_cmp(const void* left, const void* right) {
+  const char* a = *(const char* const*)left;
+  const char* b = *(const char* const*)right;
+  return strcmp(a, b);
+}
+
+static NovaValue nova_list_dir(NovaValue path) {
+  if (path.tag != NOVA_STRING || !path.string) return nova_null();
+  DIR* dir = opendir(path.string);
+  if (!dir) return nova_null();
+
+  size_t len = 0;
+  size_t cap = 16;
+  char** names = (char**)calloc(cap, sizeof(char*));
+  if (!names) { closedir(dir); return nova_null(); }
+
+  struct dirent* entry;
+  while ((entry = readdir(dir)) != NULL) {
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+    if (len == cap) {
+      cap *= 2;
+      char** next = (char**)realloc(names, cap * sizeof(char*));
+      if (!next) {
+        for (size_t i = 0; i < len; i++) free(names[i]);
+        free(names);
+        closedir(dir);
+        return nova_null();
+      }
+      names = next;
+    }
+    names[len] = nova_dup(entry->d_name);
+    if (!names[len]) {
+      for (size_t i = 0; i < len; i++) free(names[i]);
+      free(names);
+      closedir(dir);
+      return nova_null();
+    }
+    len++;
+  }
+  closedir(dir);
+
+  qsort(names, len, sizeof(char*), nova_string_cmp);
+  NovaArray* array = (NovaArray*)calloc(1, sizeof(NovaArray));
+  if (!array) {
+    for (size_t i = 0; i < len; i++) free(names[i]);
+    free(names);
+    return nova_null();
+  }
+  array->len = len;
+  array->items = len ? (NovaValue*)calloc(len, sizeof(NovaValue)) : NULL;
+  if (len && !array->items) {
+    for (size_t i = 0; i < len; i++) free(names[i]);
+    free(names);
+    free(array);
+    return nova_null();
+  }
+  for (size_t i = 0; i < len; i++) {
+    array->items[i] = nova_string(names[i]);
+  }
+  free(names);
+  return nova_array_value(array);
 }
 
 static NovaValue nova_now_ms(void) {
