@@ -129,19 +129,27 @@ jobs:
         run: |
           cargo run --release -- check examples/selfhost_parser.nova
           cargo run --release -- build-native-ssa examples/selfhost_parser.nova /tmp/nova-selfhost-parser
-          test "$(/tmp/nova-selfhost-parser)" = $'program
-1
-fn
-add
-a'
+          /tmp/nova-selfhost-parser > /tmp/nova-selfhost-parser.out
+          cat > /tmp/nova-selfhost-parser.expected <<'EOF'
+          program
+          1
+          fn
+          add
+          a
+          EOF
+          diff -u /tmp/nova-selfhost-parser.expected /tmp/nova-selfhost-parser.out
 
       - name: Self-hosted lexer
         shell: bash
         run: |
           cargo run --release -- check examples/selfhost_lexer.nova
           cargo run --release -- build-native-ssa examples/selfhost_lexer.nova /tmp/nova-selfhost-lexer
-          test "$(/tmp/nova-selfhost-lexer)" = $'20
-fn
-add
-i64
-eof'
+          /tmp/nova-selfhost-lexer > /tmp/nova-selfhost-lexer.out
+          cat > /tmp/nova-selfhost-lexer.expected <<'EOF'
+          20
+          fn
+          add
+          i64
+          eof
+          EOF
+          diff -u /tmp/nova-selfhost-lexer.expected /tmp/nova-selfhost-lexer.out
