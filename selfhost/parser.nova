@@ -50,12 +50,12 @@ fn expect(state: any, kind: string) {
 }
 
 fn precedence(kind: string) -> f64 {
-    if kind == "||" { return 1 }
-    if kind == "&&" { return 2 }
-    if kind == "==" || kind == "!=" { return 3 }
-    if kind == "<" || kind == "<=" || kind == ">" || kind == ">=" { return 4 }
-    if kind == "+" || kind == "-" { return 5 }
-    if kind == "*" || kind == "/" || kind == "%" { return 6 }
+    if kind == "or" { return 1 }
+    if kind == "and" { return 2 }
+    if kind == "==" or kind == "!=" { return 3 }
+    if kind == "<" or kind == "<=" or kind == ">" or kind == ">=" { return 4 }
+    if kind == "+" or kind == "-" { return 5 }
+    if kind == "*" or kind == "/" or kind == "%" { return 6 }
     return 0
 }
 
@@ -72,7 +72,7 @@ fn parse_primary(state: any) -> Node {
         return make_node("string", token.lexeme)
     }
 
-    if kind == "true" || kind == "false" {
+    if kind == "true" or kind == "false" {
         token = take_token(state)
         return make_node("bool", token.lexeme)
     }
@@ -83,7 +83,7 @@ fn parse_primary(state: any) -> Node {
         if accept(state, "(") {
             node.kind = "call"
             more = true
-            while more && peek_kind(state) != ")" && peek_kind(state) != "eof" {
+            while more and peek_kind(state) != ")" and peek_kind(state) != "eof" {
                 node = add_child(node, parse_expression(state, 1))
                 if !accept(state, ",") {
                     more = false
@@ -108,10 +108,10 @@ fn parse_expression(state: any, min_prec: f64) -> Node {
     left = parse_primary(state)
     done = false
 
-    while !done && peek_kind(state) != "eof" {
+    while !done and peek_kind(state) != "eof" {
         op = peek_kind(state)
         prec = precedence(op)
-        if prec < min_prec || prec == 0 {
+        if prec < min_prec or prec == 0 {
             done = true
         } else {
             take_token(state)
@@ -136,7 +136,7 @@ fn parse_statement(state: any) -> Node {
 
         if accept(state, "(") {
             more = true
-            while more && peek_kind(state) != ")" && peek_kind(state) != "eof" {
+            while more and peek_kind(state) != ")" and peek_kind(state) != "eof" {
                 param = take_token(state)
                 if param.kind == "ident" {
                     fn_node = add_child(fn_node, make_node("param", param.lexeme))
@@ -157,7 +157,7 @@ fn parse_statement(state: any) -> Node {
         }
 
         if accept(state, "{") {
-            while peek_kind(state) != "}" && peek_kind(state) != "eof" {
+            while peek_kind(state) != "}" and peek_kind(state) != "eof" {
                 fn_node = add_child(fn_node, parse_statement(state))
                 accept(state, ";")
             }
@@ -196,7 +196,7 @@ fn parse_statement(state: any) -> Node {
 
     if kind == "ident" {
         expr = parse_expression(state, 1)
-        if expr.kind == "ident" && accept(state, "=") {
+        if expr.kind == "ident" and accept(state, "=") {
             assign = make_node("assign", expr.text)
             assign = add_child(assign, parse_expression(state, 1))
             return assign
