@@ -360,6 +360,24 @@ fn emit_function(
                             v(*id),
                             v(args[0])
                         ));
+                    } else if name == "json_parse" {
+                        if (args.len() != 1) {
+                            return Err("SSA C backend: json_parse expects one argument".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_json_parse({});\n",
+                            v(*id),
+                            v(args[0])
+                        ));
+                    } else if name == "json_stringify" {
+                        if (args.len() != 1) {
+                            return Err("SSA C backend: json_stringify expects one argument".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_json_stringify({});\n",
+                            v(*id),
+                            v(args[0])
+                        ));
                     } else if name == "read_file" {
                         if args.len() != 1 {
                             return Err("SSA C backend: read_file expects one argument".into());
@@ -1135,6 +1153,370 @@ static NovaValue nova_env(NovaValue key) {
   const char* value = getenv(key.string);
   if (!value) return nova_null();
   return nova_string(nova_dup(value));
+}
+
+static void nova_json_skip_ws(const char** cursor) {
+  const char* p = *cursor;
+  while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+  *cursor = p;
+}
+
+static int nova_json_hex(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
+}
+
+static void nova_json_append_utf8(char* out, size_t* len, uint32_t code) {
+  if (code <= 0x7f) {
+    out[(*len)++] = (char)code;
+  } else if (code <= 0x7ff) {
+    out[(*len)++] = (char)(0xc0 | (code >> 6));
+    out[(*len)++] = (char)(0x80 | (code & 0x3f));
+  } else if (code <= 0xffff) {
+    out[(*len)++] = (char)(0xe0 | (code >> 12));
+    out[(*len)++] = (char)(0x80 | ((code >> 6) & 0x3f));
+    out[(*len)++] = (char)(0x80 | (code & 0x3f));
+  } else if (code <= 0x10ffff) {
+    out[(*len)++] = (char)(0xf0 | (code >> 18));
+    out[(*len)++] = (char)(0x80 | ((code >> 12) & 0x3f));
+    out[(*len)++] = (char)(0x80 | ((code >> 6) & 0x3f));
+    out[(*len)++] = (char)(0x80 | (code & 0x3f));
+  }
+}
+
+static NovaValue nova_json_parse_value(const char** cursor);
+
+static NovaValue nova_json_parse_string(const char** cursor) {
+  const char* p = *cursor;
+  if (*p != '"') return nova_null();
+  p++;
+
+  size_t cap = 32;
+  size_t len = 0;
+  char* out = (char*)calloc(cap, 1);
+  if (!out) return nova_null();
+
+  while (*p && *p != '"') {
+    uint32_t code = (unsigned char)*p++;
+    if (code == '\\') {
+      char esc = *p++;
+      switch (esc) {
+        case '"': code = '"'; break;
+        case '\\': code = '\\'; break;
+        case '/': code = '/'; break;
+        case 'b': code = 8; break;
+        case 'f': code = 12; break;
+        case 'n': code = 10; break;
+        case 'r': code = 13; break;
+        case 't': code = 9; break;
+        case 'u': {
+          int h0 = nova_json_hex(*p++);
+          int h1 = nova_json_hex(*p++);
+          int h2 = nova_json_hex(*p++);
+          int h3 = nova_json_hex(*p++);
+          if (h0 < 0 || h1 < 0 || h2 < 0 || h3 < 0) {
+            free(out);
+            return nova_null();
+          }
+          code = (uint32_t)((h0 << 12) | (h1 << 8) | (h2 << 4) | h3);
+          break;
+        }
+        default:
+          free(out);
+          return nova_null();
+      }
+    }
+
+    if (len + 5 >= cap) {
+      cap *= 2;
+      char* next = (char*)realloc(out, cap);
+      if (!next) {
+        free(out);
+        return nova_null();
+      }
+      out = next;
+    }
+
+    if (code >= 0xd800 && code <= 0xdfff) {
+      free(out);
+      return nova_null();
+    }
+    nova_json_append_utf8(out, &len, code);
+  }
+
+  if (*p != '"') {
+    free(out);
+    return nova_null();
+  }
+  p++;
+  out[len] = '\0';
+  *cursor = p;
+  return nova_string(out);
+}
+
+static NovaValue nova_json_parse_array(const char** cursor) {
+  const char* p = *cursor;
+  if (*p != '[') return nova_null();
+  p++;
+
+  size_t len = 0;
+  NovaValue* items = NULL;
+  nova_json_skip_ws(&p);
+
+  if (*p == ']') {
+    *cursor = p + 1;
+    return nova_array(NULL, 0);
+  }
+
+  while (*p) {
+    NovaValue item = nova_json_parse_value(&p);
+    NovaValue* next = (NovaValue*)realloc(items, (len + 1) * sizeof(NovaValue));
+    if (!next) {
+      free(items);
+      return nova_null();
+    }
+    items = next;
+    items[len++] = item;
+
+    nova_json_skip_ws(&p);
+    if (*p == ']') {
+      p++;
+      NovaValue result = nova_array(items, len);
+      free(items);
+      *cursor = p;
+      return result;
+    }
+    if (*p != ',') {
+      free(items);
+      return nova_null();
+    }
+    p++;
+    nova_json_skip_ws(&p);
+  }
+
+  free(items);
+  return nova_null();
+}
+
+static NovaValue nova_json_parse_object(const char** cursor) {
+  const char* p = *cursor;
+  if (*p != '{') return nova_null();
+  p++;
+
+  NovaMap* map = (NovaMap*)calloc(1, sizeof(NovaMap));
+  if (!map) return nova_null();
+
+  nova_json_skip_ws(&p);
+  if (*p == '}') {
+    p++;
+    NovaValue result = nova_map_value(map);
+    *cursor = p;
+    return result;
+  }
+
+  while (*p) {
+    NovaValue key = nova_json_parse_string(&p);
+    if (key.tag != NOVA_STRING) {
+      free(map->keys);
+      free(map->values);
+      free(map);
+      return nova_null();
+    }
+
+    nova_json_skip_ws(&p);
+    if (*p != ':') {
+      free(map->keys);
+      free(map->values);
+      free(map);
+      return nova_null();
+    }
+    p++;
+    nova_json_skip_ws(&p);
+
+    NovaValue value = nova_json_parse_value(&p);
+    size_t next_len = map->len + 1;
+    NovaValue* keys = (NovaValue*)realloc(map->keys, next_len * sizeof(NovaValue));
+    if (!keys) {
+      free(map->keys);
+      free(map->values);
+      free(map);
+      return nova_null();
+    }
+    map->keys = keys;
+    NovaValue* values = (NovaValue*)realloc(map->values, next_len * sizeof(NovaValue));
+    if (!values) {
+      free(map->keys);
+      free(map);
+      return nova_null();
+    }
+    map->values = values;
+    map->keys[map->len] = key;
+    map->values[map->len] = value;
+    map->len = next_len;
+
+    nova_json_skip_ws(&p);
+    if (*p == '}') {
+      p++;
+      NovaValue result = nova_map_value(map);
+      *cursor = p;
+      return result;
+    }
+    if (*p != ',') {
+      free(map->keys);
+      free(map->values);
+      free(map);
+      return nova_null();
+    }
+    p++;
+    nova_json_skip_ws(&p);
+  }
+
+  free(map->keys);
+  free(map->values);
+  free(map);
+  return nova_null();
+}
+
+static NovaValue nova_json_parse_value(const char** cursor) {
+  const char* p = *cursor;
+  nova_json_skip_ws(&p);
+
+  if (*p == '"') {
+    *cursor = p;
+    return nova_json_parse_string(cursor);
+  }
+  if (*p == '[') {
+    *cursor = p;
+    return nova_json_parse_array(cursor);
+  }
+  if (*p == '{') {
+    *cursor = p;
+    return nova_json_parse_object(cursor);
+  }
+  if (strncmp(p, "true", 4) == 0) {
+    *cursor = p + 4;
+    return nova_bool(1);
+  }
+  if (strncmp(p, "false", 5) == 0) {
+    *cursor = p + 5;
+    return nova_bool(0);
+  }
+  if (strncmp(p, "null", 4) == 0) {
+    *cursor = p + 4;
+    return nova_null();
+  }
+
+  char* end = NULL;
+  double number = strtod(p, &end);
+  if (end == p) return nova_null();
+  *cursor = end;
+  return nova_num(number);
+}
+
+static NovaValue nova_json_parse(NovaValue source) {
+  if (source.tag != NOVA_STRING || !source.string) return nova_null();
+  const char* cursor = source.string;
+  NovaValue value = nova_json_parse_value(&cursor);
+  nova_json_skip_ws(&cursor);
+  if (*cursor != '\0') return nova_null();
+  return value;
+}
+
+typedef struct {
+  char* data;
+  size_t len;
+  size_t cap;
+} NovaJsonBuffer;
+
+static int nova_json_buf_reserve(NovaJsonBuffer* buf, size_t extra) {
+  size_t required = buf->len + extra + 1;
+  if (required <= buf->cap) return 1;
+  size_t cap = buf->cap ? buf->cap : 64;
+  while (cap < required) cap *= 2;
+  char* next = (char*)realloc(buf->data, cap);
+  if (!next) return 0;
+  buf->data = next;
+  buf->cap = cap;
+  return 1;
+}
+
+static int nova_json_buf_push(NovaJsonBuffer* buf, char c) {
+  if (!nova_json_buf_reserve(buf, 1)) return 0;
+  buf->data[buf->len++] = c;
+  buf->data[buf->len] = '\0';
+  return 1;
+}
+
+static int nova_json_buf_text(NovaJsonBuffer* buf, const char* text) {
+  size_t len = strlen(text);
+  if (!nova_json_buf_reserve(buf, len)) return 0;
+  memcpy(buf->data + buf->len, text, len);
+  buf->len += len;
+  buf->data[buf->len] = '\0';
+  return 1;
+}
+
+static int nova_json_stringify_value(NovaJsonBuffer* buf, NovaValue value);
+
+static int nova_json_stringify_string(NovaJsonBuffer* buf, const char* text) {
+  if (!nova_json_buf_push(buf, '"')) return 0;
+  for (const unsigned char* p = (const unsigned char*)(text ? text : ""); *p; p++) {
+    switch (*p) {
+      case '"': if (!nova_json_buf_text(buf, "\\"")) return 0; break;
+      case '\\': if (!nova_json_buf_text(buf, "\\\\")) return 0; break;
+      case '\n': if (!nova_json_buf_text(buf, "\\n")) return 0; break;
+      case '\r': if (!nova_json_buf_text(buf, "\\r")) return 0; break;
+      case '\t': if (!nova_json_buf_text(buf, "\\t")) return 0; break;
+      default: if (!nova_json_buf_push(buf, (char)*p)) return 0; break;
+    }
+  }
+  return nova_json_buf_push(buf, '"');
+}
+
+static int nova_json_stringify_value(NovaJsonBuffer* buf, NovaValue value) {
+  switch (value.tag) {
+    case NOVA_NULL:
+      return nova_json_buf_text(buf, "null");
+    case NOVA_BOOL:
+      return nova_json_buf_text(buf, value.number != 0 ? "true" : "false");
+    case NOVA_NUMBER: {
+      char number[64];
+      snprintf(number, sizeof(number), "%.17g", value.number);
+      return nova_json_buf_text(buf, number);
+    }
+    case NOVA_STRING:
+      return nova_json_stringify_string(buf, value.string);
+    case NOVA_ARRAY:
+      if (!nova_json_buf_push(buf, '[')) return 0;
+      for (size_t i = 0; i < (value.array ? value.array->len : 0); i++) {
+        if (i && !nova_json_buf_push(buf, ',')) return 0;
+        if (!nova_json_stringify_value(buf, value.array->items[i])) return 0;
+      }
+      return nova_json_buf_push(buf, ']');
+    case NOVA_MAP:
+      if (!nova_json_buf_push(buf, '{')) return 0;
+      for (size_t i = 0; i < (value.map ? value.map->len : 0); i++) {
+        if (i && !nova_json_buf_push(buf, ',')) return 0;
+        if (value.map->keys[i].tag != NOVA_STRING) return 0;
+        if (!nova_json_stringify_string(buf, value.map->keys[i].string)) return 0;
+        if (!nova_json_buf_push(buf, ':')) return 0;
+        if (!nova_json_stringify_value(buf, value.map->values[i])) return 0;
+      }
+      return nova_json_buf_push(buf, '}');
+    default:
+      return 0;
+  }
+}
+
+static NovaValue nova_json_stringify(NovaValue value) {
+  NovaJsonBuffer buf = {0};
+  if (!nova_json_stringify_value(&buf, value)) {
+    free(buf.data);
+    return nova_null();
+  }
+  return nova_string(buf.data ? buf.data : nova_dup(""));
 }
 
 static NovaValue nova_read_file(NovaValue path) {
