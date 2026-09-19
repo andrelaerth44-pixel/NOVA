@@ -12,3 +12,10 @@ print has_next(chars)
 print unwrap(next(chars))
 remaining = collect(chars)
 print len(remaining)
+
+range_it = iter(range(2, 5))
+range_total = 0
+for value in range_it {
+    range_total = range_total + value
+}
+print range_total
