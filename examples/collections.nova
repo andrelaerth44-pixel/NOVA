@@ -17,3 +17,8 @@ print set_has(tags, "language")
 print len(scores)
 print len(tags)
 print scores["Laerth"]
+
+print [1, 2] == [1, 2]
+print map { "x": 1 } == map { "x": 1 }
+print set { 1, 2 } == set { 2, 1 }
+print Some(42) == Some(42)
