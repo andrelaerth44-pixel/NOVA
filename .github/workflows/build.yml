@@ -120,6 +120,27 @@ jobs:
           grep -Fxq "3" /tmp/collections.out
           grep -Fxq "100" /tmp/collections.out
 
+      - name: Native stdlib smoke test
+        shell: bash
+        run: |
+          cargo run --release -- check examples/native_stdlib.nova
+          cargo run --release -- build-native-ssa examples/native_stdlib.nova /tmp/nova-native-stdlib
+          test -x /tmp/nova-native-stdlib
+          /tmp/nova-native-stdlib > /tmp/nova-native-stdlib.out
+          cat > /tmp/nova-native-stdlib.expected <<'EOF'
+          true
+          hello NOVA
+          NOVA-native-test.txt
+          txt
+          NOVA-native-test
+          42
+          7
+          7
+          true
+          false
+          EOF
+          diff -u /tmp/nova-native-stdlib.expected /tmp/nova-native-stdlib.out
+
       - name: Native collection smoke test
         shell: bash
         run: |
