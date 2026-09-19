@@ -1,0 +1,10 @@
+import "../selfhost/lexer.nova"
+
+source = "fn add(a: i64, b: i64) -> i64 { return a + b }"
+tokens = lex(source)
+
+print len(tokens)
+print tokens[0].kind
+print tokens[1].lexeme
+print tokens[12].lexeme
+print tokens[19].kind
