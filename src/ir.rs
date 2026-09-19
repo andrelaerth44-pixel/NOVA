@@ -141,6 +141,7 @@ pub struct SsaBlock {
 pub struct SsaFunction {
     pub name: String,
     pub params: Vec<(String, IrType, ValueId)>,
+    pub captures: Vec<(String, IrType, ValueId)>,
     pub return_type: IrType,
     pub blocks: Vec<SsaBlock>,
 }
@@ -315,6 +316,11 @@ impl IrBuilder {
             crate::Stmt::Expr(e) => { self.lower_expr(e); self.push(Instr::Pop); }
             crate::Stmt::Let(n,_,e) | crate::Stmt::Assign(n,e) => {
                 self.lower_expr(e); self.push(Instr::Store(n.clone()));
+            }
+            crate::Stmt::AssignTarget(target, e) => {
+                self.lower_expr(target);
+                self.lower_expr(e);
+                self.push(Instr::Call { name: "assign_target".into(), argc: 2, result: IrType::Null });
             }
             crate::Stmt::Print(e) => {
                 self.lower_expr(e);
@@ -515,6 +521,11 @@ impl SsaFunction {
             }
         }
         for (_, _, id) in &self.params {
+            if defs.insert(*id, (0, usize::MAX)).is_some() {
+                return Err(format!("SSA value {} is defined more than once", id));
+            }
+        }
+        for (_, _, id) in &self.captures {
             if defs.insert(*id, (0, usize::MAX)).is_some() {
                 return Err(format!("SSA value {} is defined more than once", id));
             }

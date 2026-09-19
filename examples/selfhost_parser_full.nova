@@ -1,0 +1,9 @@
+import "../selfhost/lexer.nova"
+import "../selfhost/parser.nova"
+
+source = read_file("examples/selfhost_parser_full.nova")
+tokens = lex(source)
+tree = parse_program(tokens)
+
+print tree.kind
+print len(tree.children)

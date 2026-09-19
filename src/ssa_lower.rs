@@ -68,6 +68,10 @@ fn collect_stmt_vars(
                 if !bound.contains(name) { used.insert(name.clone()); }
                 collect_expr_vars(expr, bound, used);
             }
+            Stmt::AssignTarget(target, expr) => {
+                collect_expr_vars(target, bound, used);
+                collect_expr_vars(expr, bound, used);
+            }
             Stmt::If(condition, then_body, else_body) => {
                 collect_expr_vars(condition, bound, used);
                 let mut then_bound = bound.clone();
@@ -111,6 +115,21 @@ struct ClosureSpec {
     captures: Vec<String>,
 }
 
+
+type EnumVariants = std::collections::HashMap<String, String>;
+
+fn collect_enum_variants(stmts: &[Stmt]) -> EnumVariants {
+    let mut variants = EnumVariants::new();
+    for stmt in stmts {
+        if let Stmt::EnumDecl(name, members) = stmt {
+            for (variant, _) in members {
+                variants.insert(variant.clone(), name.clone());
+            }
+        }
+    }
+    variants
+}
+
 struct Builder {
     blocks: Vec<SsaBlock>,
     current: usize,
@@ -119,10 +138,18 @@ struct Builder {
     owner_name: String,
     closure_counter: usize,
     closures: Vec<ClosureSpec>,
+    enum_variants: EnumVariants,
 }
 
 impl Builder {
     fn new(owner_name: impl Into<String>) -> Self {
+        Self::new_with_enums(owner_name, EnumVariants::new())
+    }
+
+    fn new_with_enums(
+        owner_name: impl Into<String>,
+        enum_variants: EnumVariants,
+    ) -> Self {
         Self {
             blocks: vec![SsaBlock { id: 0, ..Default::default() }],
             current: 0,
@@ -131,6 +158,7 @@ impl Builder {
             owner_name: owner_name.into(),
             closure_counter: 0,
             closures: Vec::new(),
+            enum_variants,
         }
     }
     fn fresh(&mut self) -> ValueId { let v = self.next; self.next += 1; v }
@@ -171,8 +199,18 @@ impl Builder {
         match e {
             Expr::Val(v) => self.const_value(v),
             Expr::Var(name) => {
-                if let Some(v) = self.lookup(name) { v }
-                else { self.emit(SsaInstr::Load { name: name.clone() }) }
+                if name == "None" {
+                    self.emit(SsaInstr::EnumInit {
+                        name: "Option".into(),
+                        variant: "None".into(),
+                        payload: None,
+                        ty: IrType::Generic("Option".into(), vec![IrType::Any]),
+                    })
+                } else if let Some(v) = self.lookup(name) {
+                    v
+                } else {
+                    self.emit(SsaInstr::Load { name: name.clone() })
+                }
             }
             Expr::Array(xs) => {
                 let args = xs.iter().map(|x| self.expr(x)).collect::<Vec<_>>();
@@ -312,11 +350,47 @@ impl Builder {
                         })
                     }
                     _ => {
-                        let values = args.iter().map(|x| self.expr(x)).collect();
-                        self.emit(SsaInstr::Call { name: name.clone(), args: values, result: IrType::Any })
+                        let values: Vec<ValueId> = args.iter().map(|x| self.expr(x)).collect();
+                        if let Some(enum_name) = self.enum_variants.get(name) {
+                            self.emit(SsaInstr::EnumInit {
+                                name: enum_name.clone(),
+                                variant: name.clone(),
+                                payload: values.first().copied(),
+                                ty: IrType::Enum(enum_name.clone()),
+                            })
+                        } else {
+                            self.emit(SsaInstr::Call { name: name.clone(), args: values, result: IrType::Any })
+                        }
                     }
                 }
             }
+        }
+    }
+
+    fn update_target(&mut self, target: &Expr, value: ValueId) -> (String, ValueId) {
+        match target {
+            Expr::Var(name) => (name.clone(), value),
+            Expr::Field(base, field) => {
+                let base_value = self.expr(base);
+                let field_value = self.emit(SsaInstr::Const(SsaValue::String(field.clone())));
+                let updated_base = self.emit(SsaInstr::Call {
+                    name: "field_set".into(),
+                    args: vec![base_value, field_value, value],
+                    result: IrType::Any,
+                });
+                self.update_target(base, updated_base)
+            }
+            Expr::Index(base, index) => {
+                let base_value = self.expr(base);
+                let index_value = self.expr(index);
+                let updated_base = self.emit(SsaInstr::Call {
+                    name: "index_set".into(),
+                    args: vec![base_value, index_value, value],
+                    result: IrType::Any,
+                });
+                self.update_target(base, updated_base)
+            }
+            _ => panic!("invalid structured assignment target"),
         }
     }
 
@@ -334,6 +408,12 @@ impl Builder {
                 let v = self.expr(e);
                 self.bind(name.clone(), v);
                 self.emit(SsaInstr::Store { name: name.clone(), value: v });
+            }
+            Stmt::AssignTarget(target, e) => {
+                let value = self.expr(e);
+                let (root, updated) = self.update_target(target, value);
+                self.bind(root.clone(), updated);
+                self.emit(SsaInstr::Store { name: root, value: updated });
             }
             Stmt::Return(e) => {
                 let v = self.expr(e);
@@ -442,13 +522,87 @@ impl Builder {
                 }
             }
             Stmt::For(name, iterable, body) => {
-                let iterable_v = self.expr(iterable);
-                self.emit(SsaInstr::Call { name: "for_each".into(), args: vec![iterable_v], result: IrType::Null });
+                // Normalize every supported iterable through the native
+                // Iterator abstraction.
+                let source = self.expr(iterable);
+                let iterator = self.emit(SsaInstr::Call {
+                    name: "iter".into(),
+                    args: vec![source],
+                    result: IrType::Generic("Iterator".into(), vec![IrType::Any]),
+                });
+                let preheader = self.current;
+                let header = self.new_block();
+                let loop_body = self.new_block();
+                let exit = self.new_block();
+                let incoming = self.vars.last().cloned().unwrap_or_default();
+
+                self.blocks[preheader].terminator = Some(Terminator::Jump(header));
+                self.set_current(header);
+
+                let mut phis = Vec::<(String, ValueId)>::new();
+                for (var_name, value) in incoming.iter() {
+                    let phi = self.fresh();
+                    self.blocks[header].instrs.push((phi, SsaInstr::Phi {
+                        incomings: vec![(preheader, *value)],
+                        ty: IrType::Any,
+                    }));
+                    self.bind(var_name.clone(), phi);
+                    phis.push((var_name.clone(), phi));
+                }
+
+                let condition = self.emit(SsaInstr::Call {
+                    name: "has_next".into(),
+                    args: vec![iterator],
+                    result: IrType::Bool,
+                });
+                self.blocks[header].terminator = Some(Terminator::Branch {
+                    condition,
+                    then_block: loop_body,
+                    else_block: exit,
+                });
+
+                self.set_current(loop_body);
                 self.push_scope();
-                let item = self.emit(SsaInstr::Call { name: "loop_item".into(), args: vec![], result: IrType::Any });
+                let next_value = self.emit(SsaInstr::Call {
+                    name: "next".into(),
+                    args: vec![iterator],
+                    result: IrType::Generic("Option".into(), vec![IrType::Any]),
+                });
+                let item = self.emit(SsaInstr::Call {
+                    name: "unwrap".into(),
+                    args: vec![next_value],
+                    result: IrType::Any,
+                });
                 self.bind(name.clone(), item);
                 self.stmt_list(body);
+                let body_vars = self.vars.last().cloned().unwrap_or_default();
+                let loops_back = self.blocks[self.current].terminator.is_none();
+
+                if loops_back {
+                    self.blocks[self.current].terminator = Some(Terminator::Jump(header));
+                    let backedge = self.current;
+
+                    for (var_name, phi) in &phis {
+                        let initial = incoming.get(var_name).copied().unwrap();
+                        let value = body_vars.get(var_name).copied().unwrap_or(initial);
+                        if let Some((_, instr)) = self.blocks[header]
+                            .instrs
+                            .iter_mut()
+                            .find(|(id, _)| *id == *phi)
+                        {
+                            if let SsaInstr::Phi { incomings, .. } = instr {
+                                incomings.push((backedge, value));
+                            }
+                        }
+                    }
+                }
+
                 self.pop_scope();
+                self.set_current(exit);
+                self.vars.last_mut().unwrap().clone_from(&incoming);
+                for (var_name, phi) in phis {
+                    self.bind(var_name, phi);
+                }
             }
             Stmt::Match(value, arms, otherwise) => {
                 let subject = self.expr(value);
@@ -494,14 +648,16 @@ fn lower_function_tree_with_captures(
     ret: &crate::types::Type,
     body: &[Stmt],
     captures: &[String],
+    enum_variants: &EnumVariants,
 ) -> Vec<SsaFunction> {
-    let mut b = Builder::new(name);
+    let mut b = Builder::new_with_enums(name, enum_variants.clone());
     let mut params = Vec::new();
 
+    let mut capture_params = Vec::new();
     for capture in captures {
         let id = b.fresh();
         b.bind(capture.clone(), id);
-        params.push((capture.clone(), IrType::Any, id));
+        capture_params.push((capture.clone(), IrType::Any, id));
     }
 
     for (arg, ty) in args {
@@ -523,6 +679,7 @@ fn lower_function_tree_with_captures(
     let function = SsaFunction {
         name: name.into(),
         params,
+        captures: capture_params,
         return_type: type_to_ir(ret),
         blocks: b.blocks,
     };
@@ -535,6 +692,7 @@ fn lower_function_tree_with_captures(
             &crate::types::Type::Any,
             &spec.body,
             &spec.captures,
+            enum_variants,
         ));
     }
     functions
@@ -546,7 +704,7 @@ pub fn lower_function(
     ret: &crate::types::Type,
     body: &[Stmt],
 ) -> SsaFunction {
-    lower_function_tree_with_captures(name, args, ret, body, &[])
+    lower_function_tree_with_captures(name, args, ret, body, &[], &EnumVariants::new())
         .into_iter()
         .next()
         .expect("lower_function always produces a function")
@@ -562,15 +720,32 @@ pub fn lower_function_tree(
     ret: &crate::types::Type,
     body: &[Stmt],
 ) -> Vec<SsaFunction> {
-    lower_function_tree_with_captures(name, args, ret, body, &[])
+    lower_function_tree_with_captures(name, args, ret, body, &[], &collect_enum_variants(body))
 }
 
 pub fn lower_program(program: &[Stmt]) -> SsaFunction {
-    lower_function("<main>", &[], &crate::types::Type::Void, program)
+    lower_function_tree_with_captures(
+        "<main>",
+        &[],
+        &crate::types::Type::Void,
+        program,
+        &[],
+        &collect_enum_variants(program),
+    )
+    .into_iter()
+    .next()
+    .expect("lower_program always produces a function")
 }
 
 pub fn lower_program_tree(program: &[Stmt]) -> Vec<SsaFunction> {
-    lower_function_tree("<main>", &[], &crate::types::Type::Void, program)
+    lower_function_tree_with_captures(
+        "<main>",
+        &[],
+        &crate::types::Type::Void,
+        program,
+        &[],
+        &collect_enum_variants(program),
+    )
 }
 
 pub fn verify_program(program: &[Stmt]) -> Result<(), String> {

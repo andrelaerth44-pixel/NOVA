@@ -1,0 +1,25 @@
+struct User {
+    name: string
+    age: i32
+    active: bool
+}
+
+user = User {
+    name: "Laerth",
+    age: 18,
+    active: true
+}
+
+user.age = 21
+
+values = [1, 2, 3]
+values[1] = 9
+
+scores = map{"x": 10}
+scores["x"] = 42
+scores["y"] = 7
+
+print user.age
+print values[1]
+print scores["x"]
+print scores["y"]

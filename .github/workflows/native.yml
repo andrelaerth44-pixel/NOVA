@@ -1,0 +1,214 @@
+name: NOVA native backend
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo fmt
+      - run: cargo fmt -- --check
+      - run: cargo test
+      - run: cargo build --release
+
+      - name: Native C source export
+        shell: bash
+        run: |
+          cargo run --release -- build-native-ssa-c examples/hello.nova /tmp/nova-hello.c
+          test -s /tmp/nova-hello.c
+          grep -Fq 'nova_main' /tmp/nova-hello.c
+
+      - name: Native closure
+        shell: bash
+        run: |
+          cargo run --release -- check examples/closures.nova
+          cargo run --release -- abi examples/closures.nova > /tmp/closures.abi
+          grep -Fq 'NOVA ABI v1' /tmp/closures.abi
+          cargo run --release -- build-native-ssa examples/closures.nova /tmp/nova-closure
+          test "$(/tmp/nova-closure)" = $'1\n2'
+
+      - name: Native struct
+        shell: bash
+        run: |
+          cargo run --release -- build-native-ssa examples/structs.nova /tmp/nova-struct
+          test "$(/tmp/nova-struct)" = $'Laerth\n18\ntrue'
+
+      - name: Native enum
+        shell: bash
+        run: |
+          cat > /tmp/native_enum.nova <<'EOF'
+          enum Status {
+              Ready
+              Running
+              Failed(string)
+          }
+          status = Failed("oops")
+          match status {
+              Failed(message) {
+                  print message
+              },
+              else {
+                  print "other"
+              }
+          }
+          EOF
+          cargo run --release -- check /tmp/native_enum.nova
+          cargo run --release -- build-native-ssa /tmp/native_enum.nova /tmp/nova-enum
+          test "$(/tmp/nova-enum)" = "oops"
+
+      - name: Native control flow
+        shell: bash
+        run: |
+          cargo run --release -- build-native-ssa examples/ssa_control_flow.nova /tmp/nova-cfg
+          /tmp/nova-cfg > /tmp/nova-cfg.out
+          cat > /tmp/nova-cfg.expected <<'EOF'
+          ok
+          truthy
+          EOF
+          diff -u /tmp/nova-cfg.expected /tmp/nova-cfg.out
+          cargo run --release -- build-native-ssa examples/ssa.nova /tmp/nova-loop
+          test "$(/tmp/nova-loop)" = "15"
+
+      - name: Native for and iterator
+        shell: bash
+        run: |
+          cargo run --release -- build-native-ssa examples/native_for.nova /tmp/nova-for
+          test "$(/tmp/nova-for)" = "60"
+          cargo run --release -- check examples/native_iterator.nova
+          cargo run --release -- build-native-ssa examples/native_iterator.nova /tmp/nova-iterator
+          /tmp/nova-iterator > /tmp/nova-iterator.out
+          cat > /tmp/nova-iterator.expected <<'EOF'
+          60
+          true
+          N
+          3
+          9
+          EOF
+          diff -u /tmp/nova-iterator.expected /tmp/nova-iterator.out
+
+      - name: Native collections
+        shell: bash
+        run: |
+          cargo run --release -- check examples/collections.nova
+          cargo run --release -- build-native-ssa examples/collections.nova /tmp/nova-collections
+          /tmp/nova-collections > /tmp/nova-collections.out
+          cat > /tmp/nova-collections.expected <<'EOF'
+          99
+          true
+          true
+          2
+          3
+          100
+          true
+          true
+          true
+          true
+          EOF
+          diff -u /tmp/nova-collections.expected /tmp/nova-collections.out
+
+      - name: Native mutation
+        shell: bash
+        run: |
+          cargo run --release -- build-native-ssa examples/native_mutation.nova /tmp/nova-mutation
+          /tmp/nova-mutation > /tmp/nova-mutation.out
+          grep -Fxq "21" /tmp/nova-mutation.out
+          grep -Fxq "9" /tmp/nova-mutation.out
+          grep -Fxq "42" /tmp/nova-mutation.out
+          grep -Fxq "7" /tmp/nova-mutation.out
+
+      - name: Native JSON
+        shell: bash
+        run: |
+          cargo run --release -- check examples/native_json.nova
+          cargo run --release -- build-native-ssa examples/native_json.nova /tmp/nova-native-json
+          /tmp/nova-native-json > /tmp/nova-native-json.out
+          cat > /tmp/nova-native-json.expected <<'EOF'
+          NOVA
+          42
+          true
+          2
+          {"name":"NOVA","value":42,"ok":true,"items":[1,2]}
+          EOF
+          diff -u /tmp/nova-native-json.expected /tmp/nova-native-json.out
+
+      - name: Native stdlib
+        shell: bash
+        run: |
+          cargo run --release -- check examples/native_stdlib.nova
+          cargo run --release -- build-native-ssa examples/native_stdlib.nova /tmp/nova-stdlib
+          NOVA_NATIVE_ENV=bootstrap /tmp/nova-stdlib > /tmp/nova-stdlib.out
+          cat > /tmp/nova-stdlib.expected <<'EOF'
+          true
+          hello NOVA
+          NOVA-native-test.txt
+          txt
+          NOVA-native-test
+          bootstrap
+          O
+          4
+          42
+          7
+          7
+          true
+          false
+          EOF
+          diff -u /tmp/nova-stdlib.expected /tmp/nova-stdlib.out
+
+      - name: Self-hosted parser
+        shell: bash
+        run: |
+          cargo run --release -- check examples/selfhost_parser.nova
+          cargo run --release -- build-native-ssa examples/selfhost_parser.nova /tmp/nova-selfhost-parser
+          /tmp/nova-selfhost-parser > /tmp/nova-selfhost-parser.out
+          cat > /tmp/nova-selfhost-parser.expected <<'EOF'
+          program
+          1
+          fn
+          add
+          a
+          EOF
+          diff -u /tmp/nova-selfhost-parser.expected /tmp/nova-selfhost-parser.out
+
+      - name: Self-hosted full grammar parser
+        shell: bash
+        run: |
+          cargo run --release -- check examples/selfhost_parser_full.nova
+          cargo run --release -- build-native-ssa examples/selfhost_parser_full.nova /tmp/nova-selfhost-parser-full
+          /tmp/nova-selfhost-parser-full > /tmp/nova-selfhost-parser-full.out
+          cat > /tmp/nova-selfhost-parser-full.expected <<'EOF'
+          program
+          6
+          EOF
+          diff -u /tmp/nova-selfhost-parser-full.expected /tmp/nova-selfhost-parser-full.out
+
+      - name: Self-hosted compiler bootstrap
+        shell: bash
+        run: |
+          rm -f /tmp/nova-selfhost-generated.c /tmp/nova-selfhost-generated
+          cargo run --release -- check examples/selfhost_compile.nova
+          cargo run --release -- build-native-ssa examples/selfhost_compile.nova /tmp/nova-selfhost-compiler
+          test -x /tmp/nova-selfhost-compiler
+          /tmp/nova-selfhost-compiler > /tmp/nova-selfhost-compiler.out
+          test -s /tmp/nova-selfhost-generated.c
+          cc -O2 -std=c11 /tmp/nova-selfhost-generated.c -o /tmp/nova-selfhost-generated
+          test -x /tmp/nova-selfhost-generated
+          test "$(/tmp/nova-selfhost-generated)" = "42"
+
+      - name: Self-hosted lexer
+        shell: bash
+        run: |
+          cargo run --release -- check examples/selfhost_lexer.nova
+          cargo run --release -- build-native-ssa examples/selfhost_lexer.nova /tmp/nova-selfhost-lexer
+          /tmp/nova-selfhost-lexer > /tmp/nova-selfhost-lexer.out
+          cat > /tmp/nova-selfhost-lexer.expected <<'EOF'
+          20
+          fn
+          add
+          i64
+          eof
+          EOF
+          diff -u /tmp/nova-selfhost-lexer.expected /tmp/nova-selfhost-lexer.out

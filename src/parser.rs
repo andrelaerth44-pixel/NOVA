@@ -127,12 +127,16 @@ impl Parser {
                     if !self.eat(&Token::Eq){return Err("expected =".into())}
                     return Ok(Stmt::Let(name,Some(ty),self.expr()?));
                 }
-                if self.p+1<self.t.len() && self.t[self.p+1]==Token::Eq {
-                    self.take();
-                    self.take();
-                    return Ok(Stmt::Assign(name,self.expr()?));
+                let target=self.expr()?;
+                if self.eat(&Token::Eq) {
+                    let value=self.expr()?;
+                    return match target {
+                        Expr::Var(name) => Ok(Stmt::Assign(name,value)),
+                        Expr::Field(_, _) | Expr::Index(_, _) => Ok(Stmt::AssignTarget(target,value)),
+                        _ => Err("assignment target must be a variable, field, or index".into()),
+                    };
                 }
-                Ok(Stmt::Expr(self.expr()?))
+                Ok(Stmt::Expr(target))
             },
             _=>Ok(Stmt::Expr(self.expr()?))
         }

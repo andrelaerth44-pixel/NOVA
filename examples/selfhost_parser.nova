@@ -1,0 +1,12 @@
+import "../selfhost/lexer.nova"
+import "../selfhost/parser.nova"
+
+source = "fn add(a: i64, b: i64) -> i64 { return a + b }"
+tokens = lex(source)
+tree = parse_program(tokens)
+
+print tree.kind
+print len(tree.children)
+print tree.children[0].kind
+print tree.children[0].text
+print tree.children[0].children[0].text
