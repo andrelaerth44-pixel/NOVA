@@ -55,6 +55,36 @@ fn binary_expr(op: &str, left: &str, right: &str) -> Option<String> {
     })
 }
 
+fn slot_ident(name: &str) -> String {
+    let mut out = String::from("nova_slot_");
+    for ch in name.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '_' {
+            out.push(ch);
+        } else {
+            out.push('_');
+        }
+    }
+    out
+}
+
+fn state_names(function: &SsaFunction) -> std::collections::BTreeSet<String> {
+    let mut names = std::collections::BTreeSet::new();
+    for block in &function.blocks {
+        for (_, instr) in &block.instrs {
+            match instr {
+                SsaInstr::Load { name } => {
+                    names.insert(name.clone());
+                }
+                SsaInstr::Store { name, .. } => {
+                    names.insert(name.clone());
+                }
+                _ => {}
+            }
+        }
+    }
+    names
+}
+
 fn max_value_id(function: &SsaFunction) -> ValueId {
     let mut max = 0;
     for (_, _, id) in &function.params {
@@ -99,6 +129,19 @@ fn emit_function(
 
     for id in 0..=max {
         out.push_str(&format!("  NovaValue {} = nova_null();\n", v(id)));
+    }
+
+    let state = state_names(function);
+    let captures: std::collections::BTreeSet<String> = function
+        .captures
+        .iter()
+        .map(|(name, _, _)| name.clone())
+        .collect();
+    for name in state.iter().filter(|name| !captures.contains(*name)) {
+        out.push_str(&format!(
+            "  NovaValue {} = nova_null();\n",
+            slot_ident(name)
+        ));
     }
 
     for (slot, (_, _, id)) in function.captures.iter().enumerate() {
@@ -157,10 +200,23 @@ fn emit_function(
                     ));
                 }
                 SsaInstr::Load { name } => {
-                    return Err(format!(
-                        "SSA C backend: unresolved Load({}) in {}",
-                        name, function.name
-                    ));
+                    if let Some(slot) = function
+                        .captures
+                        .iter()
+                        .position(|(capture, _, _)| capture == name)
+                    {
+                        out.push_str(&format!(
+                            "  {} = env ? env->slots[{}] : nova_null();\n",
+                            v(*id),
+                            slot
+                        ));
+                    } else {
+                        out.push_str(&format!(
+                            "  {} = {};\n",
+                            v(*id),
+                            slot_ident(name)
+                        ));
+                    }
                 }
                 SsaInstr::Store { name, value } => {
                     if let Some(slot) = function
@@ -171,6 +227,12 @@ fn emit_function(
                         out.push_str(&format!(
                             "  if (env) env->slots[{}] = {};\n",
                             slot,
+                            v(*value)
+                        ));
+                    } else {
+                        out.push_str(&format!(
+                            "  {} = {};\n",
+                            slot_ident(name),
                             v(*value)
                         ));
                     }
@@ -972,6 +1034,70 @@ mod tests {
 #[cfg(test)]
 mod native_execution_tests {
     use std::process::Command;
+
+    #[test]
+    fn native_load_store_executes_real_binary() {
+        use crate::ir::{IrType, SsaBlock, SsaFunction, SsaInstr, SsaValue, Terminator};
+
+        let function = SsaFunction {
+            name: "<main>".into(),
+            params: Vec::new(),
+            captures: Vec::new(),
+            return_type: IrType::Null,
+            blocks: vec![SsaBlock {
+                id: 0,
+                params: Vec::new(),
+                instrs: vec![
+                    (0, SsaInstr::Const(SsaValue::Number(7.0))),
+                    (1, SsaInstr::Store {
+                        name: "answer".into(),
+                        value: 0,
+                    }),
+                    (2, SsaInstr::Load {
+                        name: "answer".into(),
+                    }),
+                    (3, SsaInstr::Call {
+                        name: "print".into(),
+                        args: vec![2],
+                        result: IrType::Null,
+                    }),
+                ],
+                terminator: Some(Terminator::Return(None)),
+            }],
+        };
+
+        let generated = crate::backend_ssa_c::emit_c(&[function])
+            .expect("SSA native backend should emit load/store program");
+
+        let dir = std::env::temp_dir().join(format!(
+            "nova-native-load-store-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("create native test directory");
+        let c_path = dir.join("state.c");
+        let bin_path = dir.join("state-bin");
+        std::fs::write(&c_path, generated).expect("write generated C");
+
+        let compile = Command::new("cc")
+            .args([
+                "-O2",
+                "-std=c11",
+                c_path.to_str().expect("C path"),
+                "-o",
+                bin_path.to_str().expect("binary path"),
+            ])
+            .status()
+            .expect("invoke C compiler");
+        assert!(compile.success(), "C compiler failed: {compile}");
+
+        let output = Command::new(&bin_path)
+            .output()
+            .expect("execute native load/store binary");
+        assert!(output.status.success(), "native program failed");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "7\n");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     #[test]
     fn native_option_result_try_executes_real_binary() {
