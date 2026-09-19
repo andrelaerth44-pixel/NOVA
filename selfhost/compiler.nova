@@ -63,6 +63,14 @@ fn emit_expr(node: Node) -> string {
 }
 
 fn emit_statement(node: Node) -> string {
+    if node.kind == "let" {
+        return "double " + node.text + " = " + emit_expr(node.children[0]) + ";"
+    }
+
+    if node.kind == "assign" {
+        return node.text + " = " + emit_expr(node.children[0]) + ";"
+    }
+
     if node.kind == "return" {
         return "return " + emit_expr(node.children[0]) + ";"
     }
