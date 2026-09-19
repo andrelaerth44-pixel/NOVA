@@ -8,16 +8,24 @@ fn escape_c(text: string) -> string {
         c = text[i]
         if c == chr(92) {
             out = out + chr(92) + chr(92)
-        } else if c == chr(34) {
-            out = out + chr(92) + chr(34)
-        } else if c == chr(10) {
-            out = out + chr(92) + "n"
-        } else if c == chr(13) {
-            out = out + chr(92) + "r"
-        } else if c == chr(9) {
-            out = out + chr(92) + "t"
         } else {
-            out = out + c
+            if c == chr(34) {
+                out = out + chr(92) + chr(34)
+            } else {
+                if c == chr(10) {
+                    out = out + chr(92) + "n"
+                } else {
+                    if c == chr(13) {
+                        out = out + chr(92) + "r"
+                    } else {
+                        if c == chr(9) {
+                            out = out + chr(92) + "t"
+                        } else {
+                            out = out + c
+                        }
+                    }
+                }
+            }
         }
         i = i + 1
     }
@@ -44,8 +52,11 @@ fn emit_expr(node: Node) -> string {
         op = node.text
         if op == "and" {
             op = "&&"
-        } else if op == "or" {
+        } else {
+            if op == "or" {
             op = "||"
+        }
+            }
         }
         return "(" + left + " " + op + " " + right + ")"
     }
