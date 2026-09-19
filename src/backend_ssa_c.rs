@@ -1155,6 +1155,8 @@ static NovaValue nova_env(NovaValue key) {
   return nova_string(nova_dup(value));
 }
 
+static NovaValue nova_array(NovaValue* args, size_t argc);
+
 static void nova_json_skip_ws(const char** cursor) {
   const char* p = *cursor;
   while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
@@ -1464,7 +1466,7 @@ static int nova_json_stringify_string(NovaJsonBuffer* buf, const char* text) {
   if (!nova_json_buf_push(buf, '"')) return 0;
   for (const unsigned char* p = (const unsigned char*)(text ? text : ""); *p; p++) {
     switch (*p) {
-      case '"': if (!nova_json_buf_text(buf, "\\"")) return 0; break;
+      case '"': if (!nova_json_buf_text(buf, "\\\"")) return 0; break;
       case '\\': if (!nova_json_buf_text(buf, "\\\\")) return 0; break;
       case '\n': if (!nova_json_buf_text(buf, "\\n")) return 0; break;
       case '\r': if (!nova_json_buf_text(buf, "\\r")) return 0; break;
@@ -1518,8 +1520,6 @@ static NovaValue nova_json_stringify(NovaValue value) {
   }
   return nova_string(buf.data ? buf.data : nova_dup(""));
 }
-
-static NovaValue nova_array(NovaValue* args, size_t argc);
 
 static NovaValue nova_read_file(NovaValue path) {
   if (path.tag != NOVA_STRING || !path.string) return nova_null();
