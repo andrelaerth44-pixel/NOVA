@@ -761,6 +761,7 @@ pub fn emit_c(functions: &[SsaFunction]) -> Result<String, String> {
         .collect::<std::collections::HashSet<_>>();
 
     let runtime = r#"
+#define _POSIX_C_SOURCE 200809L
 #include <math.h>
 #include <setjmp.h>
 #include <stdint.h>
