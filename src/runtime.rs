@@ -348,6 +348,32 @@ impl Vm {
                         _ => return Err("collect expects an Iterator".into()),
                     }
                 }
+                if n == "push" {
+                    if a.len() != 2 { return Err("push expects 2 arguments".into()); }
+                    let value = self.eval(&a[0])?;
+                    let item = self.eval(&a[1])?;
+                    match value {
+                        Value::Array(mut values) => {
+                            values.push(item);
+                            return Ok(Value::Array(values));
+                        }
+                        _ => return Err("push expects an array".into()),
+                    }
+                }
+                if n == "pop" {
+                    if a.len() != 1 { return Err("pop expects 1 argument".into()); }
+                    let value = self.eval(&a[0])?;
+                    match value {
+                        Value::Array(mut values) => {
+                            let item = values.pop();
+                            return Ok(match item {
+                                Some(value) => Value::Enum { name: "Option".into(), variant: "Some".into(), value: Some(Box::new(value)) },
+                                None => Value::Enum { name: "Option".into(), variant: "None".into(), value: None },
+                            });
+                        }
+                        _ => return Err("pop expects an array".into()),
+                    }
+                }
                 if n == "range" {
                     if a.len() != 2 { return Err("range expects 2 arguments".into()); }
                     let x = self.eval(&a[0])?;
