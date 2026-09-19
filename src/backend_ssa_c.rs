@@ -301,6 +301,17 @@ fn emit_function(
                             args_expr,
                             args.len()
                         ));
+                    } else if name == "ord" || name == "chr" {
+                        if (args.len() != 1) {
+                            return Err(format!("SSA C backend: {} expects one argument", name));
+                        }
+                        let helper = if name == "ord" { "nova_ord" } else { "nova_chr" };
+                        out.push_str(&format!(
+                            "  {} = {}({});\n",
+                            v(*id),
+                            helper,
+                            v(args[0])
+                        ));
                     } else if name == "push" {
                         if (args.len() != 2) {
                             return Err("SSA C backend: push expects two arguments".into());
@@ -1040,6 +1051,41 @@ static NovaValue nova_set_value(NovaSet* s) {
 static NovaValue nova_iterator_value(NovaIterator* iterator) {
   NovaValue v = { NOVA_ITERATOR, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, iterator };
   return v;
+}
+
+static NovaValue nova_ord(NovaValue value) {
+  if (value.tag != NOVA_STRING || !value.string) return nova_num(0);
+  const unsigned char* p = (const unsigned char*)value.string;
+  if ((*p & 0x80u) == 0) return nova_num((double)*p);
+  if ((*p & 0xe0u) == 0xc0u) return nova_num((double)(((p[0] & 0x1fu) << 6) | (p[1] & 0x3fu)));
+  if ((*p & 0xf0u) == 0xe0u) return nova_num((double)(((p[0] & 0x0fu) << 12) | ((p[1] & 0x3fu) << 6) | (p[2] & 0x3fu)));
+  if ((*p & 0xf8u) == 0xf0u) return nova_num((double)(((p[0] & 0x07u) << 18) | ((p[1] & 0x3fu) << 12) | ((p[2] & 0x3fu) << 6) | (p[3] & 0x3fu)));
+  return nova_num(0);
+}
+
+static NovaValue nova_chr(NovaValue value) {
+  if (value.tag != NOVA_NUMBER || value.number < 0 || value.number > 0x10ffff) return nova_null();
+  uint32_t code = (uint32_t)value.number;
+  if (code >= 0xd800 && code <= 0xdfff) return nova_null();
+  char* out = (char*)calloc(5, 1);
+  if (!out) return nova_null();
+  size_t len = 0;
+  if (code <= 0x7f) {
+    out[len++] = (char)code;
+  } else if (code <= 0x7ff) {
+    out[len++] = (char)(0xc0 | (code >> 6));
+    out[len++] = (char)(0x80 | (code & 0x3f));
+  } else if (code <= 0xffff) {
+    out[len++] = (char)(0xe0 | (code >> 12));
+    out[len++] = (char)(0x80 | ((code >> 6) & 0x3f));
+    out[len++] = (char)(0x80 | (code & 0x3f));
+  } else {
+    out[len++] = (char)(0xf0 | (code >> 18));
+    out[len++] = (char)(0x80 | ((code >> 12) & 0x3f));
+    out[len++] = (char)(0x80 | ((code >> 6) & 0x3f));
+    out[len++] = (char)(0x80 | (code & 0x3f));
+  }
+  return nova_string(out);
 }
 
 static NovaValue nova_str(NovaValue value) {
