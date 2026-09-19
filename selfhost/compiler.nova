@@ -123,7 +123,7 @@ fn emit_statement(node: Node) -> string {
     return ""
 }
 
-fn emit_function(node: Node) -> string {
+fn emit_function_signature(node: Node) -> string {
     out = "static double nova_" + node.text + "("
     i = 0
     while i < len(node.children) and node.children[i].kind == "param" {
@@ -131,7 +131,11 @@ fn emit_function(node: Node) -> string {
         out = out + "double " + node.children[i].text
         i = i + 1
     }
-    out = out + ") {"
+    return out + ")"
+}
+
+fn emit_function(node: Node) -> string {
+    out = emit_function_signature(node) + " {"
 
     returned = false
     while i < len(node.children) {
@@ -157,6 +161,16 @@ fn emit_program(tree: Node) -> string {
     out = "#include <stdio.h>\n\n"
     i = 0
 
+    while i < len(tree.children) {
+        node = tree.children[i]
+        if node.kind == "fn" {
+            out = out + emit_function_signature(node) + ";\n"
+        }
+        i = i + 1
+    }
+
+    out = out + "\n"
+    i = 0
     while i < len(tree.children) {
         node = tree.children[i]
         if node.kind == "fn" {
