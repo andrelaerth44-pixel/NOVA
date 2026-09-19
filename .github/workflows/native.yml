@@ -113,13 +113,14 @@ jobs:
         run: |
           cargo run --release -- check examples/native_stdlib.nova
           cargo run --release -- build-native-ssa examples/native_stdlib.nova /tmp/nova-stdlib
-          /tmp/nova-stdlib > /tmp/nova-stdlib.out
+          NOVA_NATIVE_ENV=bootstrap /tmp/nova-stdlib > /tmp/nova-stdlib.out
           cat > /tmp/nova-stdlib.expected <<'EOF'
           true
           hello NOVA
           NOVA-native-test.txt
           txt
           NOVA-native-test
+          bootstrap
           O
           4
           42
