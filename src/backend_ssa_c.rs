@@ -1437,7 +1437,9 @@ static size_t nova_utf8_length(const char* text) {
 
 static NovaValue nova_string_index(NovaValue value, NovaValue index) {
   if (value.tag != NOVA_STRING || !value.string || index.tag != NOVA_NUMBER) return nova_null();
-  if (index.number < 0 || floor(index.number) != index.number) return nova_null();
+  if (index.number < 0) return nova_null();
+  size_t integral = (size_t)index.number;
+  if ((double)integral != index.number) return nova_null();
 
   size_t target = (size_t)index.number;
   size_t byte_len = strlen(value.string);
