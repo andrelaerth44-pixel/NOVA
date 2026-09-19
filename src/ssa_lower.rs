@@ -68,6 +68,10 @@ fn collect_stmt_vars(
                 if !bound.contains(name) { used.insert(name.clone()); }
                 collect_expr_vars(expr, bound, used);
             }
+            Stmt::AssignTarget(target, expr) => {
+                collect_expr_vars(target, bound, used);
+                collect_expr_vars(expr, bound, used);
+            }
             Stmt::If(condition, then_body, else_body) => {
                 collect_expr_vars(condition, bound, used);
                 let mut then_bound = bound.clone();
@@ -363,20 +367,54 @@ impl Builder {
         }
     }
 
-    fn stmt_list(&mut self, body: &[Stmt]) {
-        for stmt in body {
-            if self.blocks[self.current].terminator.is_some() { break; }
-            self.stmt(stmt);
+    fn update_target(&mut self, target: &Expr, value: ValueId) -> Result<(String, ValueId), String> {
+        match target {
+            Expr::Var(name) => Ok((name.clone(), value)),
+            Expr::Field(base, field) => {
+                let base_value = self.expr(base);
+                let field_value = self.emit(SsaInstr::Const(SsaValue::String(field.clone())));
+                let updated_base = self.emit(SsaInstr::Call {
+                    name: "field_set".into(),
+                    args: vec![base_value, field_value, value],
+                    result: IrType::Any,
+                });
+                self.update_target(base, updated_base)
+            }
+            Expr::Index(base, index) => {
+                let base_value = self.expr(base);
+                let index_value = self.expr(index);
+                let updated_base = self.emit(SsaInstr::Call {
+                    name: "index_set".into(),
+                    args: vec![base_value, index_value, value],
+                    result: IrType::Any,
+                });
+                self.update_target(base, updated_base)
+            }
+            _ => Err("assignment target must resolve to a variable".into()),
         }
     }
 
-    fn stmt(&mut self, stmt: &Stmt) {
+    fn stmt_list(&mut self, body: &[Stmt]) -> Result<(), String> {
+        for stmt in body {
+            if self.blocks[self.current].terminator.is_some() { break; }
+            self.stmt(stmt)?;
+        }
+        Ok(())
+    }
+
+    fn stmt(&mut self, stmt: &Stmt) -> Result<(), String> {
         match stmt {
             Stmt::Expr(e) | Stmt::Print(e) => { let v = self.expr(e); if matches!(stmt, Stmt::Print(_)) { self.emit(SsaInstr::Call { name: "print".into(), args: vec![v], result: IrType::Null }); } }
             Stmt::Let(name, _, e) | Stmt::Assign(name, e) => {
                 let v = self.expr(e);
                 self.bind(name.clone(), v);
                 self.emit(SsaInstr::Store { name: name.clone(), value: v });
+            }
+            Stmt::AssignTarget(target, e) => {
+                let value = self.expr(e);
+                let (root, updated) = self.update_target(target, value)?;
+                self.bind(root.clone(), updated);
+                self.emit(SsaInstr::Store { name: root, value: updated });
             }
             Stmt::Return(e) => {
                 let v = self.expr(e);
@@ -528,6 +566,7 @@ impl Builder {
             }
             Stmt::Import(_) | Stmt::StructDecl(_, _) | Stmt::EnumDecl(_, _) | Stmt::Fn(..) => {}
         }
+        Ok(())
     }
 }
 
