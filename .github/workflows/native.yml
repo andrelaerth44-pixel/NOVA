@@ -57,7 +57,12 @@ jobs:
         shell: bash
         run: |
           cargo run --release -- build-native-ssa examples/ssa_control_flow.nova /tmp/nova-cfg
-          test "$(/tmp/nova-cfg)" = 
+          /tmp/nova-cfg > /tmp/nova-cfg.out
+          cat > /tmp/nova-cfg.expected <<'EOF'
+          ok
+          truthy
+          EOF
+          diff -u /tmp/nova-cfg.expected /tmp/nova-cfg.out
           cargo run --release -- build-native-ssa examples/ssa.nova /tmp/nova-loop
           test "$(/tmp/nova-loop)" = "15"
 
