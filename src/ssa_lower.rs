@@ -431,7 +431,7 @@ impl Builder {
 
                 self.set_current(then_id);
                 self.push_scope();
-                self.stmt_list(then_body);
+                self.stmt_list(then_body)?;
                 let then_vars = self.vars.last().cloned().unwrap_or_default();
                 if self.blocks[self.current].terminator.is_none() { self.blocks[self.current].terminator = Some(Terminator::Jump(merge_id)); }
                 self.pop_scope();
@@ -439,7 +439,7 @@ impl Builder {
                 self.set_current(else_id);
                 self.vars.last_mut().unwrap().clone_from(&incoming);
                 self.push_scope();
-                self.stmt_list(else_body);
+                self.stmt_list(else_body)?;
                 let else_vars = self.vars.last().cloned().unwrap_or_default();
                 if self.blocks[self.current].terminator.is_none() { self.blocks[self.current].terminator = Some(Terminator::Jump(merge_id)); }
                 self.pop_scope();
@@ -492,7 +492,7 @@ impl Builder {
 
                 self.set_current(loop_body);
                 self.push_scope();
-                self.stmt_list(body);
+                self.stmt_list(body)?;
                 let body_vars = self.vars.last().cloned().unwrap_or_default();
                 let loops_back = self.blocks[self.current].terminator.is_none();
                 if loops_back {
@@ -560,7 +560,7 @@ impl Builder {
                     next = no;
                 }
                 self.set_current(next);
-                self.stmt_list(otherwise);
+                self.stmt_list(otherwise)?;
                 if self.blocks[self.current].terminator.is_none() { self.blocks[self.current].terminator = Some(Terminator::Jump(exit)); }
                 self.set_current(exit);
             }
@@ -594,7 +594,7 @@ fn lower_function_tree_with_captures(
         params.push((arg.clone(), type_to_ir(ty), id));
     }
 
-    b.stmt_list(body);
+    b.stmt_list(body)?;
     if b.blocks.iter().any(|x| x.terminator.is_none()) {
         for block in &mut b.blocks {
             if block.terminator.is_none() {
