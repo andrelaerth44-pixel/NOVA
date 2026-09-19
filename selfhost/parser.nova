@@ -201,7 +201,9 @@ fn parse_statement(state: any) -> Node {
             assign = add_child(assign, parse_expression(state, 1))
             return assign
         }
-        return make_node("expr", "")
+        expr_node = make_node("expr", "")
+        expr_node = add_child(expr_node, expr)
+        return expr_node
     }
 
     token = take_token(state)
