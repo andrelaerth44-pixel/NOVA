@@ -218,9 +218,9 @@ impl Checker {
                     }
                     Token::EqEq | Token::Ne => crate::types::Type::Bool,
                     Token::And | Token::Or => {
-                        if !x.compatible(&crate::types::Type::Bool) || !y.compatible(&crate::types::Type::Bool) {
-                            self.error("logical operator expects booleans");
-                        }
+                        // NOVA logical operators use runtime truthiness, so
+                        // arrays, strings, structs, enums, closures and other
+                        // values may participate just like booleans.
                         crate::types::Type::Bool
                     }
                     _ => crate::types::Type::Unknown,
