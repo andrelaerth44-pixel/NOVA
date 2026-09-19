@@ -124,6 +124,19 @@ jobs:
           EOF
           diff -u /tmp/nova-stdlib.expected /tmp/nova-stdlib.out
 
+      - name: Self-hosted parser
+        shell: bash
+        run: |
+          cargo run --release -- check examples/selfhost_parser.nova
+          cargo run --release -- build-native-ssa examples/selfhost_parser.nova /tmp/nova-selfhost-parser
+          test "$(/tmp/nova-selfhost-parser)" = 
+        shell: bash
+        run: |
+          cargo run --release -- check examples/selfhost_lexer.nova
+          cargo run --release -- build-native-ssa examples/selfhost_lexer.nova /tmp/nova-selfhost-lexer
+          test "$(/tmp/nova-selfhost-lexer)" = $'20\nfn\nadd\ni64\neof'
+program\n1\nfn\nadd\na'
+
       - name: Self-hosted lexer
         shell: bash
         run: |
