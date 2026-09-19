@@ -1,0 +1,227 @@
+struct Node {
+    kind: string
+    text: string
+    children: any[]
+}
+
+fn make_node(kind: string, text: string) -> Node {
+    return Node { kind: kind, text: text, children: [] }
+}
+
+fn add_child(node: Node, child: any) -> Node {
+    node.children = push(node.children, child)
+    return node
+}
+
+fn position(state: any) -> f64 {
+    return map_get(state, "pos")
+}
+
+fn token_at(state: any, offset: f64) -> Token {
+    tokens = map_get(state, "tokens")
+    p = position(state) + offset
+    return tokens[p]
+}
+
+fn peek_kind(state: any) -> string {
+    return token_at(state, 0).kind
+}
+
+fn peek_text(state: any) -> string {
+    return token_at(state, 0).lexeme
+}
+
+fn take_token(state: any) -> Token {
+    token = token_at(state, 0)
+    map_set(state, "pos", position(state) + 1)
+    return token
+}
+
+fn accept(state: any, kind: string) -> bool {
+    if peek_kind(state) == kind {
+        take_token(state)
+        return true
+    }
+    return false
+}
+
+fn expect(state: any, kind: string) {
+    accept(state, kind)
+}
+
+fn precedence(kind: string) -> f64 {
+    if kind == "||" { return 1 }
+    if kind == "&&" { return 2 }
+    if kind == "==" || kind == "!=" { return 3 }
+    if kind == "<" || kind == "<=" || kind == ">" || kind == ">=" { return 4 }
+    if kind == "+" || kind == "-" { return 5 }
+    if kind == "*" || kind == "/" || kind == "%" { return 6 }
+    return 0
+}
+
+fn parse_primary(state: any) -> Node {
+    kind = peek_kind(state)
+
+    if kind == "number" {
+        token = take_token(state)
+        return make_node("number", token.lexeme)
+    }
+
+    if kind == "string" {
+        token = take_token(state)
+        return make_node("string", token.lexeme)
+    }
+
+    if kind == "true" || kind == "false" {
+        token = take_token(state)
+        return make_node("bool", token.lexeme)
+    }
+
+    if kind == "ident" {
+        token = take_token(state)
+        node = make_node("ident", token.lexeme)
+        if accept(state, "(") {
+            node.kind = "call"
+            while peek_kind(state) != ")" && peek_kind(state) != "eof" {
+                node = add_child(node, parse_expression(state, 1))
+                if !accept(state, ",") {
+                    break
+                }
+            }
+            expect(state, ")")
+        }
+        return node
+    }
+
+    if accept(state, "(") {
+        node = parse_expression(state, 1)
+        expect(state, ")")
+        return node
+    }
+
+    token = take_token(state)
+    return make_node("unknown", token.lexeme)
+}
+
+fn parse_expression(state: any, min_prec: f64) -> Node {
+    left = parse_primary(state)
+    done = false
+
+    while !done && peek_kind(state) != "eof" {
+        op = peek_kind(state)
+        prec = precedence(op)
+        if prec < min_prec || prec == 0 {
+            done = true
+        } else {
+            take_token(state)
+            right = parse_expression(state, prec + 1)
+            binary = make_node("binary", op)
+            binary = add_child(binary, left)
+            binary = add_child(binary, right)
+            left = binary
+        }
+    }
+
+    return left
+}
+
+fn parse_statement(state: any) -> Node {
+    kind = peek_kind(state)
+
+    if kind == "fn" {
+        take_token(state)
+        name = take_token(state)
+        fn_node = make_node("fn", name.lexeme)
+
+        if accept(state, "(") {
+            while peek_kind(state) != ")" && peek_kind(state) != "eof" {
+                param = take_token(state)
+                if param.kind == "ident" {
+                    fn_node = add_child(fn_node, make_node("param", param.lexeme))
+                }
+                if peek_kind(state) == ":" {
+                    take_token(state)
+                    take_token(state)
+                }
+                if !accept(state, ",") {
+                    break
+                }
+            }
+            expect(state, ")")
+        }
+
+        if accept(state, "->") {
+            take_token(state)
+        }
+
+        if accept(state, "{") {
+            while peek_kind(state) != "}" && peek_kind(state) != "eof" {
+                fn_node = add_child(fn_node, parse_statement(state))
+                accept(state, ";")
+            }
+            expect(state, "}")
+        }
+
+        return fn_node
+    }
+
+    if kind == "return" {
+        take_token(state)
+        result = make_node("return", "")
+        result = add_child(result, parse_expression(state, 1))
+        return result
+    }
+
+    if kind == "print" {
+        take_token(state)
+        result = make_node("print", "")
+        result = add_child(result, parse_expression(state, 1))
+        return result
+    }
+
+    if kind == "let" {
+        take_token(state)
+        name = take_token(state)
+        let_node = make_node("let", name.lexeme)
+        if peek_kind(state) == ":" {
+            take_token(state)
+            take_token(state)
+        }
+        expect(state, "=")
+        let_node = add_child(let_node, parse_expression(state, 1))
+        return let_node
+    }
+
+    if kind == "ident" {
+        expr = parse_expression(state, 1)
+        if expr.kind == "ident" && accept(state, "=") {
+            assign = make_node("assign", expr.text)
+            assign = add_child(assign, parse_expression(state, 1))
+            return assign
+        }
+        return make_node("expr", "")
+    }
+
+    token = take_token(state)
+    return make_node("token", token.lexeme)
+}
+
+fn parse_program(tokens: Token[]) -> Node {
+    state = map {
+        "tokens": tokens,
+        "pos": 0
+    }
+    program = make_node("program", "")
+    done = false
+
+    while !done {
+        if peek_kind(state) == "eof" {
+            done = true
+        } else {
+            program = add_child(program, parse_statement(state))
+            accept(state, ";")
+        }
+    }
+
+    return program
+}
