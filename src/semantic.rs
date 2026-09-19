@@ -369,6 +369,8 @@ impl Checker {
                     _ => {}
                 };
                 let builtin = match name.as_str() {
+                    "ord" => Some((vec![crate::types::Type::String], crate::types::Type::Number)),
+                    "chr" => Some((vec![crate::types::Type::Number], crate::types::Type::String)),
                     "push" => Some((vec![crate::types::Type::Array(Box::new(crate::types::Type::Any)), crate::types::Type::Any], crate::types::Type::Array(Box::new(crate::types::Type::Any)))),
                     "pop" => Some((vec![crate::types::Type::Array(Box::new(crate::types::Type::Any))], crate::types::Type::Generic("Option".into(), vec![crate::types::Type::Any]))),
                     "range" => Some((vec![crate::types::Type::Number, crate::types::Type::Number], crate::types::Type::Array(Box::new(crate::types::Type::Number)))),
