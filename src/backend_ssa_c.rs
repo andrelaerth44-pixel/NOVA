@@ -1685,27 +1685,87 @@ static int nova_truthy(NovaValue v) {
 
 static int nova_equal(NovaValue a, NovaValue b) {
   if (a.tag != b.tag) return 0;
+
   switch (a.tag) {
-    case NOVA_NULL: return 1;
+    case NOVA_NULL:
+      return 1;
+
     case NOVA_NUMBER:
-    case NOVA_BOOL: return a.number == b.number;
-    case NOVA_STRING: return strcmp(a.string ? a.string : "", b.string ? b.string : "") == 0;
+    case NOVA_BOOL:
+      return a.number == b.number;
+
+    case NOVA_STRING:
+      return strcmp(a.string ? a.string : "", b.string ? b.string : "") == 0;
+
     case NOVA_ENUM:
-      return strcmp(a.enumeration->name, b.enumeration->name) == 0
-          && strcmp(a.enumeration->variant, b.enumeration->variant) == 0;
+      if (!a.enumeration || !b.enumeration) return a.enumeration == b.enumeration;
+      if (strcmp(a.enumeration->name, b.enumeration->name) != 0) return 0;
+      if (strcmp(a.enumeration->variant, b.enumeration->variant) != 0) return 0;
+      return nova_equal(a.enumeration->payload, b.enumeration->payload);
+
     case NOVA_STRUCT:
-      return a.structure == b.structure;
+      if (a.structure == b.structure) return 1;
+      if (!a.structure || !b.structure) return 0;
+      if (strcmp(a.structure->name ? a.structure->name : "", b.structure->name ? b.structure->name : "") != 0) return 0;
+      if (a.structure->len != b.structure->len) return 0;
+      for (size_t i = 0; i < a.structure->len; i++) {
+        const char* an = a.structure->fields[i].name ? a.structure->fields[i].name : "";
+        const char* bn = b.structure->fields[i].name ? b.structure->fields[i].name : "";
+        if (strcmp(an, bn) != 0) return 0;
+        if (!nova_equal(a.structure->fields[i].value, b.structure->fields[i].value)) return 0;
+      }
+      return 1;
+
     case NOVA_CLOSURE:
       return a.closure == b.closure;
+
     case NOVA_ARRAY:
-      return a.array == b.array;
+      if (a.array == b.array) return 1;
+      if (!a.array || !b.array) return 0;
+      if (a.array->len != b.array->len) return 0;
+      for (size_t i = 0; i < a.array->len; i++) {
+        if (!nova_equal(a.array->items[i], b.array->items[i])) return 0;
+      }
+      return 1;
+
     case NOVA_MAP:
-      return a.map == b.map;
+      if (a.map == b.map) return 1;
+      if (!a.map || !b.map) return 0;
+      if (a.map->len != b.map->len) return 0;
+      for (size_t i = 0; i < a.map->len; i++) {
+        int found = 0;
+        for (size_t j = 0; j < b.map->len; j++) {
+          if (nova_equal(a.map->keys[i], b.map->keys[j]) &&
+              nova_equal(a.map->values[i], b.map->values[j])) {
+            found = 1;
+            break;
+          }
+        }
+        if (!found) return 0;
+      }
+      return 1;
+
     case NOVA_SET:
-      return a.set == b.set;
+      if (a.set == b.set) return 1;
+      if (!a.set || !b.set) return 0;
+      if (a.set->len != b.set->len) return 0;
+      for (size_t i = 0; i < a.set->len; i++) {
+        int found = 0;
+        for (size_t j = 0; j < b.set->len; j++) {
+          if (nova_equal(a.set->items[i], b.set->items[j])) {
+            found = 1;
+            break;
+          }
+        }
+        if (!found) return 0;
+      }
+      return 1;
+
     case NOVA_ITERATOR:
       return a.iterator == b.iterator;
-    default: return 0;
+
+    default:
+      return 0;
   }
 }
 
