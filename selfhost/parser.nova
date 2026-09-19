@@ -82,10 +82,11 @@ fn parse_primary(state: any) -> Node {
         node = make_node("ident", token.lexeme)
         if accept(state, "(") {
             node.kind = "call"
-            while peek_kind(state) != ")" && peek_kind(state) != "eof" {
+            more = true
+            while more && peek_kind(state) != ")" && peek_kind(state) != "eof" {
                 node = add_child(node, parse_expression(state, 1))
                 if !accept(state, ",") {
-                    break
+                    more = false
                 }
             }
             expect(state, ")")
@@ -134,7 +135,8 @@ fn parse_statement(state: any) -> Node {
         fn_node = make_node("fn", name.lexeme)
 
         if accept(state, "(") {
-            while peek_kind(state) != ")" && peek_kind(state) != "eof" {
+            more = true
+            while more && peek_kind(state) != ")" && peek_kind(state) != "eof" {
                 param = take_token(state)
                 if param.kind == "ident" {
                     fn_node = add_child(fn_node, make_node("param", param.lexeme))
@@ -144,7 +146,7 @@ fn parse_statement(state: any) -> Node {
                     take_token(state)
                 }
                 if !accept(state, ",") {
-                    break
+                    more = false
                 }
             }
             expect(state, ")")
