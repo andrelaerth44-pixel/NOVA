@@ -6,6 +6,7 @@ print read_file(path)
 print path_basename(path)
 print path_ext(path)
 print path_stem(path)
+print env("NOVA_NATIVE_ENV")
 print "NOVA"[1]
 print len("NOVA")
 print str(42)
