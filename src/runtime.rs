@@ -348,6 +348,23 @@ impl Vm {
                         _ => return Err("collect expects an Iterator".into()),
                     }
                 }
+                if n == "ord" {
+                    if a.len() != 1 { return Err("ord expects 1 argument".into()); }
+                    let value = self.eval(&a[0])?;
+                    match value {
+                        Value::Str(text) => {
+                            let code = text.chars().next().map(|c| c as u32).unwrap_or(0);
+                            return Ok(Value::Num(code as f64));
+                        }
+                        _ => return Err("ord expects a string".into()),
+                    }
+                }
+                if n == "chr" {
+                    if a.len() != 1 { return Err("chr expects 1 argument".into()); }
+                    let value = num(self.eval(&a[0])?)? as u32;
+                    let ch = char::from_u32(value).ok_or_else(|| "chr expects a valid Unicode scalar".to_string())?;
+                    return Ok(Value::Str(ch.to_string()));
+                }
                 if n == "push" {
                     if a.len() != 2 { return Err("push expects 2 arguments".into()); }
                     let value = self.eval(&a[0])?;
