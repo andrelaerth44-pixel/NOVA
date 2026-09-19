@@ -113,6 +113,21 @@ jobs:
           grep -Fxq "42" /tmp/nova-mutation.out
           grep -Fxq "7" /tmp/nova-mutation.out
 
+      - name: Native JSON
+        shell: bash
+        run: |
+          cargo run --release -- check examples/native_json.nova
+          cargo run --release -- build-native-ssa examples/native_json.nova /tmp/nova-native-json
+          /tmp/nova-native-json > /tmp/nova-native-json.out
+          cat > /tmp/nova-native-json.expected <<'EOF'
+          NOVA
+          42
+          true
+          2
+          {"name":"NOVA","value":42,"ok":true,"items":[1,2]}
+          EOF
+          diff -u /tmp/nova-native-json.expected /tmp/nova-native-json.out
+
       - name: Native stdlib
         shell: bash
         run: |
