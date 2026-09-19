@@ -25,7 +25,7 @@ fn escape_c(text: string) -> string {
 }
 
 fn emit_expr(node: Node) -> string {
-    if node.kind == "number" || node.kind == "ident" {
+    if node.kind == "number" or node.kind == "ident" {
         return node.text
     }
 
@@ -71,9 +71,9 @@ fn emit_statement(node: Node) -> string {
         expr = emit_expr(node.children[0])
         kind = node.children[0].kind
         if kind == "string" {
-            return "printf("%s\\n", " + expr + ");"
+            return "printf(\"%s\\n\", " + expr + ");"
         }
-        return "printf("%.17g\\n", " + expr + ");"
+        return "printf(\"%.17g\\n\", " + expr + ");"
     }
 
     if node.kind == "expr" {
@@ -86,7 +86,7 @@ fn emit_statement(node: Node) -> string {
 fn emit_function(node: Node) -> string {
     out = "static double nova_" + node.text + "("
     i = 0
-    while i < len(node.children) && node.children[i].kind == "param" {
+    while i < len(node.children) and node.children[i].kind == "param" {
         if i > 0 { out = out + ", " }
         out = out + "double " + node.children[i].text
         i = i + 1
