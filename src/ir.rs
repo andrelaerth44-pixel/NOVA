@@ -317,6 +317,11 @@ impl IrBuilder {
             crate::Stmt::Let(n,_,e) | crate::Stmt::Assign(n,e) => {
                 self.lower_expr(e); self.push(Instr::Store(n.clone()));
             }
+            crate::Stmt::AssignTarget(target, e) => {
+                self.lower_expr(target);
+                self.lower_expr(e);
+                self.push(Instr::Call { name: "assign_target".into(), argc: 2, result: IrType::Null });
+            }
             crate::Stmt::Print(e) => {
                 self.lower_expr(e);
                 self.push(Instr::Call { name: "print".into(), argc: 1, result: IrType::Null });
