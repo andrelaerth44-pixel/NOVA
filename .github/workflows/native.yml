@@ -166,6 +166,18 @@ jobs:
           EOF
           diff -u /tmp/nova-selfhost-parser.expected /tmp/nova-selfhost-parser.out
 
+      - name: Self-hosted full grammar parser
+        shell: bash
+        run: |
+          cargo run --release -- check examples/selfhost_parser_full.nova
+          cargo run --release -- build-native-ssa examples/selfhost_parser_full.nova /tmp/nova-selfhost-parser-full
+          /tmp/nova-selfhost-parser-full > /tmp/nova-selfhost-parser-full.out
+          cat > /tmp/nova-selfhost-parser-full.expected <<'EOF'
+          program
+          6
+          EOF
+          diff -u /tmp/nova-selfhost-parser-full.expected /tmp/nova-selfhost-parser-full.out
+
       - name: Self-hosted compiler bootstrap
         shell: bash
         run: |
