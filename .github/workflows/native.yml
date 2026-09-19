@@ -15,6 +15,13 @@ jobs:
       - run: cargo test
       - run: cargo build --release
 
+      - name: Native C source export
+        shell: bash
+        run: |
+          cargo run --release -- build-native-ssa-c examples/hello.nova /tmp/nova-hello.c
+          test -s /tmp/nova-hello.c
+          grep -Fq 'nova_main' /tmp/nova-hello.c
+
       - name: Native closure
         shell: bash
         run: |
