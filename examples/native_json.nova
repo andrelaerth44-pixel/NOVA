@@ -1,0 +1,6 @@
+payload = json_parse("{\"name\":\"NOVA\",\"value\":42,\"ok\":true,\"items\":[1,2]}")
+print payload["name"]
+print payload["value"]
+print payload["ok"]
+print len(payload["items"])
+print json_stringify(payload)
