@@ -435,6 +435,81 @@ impl Checker {
         }
     }
 
+    fn is_assignable_target(expr: &Expr) -> bool {
+        matches!(expr, Expr::Var(_) | Expr::Field(_, _) | Expr::Index(_, _))
+    }
+
+    fn check_assign_target(&mut self, target: &Expr, value: &Expr) {
+        if !Self::is_assignable_target(target) {
+            self.error("assignment target must be a variable, field, or index");
+            self.infer(value);
+            return;
+        }
+        match target {
+            Expr::Var(name) => {
+                let got = self.infer(value);
+                if let Some(old) = self.lookup(name) {
+                    if !old.compatible(&got) {
+                        self.error(format!("cannot assign {} to {} (expected {})", got.name(), name, old.name()));
+                    }
+                } else {
+                    self.define(name.clone(), got);
+                }
+            }
+            Expr::Field(base, field) => {
+                if !Self::is_assignable_target(base) {
+                    self.error("field assignment base must be a variable, field, or index");
+                }
+                let base_ty = self.infer(base);
+                let got = self.infer(value);
+                match base_ty {
+                    crate::types::Type::Struct(name) => {
+                        if let Some(fields) = self.structs.get(&name) {
+                            if let Some((_, expected)) = fields.iter().find(|(n, _)| n == field) {
+                                if !expected.compatible(&got) {
+                                    self.error(format!("cannot assign {} to {}.{} (expected {})", got.name(), name, field, expected.name()));
+                                }
+                            } else {
+                                self.error(format!("unknown field {}.{}", name, field));
+                            }
+                        }
+                    }
+                    crate::types::Type::Any | crate::types::Type::Unknown => {}
+                    _ => self.error(format!("field assignment requires struct, got {}", base_ty.name())),
+                }
+            }
+            Expr::Index(base, index) => {
+                if !Self::is_assignable_target(base) {
+                    self.error("index assignment base must be a variable, field, or index");
+                }
+                let base_ty = self.infer(base);
+                let index_ty = self.infer(index);
+                let got = self.infer(value);
+                match base_ty {
+                    crate::types::Type::Array(inner) => {
+                        if !index_ty.compatible(&crate::types::Type::Number) {
+                            self.error("array index assignment expects a number");
+                        }
+                        if !inner.compatible(&got) {
+                            self.error(format!("cannot assign {} to array element (expected {})", got.name(), inner.name()));
+                        }
+                    }
+                    crate::types::Type::Generic(name, args) if name == "Map" && args.len() == 2 => {
+                        if !args[0].compatible(&index_ty) && !matches!(index_ty, crate::types::Type::Any) {
+                            self.error("map index assignment key type mismatch");
+                        }
+                        if !args[1].compatible(&got) {
+                            self.error(format!("cannot assign {} to map value (expected {})", got.name(), args[1].name()));
+                        }
+                    }
+                    crate::types::Type::Any | crate::types::Type::Unknown => {}
+                    _ => self.error(format!("index assignment requires array or Map, got {}", base_ty.name())),
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+
     fn check_stmt(&mut self, stmt: &Stmt, expected_return: Option<&crate::types::Type>) {
         match stmt {
             Stmt::Expr(e) | Stmt::Print(e) => { self.infer(e); }
@@ -457,6 +532,9 @@ impl Checker {
                 } else {
                     self.define(name.clone(), got);
                 }
+            }
+            Stmt::AssignTarget(target, e) => {
+                self.check_assign_target(target, e);
             }
             Stmt::Return(e) => {
                 let got = self.infer(e);
