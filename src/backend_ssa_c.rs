@@ -1006,6 +1006,8 @@ static NovaValue nova_is_err(NovaValue value) {
       strcmp(value.enumeration->variant, "Err") == 0);
 }
 
+static size_t nova_utf8_length(const char* text);
+
 static NovaValue nova_len(NovaValue value) {
   switch (value.tag) {
     case NOVA_STRING: return nova_num(value.string ? (double)nova_utf8_length(value.string) : 0.0);
