@@ -522,13 +522,106 @@ impl Builder {
                 }
             }
             Stmt::For(name, iterable, body) => {
+                // Lower a for-loop to ordinary SSA control flow.
                 let iterable_v = self.expr(iterable);
-                self.emit(SsaInstr::Call { name: "for_each".into(), args: vec![iterable_v], result: IrType::Null });
+                let preheader = self.current;
+                let header = self.new_block();
+                let loop_body = self.new_block();
+                let exit = self.new_block();
+                let incoming = self.vars.last().cloned().unwrap_or_default();
+
+                self.blocks[preheader].terminator = Some(Terminator::Jump(header));
+                self.set_current(header);
+
+                let mut phis = Vec::<(String, ValueId)>::new();
+                for (var_name, value) in incoming.iter() {
+                    let phi = self.fresh();
+                    self.blocks[header].instrs.push((phi, SsaInstr::Phi {
+                        incomings: vec![(preheader, *value)],
+                        ty: IrType::Any,
+                    }));
+                    self.bind(var_name.clone(), phi);
+                    phis.push((var_name.clone(), phi));
+                }
+
+                let index_phi = self.fresh();
+                let zero = self.emit(SsaInstr::Const(SsaValue::Number(0.0)));
+                self.blocks[header].instrs.push((index_phi, SsaInstr::Phi {
+                    incomings: vec![(preheader, zero)],
+                    ty: IrType::Number,
+                }));
+
+                let length = self.emit(SsaInstr::Call {
+                    name: "len".into(),
+                    args: vec![iterable_v],
+                    result: IrType::Number,
+                });
+                let condition = self.emit(SsaInstr::Binary {
+                    op: "Lt".into(),
+                    left: index_phi,
+                    right: length,
+                    ty: IrType::Bool,
+                });
+                self.blocks[header].terminator = Some(Terminator::Branch {
+                    condition,
+                    then_block: loop_body,
+                    else_block: exit,
+                });
+
+                self.set_current(loop_body);
                 self.push_scope();
-                let item = self.emit(SsaInstr::Call { name: "loop_item".into(), args: vec![], result: IrType::Any });
+                let item = self.emit(SsaInstr::Call {
+                    name: "index".into(),
+                    args: vec![iterable_v, index_phi],
+                    result: IrType::Any,
+                });
                 self.bind(name.clone(), item);
                 self.stmt_list(body);
+                let body_vars = self.vars.last().cloned().unwrap_or_default();
+                let loops_back = self.blocks[self.current].terminator.is_none();
+
+                if loops_back {
+                    let one = self.emit(SsaInstr::Const(SsaValue::Number(1.0)));
+                    let next_index = self.emit(SsaInstr::Binary {
+                        op: "Plus".into(),
+                        left: index_phi,
+                        right: one,
+                        ty: IrType::Number,
+                    });
+                    self.blocks[self.current].terminator = Some(Terminator::Jump(header));
+                    let backedge = self.current;
+
+                    if let Some((_, instr)) = self.blocks[header]
+                        .instrs
+                        .iter_mut()
+                        .find(|(id, _)| *id == index_phi)
+                    {
+                        if let SsaInstr::Phi { incomings, .. } = instr {
+                            incomings.push((backedge, next_index));
+                        }
+                    }
+
+                    for (var_name, phi) in &phis {
+                        let initial = incoming.get(var_name).copied().unwrap();
+                        let value = body_vars.get(var_name).copied().unwrap_or(initial);
+                        if let Some((_, instr)) = self.blocks[header]
+                            .instrs
+                            .iter_mut()
+                            .find(|(id, _)| *id == *phi)
+                        {
+                            if let SsaInstr::Phi { incomings, .. } = instr {
+                                incomings.push((backedge, value));
+                            }
+                        }
+                    }
+                }
+
                 self.pop_scope();
+                self.set_current(exit);
+                self.vars.last_mut().unwrap().clone_from(&incoming);
+                for (var_name, phi) in phis {
+                    self.bind(var_name, phi);
+                }
             }
             Stmt::Match(value, arms, otherwise) => {
                 let subject = self.expr(value);
