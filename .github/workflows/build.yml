@@ -120,6 +120,23 @@ jobs:
           grep -Fxq "3" /tmp/collections.out
           grep -Fxq "100" /tmp/collections.out
 
+      - name: Native collection smoke test
+        shell: bash
+        run: |
+          cargo run --release -- check examples/collections.nova
+          cargo run --release -- build-native-ssa examples/collections.nova /tmp/nova-collections-native
+          test -x /tmp/nova-collections-native
+          /tmp/nova-collections-native > /tmp/nova-collections.out
+          cat > /tmp/nova-collections.expected <<'EOF'
+          99
+          true
+          true
+          2
+          3
+          100
+          EOF
+          diff -u /tmp/nova-collections.expected /tmp/nova-collections.out
+
       - name: Closure capture smoke test
         shell: bash
         run: |
