@@ -126,7 +126,9 @@ jobs:
           cargo run --release -- check examples/selfhost_lexer.nova
           cargo run --release -- build-native-ssa examples/selfhost_lexer.nova /tmp/nova-selfhost-lexer
           test -x /tmp/nova-selfhost-lexer
-          test "$(/tmp/nova-selfhost-lexer)" = 
+          test "$(/tmp/nova-selfhost-lexer)" = $'20\nfn\nadd\ni64\neof'
+
+      - name: Native stdlib smoke test
         shell: bash
         run: |
           cargo run --release -- check examples/native_stdlib.nova
