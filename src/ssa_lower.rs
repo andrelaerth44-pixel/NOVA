@@ -530,6 +530,8 @@ impl Builder {
                 let exit = self.new_block();
                 let incoming = self.vars.last().cloned().unwrap_or_default();
 
+                self.set_current(preheader);
+                let zero = self.emit(SsaInstr::Const(SsaValue::Number(0.0)));
                 self.blocks[preheader].terminator = Some(Terminator::Jump(header));
                 self.set_current(header);
 
@@ -545,7 +547,6 @@ impl Builder {
                 }
 
                 let index_phi = self.fresh();
-                let zero = self.emit(SsaInstr::Const(SsaValue::Number(0.0)));
                 self.blocks[header].instrs.push((index_phi, SsaInstr::Phi {
                     incomings: vec![(preheader, zero)],
                     ty: IrType::Number,
