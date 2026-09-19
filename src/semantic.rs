@@ -465,7 +465,7 @@ impl Checker {
                 match base_ty {
                     crate::types::Type::Struct(name) => {
                         if let Some(fields) = self.structs.get(&name) {
-                            if let Some((_, expected)) = fields.iter().find(|(n, _)| n == field) {
+                            if let Some((_, expected)) = fields.iter().find(|(n, _)| *n == field) {
                                 if !expected.compatible(&got) {
                                     self.error(format!("cannot assign {} to {}.{} (expected {})", got.name(), name, field, expected.name()));
                                 }
