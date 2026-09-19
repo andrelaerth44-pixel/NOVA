@@ -126,6 +126,22 @@ fn parse_expression(state: any, min_prec: f64) -> Node {
     return left
 }
 
+fn parse_block(state: any) -> Node {
+    block = make_node("block", "")
+    expect(state, "{")
+    done = false
+    while !done && peek_kind(state) != "eof" {
+        if peek_kind(state) == "}" {
+            done = true
+        } else {
+            block = add_child(block, parse_statement(state))
+            accept(state, ";")
+        }
+    }
+    expect(state, "}")
+    return block
+}
+
 fn parse_statement(state: any) -> Node {
     kind = peek_kind(state)
 
@@ -156,15 +172,33 @@ fn parse_statement(state: any) -> Node {
             take_token(state)
         }
 
-        if accept(state, "{") {
-            while peek_kind(state) != "}" and peek_kind(state) != "eof" {
-                fn_node = add_child(fn_node, parse_statement(state))
-                accept(state, ";")
-            }
-            expect(state, "}")
+        body = parse_block(state)
+        i = 0
+        while i < len(body.children) {
+            fn_node = add_child(fn_node, body.children[i])
+            i = i + 1
         }
-
         return fn_node
+    }
+
+    if kind == "if" {
+        take_token(state)
+        node = make_node("if", "")
+        node = add_child(node, parse_expression(state, 1))
+        node = add_child(node, parse_block(state))
+        if peek_kind(state) == "else" {
+            take_token(state)
+            node = add_child(node, parse_block(state))
+        }
+        return node
+    }
+
+    if kind == "while" {
+        take_token(state)
+        node = make_node("while", "")
+        node = add_child(node, parse_expression(state, 1))
+        node = add_child(node, parse_block(state))
+        return node
     }
 
     if kind == "return" {
