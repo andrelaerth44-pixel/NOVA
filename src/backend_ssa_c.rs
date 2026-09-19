@@ -87,6 +87,7 @@ fn emit_function(
     ));
     out.push_str(" {\n");
     out.push_str("  jmp_buf nova_jmp;\n");
+    out.push_str("  int nova_pred = -1;\n");
     out.push_str("  jmp_buf* nova_prev_jmp = nova_active_jmp;\n");
     out.push_str("  nova_active_jmp = &nova_jmp;\n");
     out.push_str("  int nova_jmp_code = setjmp(nova_jmp);\n");
@@ -419,17 +420,34 @@ fn emit_function(
                         id
                     ));
                 }
-                SsaInstr::Phi { .. } => {
-                    return Err(format!(
-                        "SSA C backend: Phi not yet lowered for {}",
-                        function.name
-                    ));
+                SsaInstr::Phi { incomings, .. } => {
+                    if incomings.is_empty() {
+                        return Err(format!("SSA C backend: empty Phi in {}", function.name));
+                    }
+                    for (index, (pred, value)) in incomings.iter().enumerate() {
+                        if index == 0 {
+                            out.push_str(&format!(
+                                "  if (nova_pred == {}) {} = {};\n",
+                                pred,
+                                v(*id),
+                                v(*value)
+                            ));
+                        } else {
+                            out.push_str(&format!(
+                                "  else if (nova_pred == {}) {} = {};\n",
+                                pred,
+                                v(*id),
+                                v(*value)
+                            ));
+                        }
+                    }
                 }
             }
         }
 
         match &block.terminator {
             Some(Terminator::Jump(target)) => {
+                out.push_str(&format!("  nova_pred = {};\n", block.id));
                 out.push_str(&format!("  goto B{};\n", target));
             }
             Some(Terminator::Branch {
@@ -438,9 +456,11 @@ fn emit_function(
                 else_block,
             }) => {
                 out.push_str(&format!(
-                    "  if (nova_truthy({})) goto B{}; else goto B{};\n",
+                    "  if (nova_truthy({})) {{ nova_pred = {}; goto B{}; }} else {{ nova_pred = {}; goto B{}; }}\n",
                     v(*condition),
+                    block.id,
                     then_block,
+                    block.id,
                     else_block
                 ));
             }
