@@ -194,7 +194,8 @@ jobs:
           cargo run --release -- check examples/native_mutation.nova
           cargo run --release -- build-native-ssa examples/native_mutation.nova /tmp/nova-mutation-native
           test -x /tmp/nova-mutation-native
-          test "$(/tmp/nova-mutation-native)" =         shell: bash
+          actual=$(/tmp/nova-mutation-native)
+          expected=        shell: bash
         run: |
           cargo run --release -- check examples/stdlib.nova
           cargo run --release -- run examples/stdlib.nova > /tmp/stdlib.out
@@ -278,6 +279,7 @@ jobs:
           fi
           grep -q "module import cycle" /tmp/nova-cycle.out
 21\n9\n42\n7'
+          test "$actual" = "$expected"
 
       - name: Standard library smoke test
         shell: bash
