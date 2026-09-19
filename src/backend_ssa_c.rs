@@ -351,6 +351,15 @@ fn emit_function(
                             helper,
                             v(args[0])
                         ));
+                    } else if name == "env" {
+                        if (args.len() != 1) {
+                            return Err("SSA C backend: env expects one argument".into());
+                        }
+                        out.push_str(&format!(
+                            "  {} = nova_env({});\n",
+                            v(*id),
+                            v(args[0])
+                        ));
                     } else if name == "read_file" {
                         if args.len() != 1 {
                             return Err("SSA C backend: read_file expects one argument".into());
@@ -1119,6 +1128,13 @@ static NovaValue nova_abs(NovaValue value) {
 static NovaValue nova_sqrt(NovaValue value) {
   if (value.tag != NOVA_NUMBER || value.number < 0) return nova_null();
   return nova_num(sqrt(value.number));
+}
+
+static NovaValue nova_env(NovaValue key) {
+  if (key.tag != NOVA_STRING || !key.string) return nova_null();
+  const char* value = getenv(key.string);
+  if (!value) return nova_null();
+  return nova_string(nova_dup(value));
 }
 
 static NovaValue nova_read_file(NovaValue path) {
