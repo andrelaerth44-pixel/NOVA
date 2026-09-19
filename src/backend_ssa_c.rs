@@ -43,7 +43,7 @@ fn binary_expr(op: &str, left: &str, right: &str) -> Option<String> {
         "Star" => format!("nova_num({}.number * {}.number)", left, right),
         "Slash" => format!("nova_num({}.number / {}.number)", left, right),
         "Percent" => format!("nova_num(fmod({}.number, {}.number))", left, right),
-        "EqEq" => format!("nova_equal({}, {})", left, right),
+        "EqEq" => format!("nova_bool(nova_equal({}, {}))", left, right),
         "NotEq" => format!("nova_bool(!nova_equal({}, {}))", left, right),
         "Lt" => format!("nova_bool({}.number < {}.number)", left, right),
         "Le" => format!("nova_bool({}.number <= {}.number)", left, right),
