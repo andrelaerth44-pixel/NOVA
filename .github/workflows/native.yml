@@ -162,6 +162,8 @@ jobs:
         shell: bash
         run: |
           cargo run --release -- check examples/selfhost_parser.nova
+          cargo run --release -- ssa-raw examples/selfhost_parser.nova > /tmp/nova-selfhost-parser.raw-ssa
+          grep -n -B4 -A8 '%218' /tmp/nova-selfhost-parser.raw-ssa || true
           cargo run --release -- build-native-ssa examples/selfhost_parser.nova /tmp/nova-selfhost-parser
           /tmp/nova-selfhost-parser > /tmp/nova-selfhost-parser.out
           cat > /tmp/nova-selfhost-parser.expected <<'EOF'
