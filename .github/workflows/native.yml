@@ -185,6 +185,19 @@ jobs:
           EOF
           diff -u /tmp/nova-selfhost-parser-full.expected /tmp/nova-selfhost-parser-full.out
 
+      - name: Self-hosted semantic checker
+        shell: bash
+        run: |
+          cargo run --release -- check examples/selfhost_semantic.nova
+          cargo run --release -- build-native-ssa examples/selfhost_semantic.nova /tmp/nova-selfhost-semantic
+          /tmp/nova-selfhost-semantic > /tmp/nova-selfhost-semantic.out
+          cat > /tmp/nova-selfhost-semantic.expected <<'EOF'
+          0
+          1
+          cannot assign string to x
+          EOF
+          diff -u /tmp/nova-selfhost-semantic.expected /tmp/nova-selfhost-semantic.out
+
       - name: Self-hosted compiler bootstrap
         shell: bash
         run: |
