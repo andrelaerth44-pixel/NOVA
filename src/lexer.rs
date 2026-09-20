@@ -30,7 +30,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>, String> {
                     "if"=>Token::If, "else"=>Token::Else, "while"=>Token::While,
                     "fn"=>Token::Fn, "return"=>Token::Return, "true"=>Token::True,
                     "false"=>Token::False, "let"=>Token::Let, "print"=>Token::Print, "in"=>Token::In, "for"=>Token::For, "import"=>Token::Import, "match"=>Token::Match,
-                    "and"=>Token::And, "or"=>Token::Or, _=>Token::Ident(w.into())
+                    "and"=>Token::And, "or"=>Token::Or, "null"=>Token::Null, _=>Token::Ident(w.into())
                 });
             }
             '+' => { out.push(Token::Plus); i+=1; }
