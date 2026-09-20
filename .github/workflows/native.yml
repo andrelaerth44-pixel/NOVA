@@ -187,7 +187,7 @@ jobs:
           /tmp/nova-selfhost-parser-full > /tmp/selfhost-parser-full.out
           cat > /tmp/selfhost-parser-full.expected <<'EOF'
           program
-          5
+          7
           EOF
           diff -u /tmp/selfhost-parser-full.expected /tmp/selfhost-parser-full.out
 
