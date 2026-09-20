@@ -19,9 +19,8 @@ fn infer_expr(node: Node, scope: any) -> string {
     if node.kind == "bool" { return "bool" }
 
     if node.kind == "ident" {
-        ty = map_get(scope, node.text)
-        if ty != null {
-            return ty
+        if map_has(scope, node.text) {
+            return map_get(scope, node.text)
         }
         return "unknown"
     }
@@ -82,10 +81,11 @@ fn check_statement(node: Node, scope: any, errors: string[]) -> string[] {
     if node.kind == "assign" {
         ty = infer_expr(node.children[0], scope)
         old = map_get(scope, node.text)
-        if old != null and old != ty and ty != "unknown" {
-            errors = push(errors, "cannot assign " + ty + " to " + node.text)
-        }
-        if old == null {
+        if map_has(scope, node.text) {
+            if old != ty and ty != "unknown" {
+                errors = push(errors, "cannot assign " + ty + " to " + node.text)
+            }
+        } else {
             map_set(scope, node.text, ty)
         }
         return errors
