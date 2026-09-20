@@ -2324,8 +2324,10 @@ static NovaValue nova_call_closure(
     }
 
     out.push_str(
-        "int main(void) {\n"
+        "int main(int argc, char** argv) {\n"
     );
+    out.push_str("  nova_cli_argc = argc;\n");
+    out.push_str("  nova_cli_argv = argv;\n");
     out.push_str("  NovaValue result = nova_main(NULL, NULL, 0);\n");
     out.push_str("  (void)result;\n");
     out.push_str("  return 0;\n");
