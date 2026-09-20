@@ -131,7 +131,9 @@ jobs:
         run: |
           cargo run --release -- check examples/native_args.nova
           cargo run --release -- build-native-ssa examples/native_args.nova /tmp/nova-native-args
-          test "$(/tmp/nova-native-args alpha beta)" = 
+          test "$(/tmp/nova-native-args alpha beta)" = $'2\nalpha\nbeta'
+
+      - name: Native standard library
         shell: bash
         run: |
           export NOVA_NATIVE_ENV="native-ok"
