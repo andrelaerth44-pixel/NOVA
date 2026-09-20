@@ -1,0 +1,3 @@
+print len(args())
+print arg(0)
+print arg(1)
