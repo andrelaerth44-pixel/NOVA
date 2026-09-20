@@ -153,7 +153,9 @@ fn parse_atom(state: ParserState) -> Node {
             return node
         }
 
-        if peek_kind(state) == "{" {
+        if peek_kind(state) == "{" and
+           token_at(state, 1).kind == "ident" and
+           token_at(state, 2).kind == ":" {
             take_token(state)
             node.kind = "struct"
             more = true
