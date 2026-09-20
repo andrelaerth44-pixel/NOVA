@@ -216,7 +216,10 @@ jobs:
           ls -l /tmp/nova-selfhost-generated.c || true
           test -s /tmp/nova-selfhost-generated.c
           cat /tmp/nova-selfhost-generated.c
-          cc -O2 -std=c11 /tmp/nova-selfhost-generated.c -o /tmp/nova-selfhost-generated
+          if ! cc -O2 -std=c11 /tmp/nova-selfhost-generated.c -o /tmp/nova-selfhost-generated > /tmp/nova-selfhost-cc.out 2>&1; then
+            cat /tmp/nova-selfhost-cc.out
+            exit 1
+          fi
           test -x /tmp/nova-selfhost-generated
           /tmp/nova-selfhost-generated > /tmp/nova-selfhost-generated.out
           cat /tmp/nova-selfhost-generated.out
