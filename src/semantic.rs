@@ -383,6 +383,8 @@ impl Checker {
                     "read_file" => Some((vec![crate::types::Type::String], crate::types::Type::String)),
                     "write_file" => Some((vec![crate::types::Type::String, crate::types::Type::String], crate::types::Type::Null)),
                     "exists" => Some((vec![crate::types::Type::String], crate::types::Type::Bool)),
+                    "args" => Some((vec![], crate::types::Type::Array(Box::new(crate::types::Type::String)))),
+                    "arg" => Some((vec![crate::types::Type::Number], crate::types::Type::String)),
                     "env" => Some((vec![crate::types::Type::String], crate::types::Type::String)),
                     "now_ms" | "now_s" => Some((vec![], crate::types::Type::Number)),
                     "sleep_ms" => Some((vec![crate::types::Type::Number], crate::types::Type::Null)),
