@@ -920,6 +920,8 @@ struct NovaClosure {
   NovaValue (*invoke)(NovaEnv*, NovaValue*, size_t);
 };
 
+static int nova_cli_argc = 0;
+static char** nova_cli_argv = NULL;
 static jmp_buf* nova_active_jmp = NULL;
 static NovaValue nova_pending_return;
 
