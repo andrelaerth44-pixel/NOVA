@@ -92,6 +92,12 @@ fn main(){
         Err(e)=>{eprintln!("{}",e);std::process::exit(1)}
     };
 
+    if a[1]=="ssa-raw"{
+        let functions = ssa_lower::lower_program_tree(&program);
+        print!("{}", compiler::format_ssa_module(&functions));
+        return
+    }
+
     if a[1]=="ssa"{
         let compiled=match compiler::compile_program(program){
             Ok(x)=>x,
