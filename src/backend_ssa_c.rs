@@ -353,6 +353,16 @@ fn emit_function(
                             helper,
                             v(args[0])
                         ));
+                    } else if name == "args" {
+                        if !args.is_empty() {
+                            return Err("SSA C backend: args expects zero arguments".into());
+                        }
+                        out.push_str(&format!("  {} = nova_args();\n", v(*id)));
+                    } else if name == "arg" {
+                        if args.len() != 1 {
+                            return Err("SSA C backend: arg expects one argument".into());
+                        }
+                        out.push_str(&format!("  {} = nova_arg({});\n", v(*id), v(args[0])));
                     } else if name == "env" {
                         if (args.len() != 1) {
                             return Err("SSA C backend: env expects one argument".into());
