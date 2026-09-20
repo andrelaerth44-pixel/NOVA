@@ -158,6 +158,88 @@ jobs:
           EOF
           diff -u /tmp/nova-stdlib.expected /tmp/nova-stdlib.out
 
+      - name: Self-hosted compiler bootstrap
+        shell: bash
+        run: |
+          cargo run --release -- check examples/selfhost_compile.nova
+          cargo run --release -- build-native-ssa examples/selfhost_compile.nova /tmp/nova-selfhost-compiler
+          test -x /tmp/nova-selfhost-compiler
+          /tmp/nova-selfhost-compiler > /tmp/nova-selfhost-compiler.out
+          grep -Eq '^[0-9]+
+        shell: bash
+        run: |
+          cargo run --release -- check examples/selfhost_parser.nova
+          cargo run --release -- ssa-raw examples/selfhost_parser.nova > /tmp/nova-selfhost-parser.raw-ssa
+          grep -n -B6 -A18 '^block 62' /tmp/nova-selfhost-parser.raw-ssa || true
+          grep -n -B6 -A8 -E '%(21[0-9]|22[0-9]) =' /tmp/nova-selfhost-parser.raw-ssa || true
+          cargo run --release -- build-native-ssa examples/selfhost_parser.nova /tmp/nova-selfhost-parser
+          /tmp/nova-selfhost-parser > /tmp/nova-selfhost-parser.out
+          cat > /tmp/nova-selfhost-parser.expected <<'EOF'
+          program
+          1
+          fn
+          add
+          a
+          EOF
+          diff -u /tmp/nova-selfhost-parser.expected /tmp/nova-selfhost-parser.out
+
+      - name: Self-hosted full grammar parser
+        shell: bash
+        run: |
+          cargo run --release -- check examples/selfhost_parser_full.nova
+          cargo run --release -- build-native-ssa examples/selfhost_parser_full.nova /tmp/nova-selfhost-parser-full
+          /tmp/nova-selfhost-parser-full > /tmp/nova-selfhost-parser-full.out
+          cat > /tmp/nova-selfhost-parser-full.expected <<'EOF'
+          program
+          6
+          EOF
+          diff -u /tmp/nova-selfhost-parser-full.expected /tmp/nova-selfhost-parser-full.out
+
+      - name: Self-hosted semantic checker
+        shell: bash
+        run: |
+          cargo run --release -- check examples/selfhost_semantic.nova
+          cargo run --release -- build-native-ssa examples/selfhost_semantic.nova /tmp/nova-selfhost-semantic
+          /tmp/nova-selfhost-semantic > /tmp/nova-selfhost-semantic.out
+          cat > /tmp/nova-selfhost-semantic.expected <<'EOF'
+          0
+          1
+          cannot assign string to x
+          EOF
+          diff -u /tmp/nova-selfhost-semantic.expected /tmp/nova-selfhost-semantic.out
+
+      - name: Self-hosted compiler bootstrap
+        shell: bash
+        run: |
+          rm -f /tmp/nova-selfhost-generated.c /tmp/nova-selfhost-generated
+          cargo run --release -- check examples/selfhost_compile.nova
+          cargo run --release -- build-native-ssa examples/selfhost_compile.nova /tmp/nova-selfhost-compiler
+          test -x /tmp/nova-selfhost-compiler
+          /tmp/nova-selfhost-compiler > /tmp/nova-selfhost-compiler.out
+          test -s /tmp/nova-selfhost-generated.c
+          cc -O2 -std=c11 /tmp/nova-selfhost-generated.c -o /tmp/nova-selfhost-generated
+          test -x /tmp/nova-selfhost-generated
+          test "$(/tmp/nova-selfhost-generated)" = "42"
+
+      - name: Self-hosted lexer
+        shell: bash
+        run: |
+          cargo run --release -- check examples/selfhost_lexer.nova
+          cargo run --release -- build-native-ssa examples/selfhost_lexer.nova /tmp/nova-selfhost-lexer
+          /tmp/nova-selfhost-lexer > /tmp/nova-selfhost-lexer.out
+          cat > /tmp/nova-selfhost-lexer.expected <<'EOF'
+          20
+          fn
+          add
+          i64
+          eof
+          EOF
+          diff -u /tmp/nova-selfhost-lexer.expected /tmp/nova-selfhost-lexer.out
+ /tmp/nova-selfhost-compiler.out
+          test -s /tmp/nova-selfhost-generated.c
+          cc -O2 -std=c11 /tmp/nova-selfhost-generated.c -o /tmp/nova-selfhost-generated
+          test "$(/tmp/nova-selfhost-generated)" = "42"
+
       - name: Self-hosted parser
         shell: bash
         run: |
