@@ -378,15 +378,6 @@ fn emit_function(
                             v(*id),
                             v(args[0])
                         ));
-                    } else if name == "env" {
-                        if (args.len() != 1) {
-                            return Err("SSA C backend: env expects one argument".into());
-                        }
-                        out.push_str(&format!(
-                            "  {} = nova_env({});\n",
-                            v(*id),
-                            v(args[0])
-                        ));
                     } else if name == "read_file" {
                         if args.len() != 1 {
                             return Err("SSA C backend: read_file expects one argument".into());
