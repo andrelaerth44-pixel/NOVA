@@ -129,6 +129,7 @@ jobs:
       - name: Native standard library
         shell: bash
         run: |
+          export NOVA_NATIVE_ENV="native-ok"
           cargo run --release -- build-native-ssa examples/native_stdlib.nova /tmp/nova-stdlib
           /tmp/nova-stdlib > /tmp/stdlib.out
           cat > /tmp/stdlib.expected <<'EOF'
@@ -137,6 +138,9 @@ jobs:
           NOVA-native-test.txt
           txt
           NOVA-native-test
+          native-ok
+          O
+          4
           42
           7
           7
