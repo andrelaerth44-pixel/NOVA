@@ -547,7 +547,7 @@ impl SsaFunction {
         };
 
         for block in &self.blocks {
-            for (idx, (_, instr)) in block.instrs.iter().enumerate() {
+            for (idx, (instr_id, instr)) in block.instrs.iter().enumerate() {
                 match instr {
                     SsaInstr::Const(_) | SsaInstr::Load { .. } => {}
                     SsaInstr::Store { value, .. } |
@@ -599,7 +599,7 @@ impl SsaFunction {
                             // only when the Phi block dominates that
                             // predecessor, proving that the edge is a
                             // back-edge.
-                            if *value == *id && dom[*pred].contains(&block.id) {
+                            if *value == *instr_id && dom[*pred].contains(&block.id) {
                                 continue;
                             }
 
