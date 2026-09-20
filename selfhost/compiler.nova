@@ -75,7 +75,11 @@ fn emit_expr(node: Node) -> string {
         return emit_expr(node.children[0])
     }
 
-    if node.kind == "unknown" {
+    if node.kind == "unknown" or node.kind == "token" {
+        return node.text
+    }
+
+    if node.text != "" {
         return node.text
     }
 
