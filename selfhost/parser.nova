@@ -13,31 +13,35 @@ fn add_child(node: Node, child: any) -> Node {
     return node
 }
 
-fn position(state: any) -> f64 {
-    return map_get(state, "pos")
+struct ParserState {
+    tokens: Token[]
+    pos: f64
 }
 
-fn token_at(state: any, offset: f64) -> Token {
-    tokens = map_get(state, "tokens")
-    p = position(state) + offset
-    return tokens[p]
+fn position(state: ParserState) -> f64 {
+    return state.pos
 }
 
-fn peek_kind(state: any) -> string {
+fn token_at(state: ParserState, offset: f64) -> Token {
+    p = state.pos + offset
+    return state.tokens[p]
+}
+
+fn peek_kind(state: ParserState) -> string {
     return token_at(state, 0).kind
 }
 
-fn peek_text(state: any) -> string {
+fn peek_text(state: ParserState) -> string {
     return token_at(state, 0).lexeme
 }
 
-fn take_token(state: any) -> Token {
+fn take_token(state: ParserState) -> Token {
     token = token_at(state, 0)
-    map_set(state, "pos", position(state) + 1)
+    state.pos = position(state) + 1
     return token
 }
 
-fn accept(state: any, kind: string) -> bool {
+fn accept(state: ParserState, kind: string) -> bool {
     if peek_kind(state) == kind {
         take_token(state)
         return true
@@ -45,7 +49,7 @@ fn accept(state: any, kind: string) -> bool {
     return false
 }
 
-fn expect(state: any, kind: string) {
+fn expect(state: ParserState, kind: string) {
     accept(state, kind)
 }
 
@@ -59,7 +63,7 @@ fn precedence(kind: string) -> f64 {
     return 0
 }
 
-fn parse_list(state: any, closing: string) -> Node[] {
+fn parse_list(state: ParserState, closing: string) -> Node[] {
     items = []
     more = true
 
@@ -74,7 +78,7 @@ fn parse_list(state: any, closing: string) -> Node[] {
     return items
 }
 
-fn parse_atom(state: any) -> Node {
+fn parse_atom(state: ParserState) -> Node {
     kind = peek_kind(state)
 
     if kind == "-" or kind == "!" {
@@ -177,7 +181,7 @@ fn parse_atom(state: any) -> Node {
     return make_node("unknown", token.lexeme)
 }
 
-fn parse_postfix(state: any) -> Node {
+fn parse_postfix(state: ParserState) -> Node {
     node = parse_atom(state)
     done = false
 
@@ -223,11 +227,11 @@ fn parse_postfix(state: any) -> Node {
     return node
 }
 
-fn parse_primary(state: any) -> Node {
+fn parse_primary(state: ParserState) -> Node {
     return parse_postfix(state)
 }
 
-fn parse_expression(state: any, min_prec: f64) -> Node {
+fn parse_expression(state: ParserState, min_prec: f64) -> Node {
     left = parse_primary(state)
     done = false
 
@@ -249,7 +253,7 @@ fn parse_expression(state: any, min_prec: f64) -> Node {
     return left
 }
 
-fn parse_block(state: any) -> Node {
+fn parse_block(state: ParserState) -> Node {
     block = make_node("block", "")
     expect(state, "{")
     done = false
@@ -267,7 +271,7 @@ fn parse_block(state: any) -> Node {
     return block
 }
 
-fn parse_statement(state: any) -> Node {
+fn parse_statement(state: ParserState) -> Node {
     kind = peek_kind(state)
 
     if kind == "import" {
@@ -450,10 +454,7 @@ fn parse_statement(state: any) -> Node {
 }
 
 fn parse_program(tokens: Token[]) -> Node {
-    state = map {
-        "tokens": tokens,
-        "pos": 0
-    }
+    state = ParserState { tokens: tokens, pos: 0 }
     program = make_node("program", "")
     done = false
 
