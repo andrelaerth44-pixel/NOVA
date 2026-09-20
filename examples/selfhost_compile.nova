@@ -1,0 +1,6 @@
+import "../selfhost/compiler.nova"
+
+source = read_file("examples/selfhost_compile_input.nova")
+generated = compile_source(source)
+write_file("/tmp/nova-selfhost-generated.c", generated)
+print len(generated)

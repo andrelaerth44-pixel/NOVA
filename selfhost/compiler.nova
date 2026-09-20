@@ -1,0 +1,221 @@
+import "lexer.nova"
+import "parser.nova"
+
+fn escape_c(text: string) -> string {
+    out = ""
+    i = 0
+    while i < len(text) {
+        c = text[i]
+        if c == chr(92) {
+            out = out + chr(92) + chr(92)
+        } else {
+            if c == chr(34) {
+                out = out + chr(92) + chr(34)
+            } else {
+                if c == chr(10) {
+                    out = out + chr(92) + "n"
+                } else {
+                    if c == chr(13) {
+                        out = out + chr(92) + "r"
+                    } else {
+                        if c == chr(9) {
+                            out = out + chr(92) + "t"
+                        } else {
+                            out = out + c
+                        }
+                    }
+                }
+            }
+        }
+        i = i + 1
+    }
+    return out
+}
+
+fn emit_expr(node: Node) -> string {
+    if node.kind == "number" or node.kind == "ident" {
+        return node.text
+    }
+
+    if node.kind == "string" {
+        return chr(34) + escape_c(node.text) + chr(34)
+    }
+
+    if node.kind == "bool" {
+        if node.text == "true" { return "1" }
+        return "0"
+    }
+
+    if node.kind == "binary" {
+        left = emit_expr(node.children[0])
+        right = emit_expr(node.children[1])
+        op = node.text
+        if op == "and" {
+            op = "&&"
+        } else {
+            if op == "or" {
+                op = "||"
+            }
+        }
+        return "(" + left + " " + op + " " + right + ")"
+    }
+
+    if node.kind == "call" {
+        out = "nova_" + node.text + "("
+        i = 0
+        while i < len(node.children) {
+            if i > 0 { out = out + ", " }
+            out = out + emit_expr(node.children[i])
+            i = i + 1
+        }
+        return out + ")"
+    }
+
+    if node.kind == "expr" {
+        return emit_expr(node.children[0])
+    }
+
+    if node.kind == "unknown" or node.kind == "token" {
+        return node.text
+    }
+
+    if node.text != "" {
+        return node.text
+    }
+
+    return "0"
+}
+
+fn emit_block(node: Node) -> string {
+    out = ""
+    i = 0
+    while i < len(node.children) {
+        code = emit_statement(node.children[i])
+        if code != "" {
+            out = out + " " + code
+        }
+        i = i + 1
+    }
+    return out
+}
+
+fn emit_statement(node: Node) -> string {
+    if node.kind == "let" {
+        return "double " + node.text + " = " + emit_expr(node.children[0]) + ";"
+    }
+
+    if node.kind == "assign" {
+        return node.text + " = " + emit_expr(node.children[0]) + ";"
+    }
+
+    if node.kind == "return" {
+        return "return " + emit_expr(node.children[0]) + ";"
+    }
+
+    if node.kind == "print" {
+        expr = emit_expr(node.children[0])
+        kind = node.children[0].kind
+        if kind == "string" {
+            return "printf(\"%s\\n\", " + expr + ");"
+        }
+        return "printf(\"%.17g\\n\", " + expr + ");"
+    }
+
+    if node.kind == "if" {
+        out = "if (" + emit_expr(node.children[0]) + ") {"
+        out = out + emit_block(node.children[1]) + " }"
+        if len(node.children) > 2 {
+            out = out + " else {" + emit_block(node.children[2]) + " }"
+        }
+        return out
+    }
+
+    if node.kind == "while" {
+        return "while (" + emit_expr(node.children[0]) + ") {" + emit_block(node.children[1]) + " }"
+    }
+
+    if node.kind == "expr" {
+        return emit_expr(node.children[0]) + ";"
+    }
+
+    return ""
+}
+
+fn emit_function_signature(node: Node) -> string {
+    out = "static double nova_" + node.text + "("
+    i = 0
+    while i < len(node.children) and node.children[i].kind == "param" {
+        if i > 0 { out = out + ", " }
+        out = out + "double " + node.children[i].text
+        i = i + 1
+    }
+    return out + ")"
+}
+
+fn emit_function(node: Node) -> string {
+    out = emit_function_signature(node) + " {"
+
+    returned = false
+    i = 0
+    while i < len(node.children) {
+        stmt = node.children[i]
+        code = emit_statement(stmt)
+        if code != "" {
+            out = out + " " + code
+            if stmt.kind == "return" {
+                returned = true
+            }
+        }
+        i = i + 1
+    }
+
+    if !returned {
+        out = out + " return 0;"
+    }
+
+    return out + " }"
+}
+
+fn emit_program(tree: Node) -> string {
+    out = "#include <stdio.h>\n\n"
+    i = 0
+
+    while i < len(tree.children) {
+        node = tree.children[i]
+        if node.kind == "fn" {
+            out = out + emit_function_signature(node) + ";\n"
+        }
+        i = i + 1
+    }
+
+    out = out + "\n"
+    i = 0
+    while i < len(tree.children) {
+        node = tree.children[i]
+        if node.kind == "fn" {
+            out = out + emit_function(node) + "\n"
+        }
+        i = i + 1
+    }
+
+    out = out + "\nint main(void) {\n"
+    i = 0
+    while i < len(tree.children) {
+        node = tree.children[i]
+        if node.kind != "fn" {
+            code = emit_statement(node)
+            if code != "" {
+                out = out + "  " + code + "\n"
+            }
+        }
+        i = i + 1
+    }
+    out = out + "  return 0;\n}\n"
+    return out
+}
+
+fn compile_source(source: string) -> string {
+    tokens = lex(source)
+    tree = parse_program(tokens)
+    return emit_program(tree)
+}

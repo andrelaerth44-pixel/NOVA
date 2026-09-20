@@ -20,8 +20,8 @@ pub fn parse_source(source: &str) -> Result<Vec<Stmt>, String> {
 }
 
 fn verify_ssa(function: &SsaFunction) -> Result<(), String> {
-    function.validate()?;
-    function.verify_operands()
+    function.validate().map_err(|err| format!("{}: {}", function.name, err))?;
+    function.verify_operands().map_err(|err| format!("{}: {}", function.name, err))
 }
 
 pub fn compile_program(program: Vec<Stmt>) -> Result<Compilation, String> {
@@ -286,8 +286,7 @@ mod closure_function_tests {
             .find(|function| function.name == "make_counter__closure0")
             .expect("nested closure function missing");
 
-        assert_eq!(closure_function.params.len(), 1);
-        assert_eq!(closure_function.params[0].0, "value");
+        assert_eq!(closure_function.params.len(), 0);
         assert!(compilation.ssa_functions.iter().any(|function| {
             function.blocks.iter().any(|block| {
                 block.instrs.iter().any(|(_, instr)| matches!(
@@ -298,5 +297,38 @@ mod closure_function_tests {
                 ))
             })
         }));
+    }
+}
+
+
+#[cfg(test)]
+mod ssa_native_backend_tests {
+    use super::*;
+
+    #[test]
+    fn native_backend_emits_real_closure_runtime() {
+        let source = r#"
+            fn make_counter() {
+                value = 0
+                return fn() {
+                    value = value + 1
+                    return value
+                }
+            }
+
+            counter = make_counter()
+            print counter()
+            print counter()
+        "#;
+
+        let compilation = compile_source(source).expect("closure source should compile");
+        let generated = crate::backend_ssa_c::emit_c(&compilation.ssa_functions)
+            .expect("SSA native backend should support closure sample");
+
+        assert!(generated.contains("NovaClosure"));
+        assert!(generated.contains("nova_make_closure"));
+        assert!(generated.contains("nova_call_closure"));
+        assert!(generated.contains("make_counter__closure0"));
+        assert!(generated.contains("env->slots[0]"));
     }
 }

@@ -1,0 +1,13 @@
+import "../selfhost/semantic.nova"
+
+good = "let x = 1\nx = x + 2\nprint x"
+bad = "let x = 1\nx = \"oops\""
+
+good_errors = analyze(good)
+bad_errors = analyze(bad)
+
+print len(good_errors)
+print len(bad_errors)
+if len(bad_errors) > 0 {
+    print bad_errors[0]
+}

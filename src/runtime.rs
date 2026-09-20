@@ -73,6 +73,46 @@ impl Vm {
         parent.map(|p| Self::assign_in(&p, name, value)).unwrap_or(false)
     }
 
+    fn assign_root_target(&mut self, target: &Expr, value: Value) -> Result<(), RuntimeError> {
+        match target {
+            Expr::Var(name) => {
+                self.assign(name.clone(), value);
+                Ok(())
+            }
+            Expr::Field(base, field) => {
+                let base_value = self.eval(base)?;
+                let updated = match base_value {
+                    Value::Struct { name, mut fields } => {
+                        fields.insert(field.clone(), value);
+                        Value::Struct { name, fields }
+                    }
+                    _ => return Err("field assignment requires struct".into()),
+                };
+                self.assign_root_target(base, updated)
+            }
+            Expr::Index(base, index) => {
+                let base_value = self.eval(base)?;
+                let index_value = self.eval(index)?;
+                let updated = match base_value {
+                    Value::Array(mut values) => {
+                        let i = num(index_value)? as i64;
+                        if i < 0 || i as usize >= values.len() { return Err("array index out of bounds".into()); }
+                        values[i as usize] = value;
+                        Value::Array(values)
+                    }
+                    Value::Map(map) => {
+                        let key = to_map_key(&index_value).ok_or_else(|| "map key must be number, string, bool or null".to_string())?;
+                        map.borrow_mut().insert(key, value);
+                        Value::Map(map)
+                    }
+                    _ => return Err("index assignment requires array or map".into()),
+                };
+                self.assign_root_target(base, updated)
+            }
+            _ => Err("invalid assignment target".into()),
+        }
+    }
+
     fn assign(&mut self, name: String, value: Value) {
         if !Self::assign_in(&self.env, &name, value.clone()) {
             self.define(name, value);
@@ -308,6 +348,49 @@ impl Vm {
                         _ => return Err("collect expects an Iterator".into()),
                     }
                 }
+                if n == "ord" {
+                    if a.len() != 1 { return Err("ord expects 1 argument".into()); }
+                    let value = self.eval(&a[0])?;
+                    match value {
+                        Value::Str(text) => {
+                            let code = text.chars().next().map(|c| c as u32).unwrap_or(0);
+                            return Ok(Value::Num(code as f64));
+                        }
+                        _ => return Err("ord expects a string".into()),
+                    }
+                }
+                if n == "chr" {
+                    if a.len() != 1 { return Err("chr expects 1 argument".into()); }
+                    let value = num(self.eval(&a[0])?)? as u32;
+                    let ch = char::from_u32(value).ok_or_else(|| "chr expects a valid Unicode scalar".to_string())?;
+                    return Ok(Value::Str(ch.to_string()));
+                }
+                if n == "push" {
+                    if a.len() != 2 { return Err("push expects 2 arguments".into()); }
+                    let value = self.eval(&a[0])?;
+                    let item = self.eval(&a[1])?;
+                    match value {
+                        Value::Array(mut values) => {
+                            values.push(item);
+                            return Ok(Value::Array(values));
+                        }
+                        _ => return Err("push expects an array".into()),
+                    }
+                }
+                if n == "pop" {
+                    if a.len() != 1 { return Err("pop expects 1 argument".into()); }
+                    let value = self.eval(&a[0])?;
+                    match value {
+                        Value::Array(mut values) => {
+                            let item = values.pop();
+                            return Ok(match item {
+                                Some(value) => Value::Enum { name: "Option".into(), variant: "Some".into(), value: Some(Box::new(value)) },
+                                None => Value::Enum { name: "Option".into(), variant: "None".into(), value: None },
+                            });
+                        }
+                        _ => return Err("pop expects an array".into()),
+                    }
+                }
                 if n == "range" {
                     if a.len() != 2 { return Err("range expects 2 arguments".into()); }
                     let x = self.eval(&a[0])?;
@@ -391,6 +474,16 @@ impl Vm {
                         Value::Enum { variant, .. } if variant == "None" || variant == "Err" => Ok(fallback),
                         v => Ok(v),
                     };
+                }
+                if n == "args" {
+                    if !a.is_empty() { return Err("args expects 0 arguments".into()); }
+                    let values = std::env::args().skip(1).map(Value::Str).collect::<Vec<_>>();
+                    return Ok(Value::Array(values));
+                }
+                if n == "arg" {
+                    if a.len() != 1 { return Err("arg expects 1 argument".into()); }
+                    let index = num(self.eval(&a[0])?)? as usize;
+                    return Ok(std::env::args().nth(index + 1).map(Value::Str).unwrap_or(Value::Null));
                 }
                 if n == "env" {
                     if a.len() != 1 { return Err("env expects 1 argument".into()); }
@@ -479,6 +572,44 @@ impl Vm {
                     if a.len() != 1 { return Err("json_stringify expects 1 argument".into()); }
                     let value = self.eval(&a[0])?;
                     return Ok(Value::Str(stringify_json(&value)?));
+                }
+
+                if n == "index_set" {
+                    if a.len() != 3 { return Err("index_set expects 3 arguments".into()); }
+                    let base = self.eval(&a[0])?;
+                    let index = self.eval(&a[1])?;
+                    let value = self.eval(&a[2])?;
+                    match base {
+                        Value::Array(mut values) => {
+                            let i = num(index)? as i64;
+                            if i < 0 || i as usize >= values.len() { return Err("array index out of bounds".into()); }
+                            values[i as usize] = value;
+                            return Ok(Value::Array(values));
+                        }
+                        Value::Map(map) => {
+                            let key = to_map_key(&index).ok_or_else(|| "map key must be number, string, bool or null".to_string())?;
+                            map.borrow_mut().insert(key, value);
+                            return Ok(Value::Map(map));
+                        }
+                        _ => return Err("index_set expects an array or map".into()),
+                    }
+                }
+                if n == "field_set" {
+                    if a.len() != 3 { return Err("field_set expects 3 arguments".into()); }
+                    let base = self.eval(&a[0])?;
+                    let field = self.eval(&a[1])?;
+                    let value = self.eval(&a[2])?;
+                    let field = match field {
+                        Value::Str(name) => name,
+                        _ => return Err("field_set expects a string field name".into()),
+                    };
+                    match base {
+                        Value::Struct { name, mut fields } => {
+                            fields.insert(field, value);
+                            return Ok(Value::Struct { name, fields });
+                        }
+                        _ => return Err("field_set expects a struct".into()),
+                    }
                 }
 
                 if n == "map_get" || n == "map_has" || n == "map_set" || n == "map_remove" {
@@ -618,6 +749,43 @@ impl Vm {
                 Stmt::Assign(n, e) => {
                     let v = self.eval(e)?;
                     self.assign(n.clone(), v);
+                }
+                Stmt::AssignTarget(target, e) => {
+                    let value = self.eval(e)?;
+                    match target {
+                        Expr::Var(name) => self.assign(name.clone(), value),
+                        Expr::Field(base, field) => {
+                            let base_value = self.eval(base)?;
+                            let updated = match base_value {
+                                Value::Struct { name, mut fields } => {
+                                    fields.insert(field.clone(), value);
+                                    Value::Struct { name, fields }
+                                }
+                                _ => return Err("field assignment requires struct".into()),
+                            };
+                            self.assign_root_target(base, updated)?;
+                        }
+                        Expr::Index(base, index) => {
+                            let base_value = self.eval(base)?;
+                            let index_value = self.eval(index)?;
+                            let updated = match base_value {
+                                Value::Array(mut values) => {
+                                    let i = num(index_value)? as i64;
+                                    if i < 0 || i as usize >= values.len() { return Err("array index out of bounds".into()); }
+                                    values[i as usize] = value;
+                                    Value::Array(values)
+                                }
+                                Value::Map(map) => {
+                                    let key = to_map_key(&index_value).ok_or_else(|| "map key must be number, string, bool or null".to_string())?;
+                                    map.borrow_mut().insert(key, value);
+                                    Value::Map(map)
+                                }
+                                _ => return Err("index assignment requires array or map".into()),
+                            };
+                            self.assign_root_target(base, updated)?;
+                        }
+                        _ => return Err("invalid assignment target".into()),
+                    }
                 }
                 Stmt::Print(e) => println!("{}", self.eval(e)?),
                 Stmt::Return(e) => return Ok(Some(self.eval(e)?)),

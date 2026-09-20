@@ -88,6 +88,9 @@ impl Checker {
         match e {
             Expr::Val(v) => self.value_type(v),
             Expr::Var(n) => {
+                if n == "null" {
+                    return crate::types::Type::Null;
+                }
                 if n == "None" {
                     return crate::types::Type::Generic("Option".into(), vec![crate::types::Type::Any]);
                 }
@@ -218,9 +221,9 @@ impl Checker {
                     }
                     Token::EqEq | Token::Ne => crate::types::Type::Bool,
                     Token::And | Token::Or => {
-                        if !x.compatible(&crate::types::Type::Bool) || !y.compatible(&crate::types::Type::Bool) {
-                            self.error("logical operator expects booleans");
-                        }
+                        // NOVA logical operators use runtime truthiness, so
+                        // arrays, strings, structs, enums, closures and other
+                        // values may participate just like booleans.
                         crate::types::Type::Bool
                     }
                     _ => crate::types::Type::Unknown,
@@ -369,13 +372,19 @@ impl Checker {
                     _ => {}
                 };
                 let builtin = match name.as_str() {
-                    "range" => Some((vec![crate::types::Type::Number], crate::types::Type::Array(Box::new(crate::types::Type::Number)))),
+                    "ord" => Some((vec![crate::types::Type::String], crate::types::Type::Number)),
+                    "chr" => Some((vec![crate::types::Type::Number], crate::types::Type::String)),
+                    "push" => Some((vec![crate::types::Type::Array(Box::new(crate::types::Type::Any)), crate::types::Type::Any], crate::types::Type::Array(Box::new(crate::types::Type::Any)))),
+                    "pop" => Some((vec![crate::types::Type::Array(Box::new(crate::types::Type::Any))], crate::types::Type::Generic("Option".into(), vec![crate::types::Type::Any]))),
+                    "range" => Some((vec![crate::types::Type::Number, crate::types::Type::Number], crate::types::Type::Array(Box::new(crate::types::Type::Number)))),
                     "str" => Some((vec![crate::types::Type::Any], crate::types::Type::String)),
                     "len" => Some((vec![crate::types::Type::Any], crate::types::Type::Number)),
                     "abs" | "sqrt" => Some((vec![crate::types::Type::Number], crate::types::Type::Number)),
                     "read_file" => Some((vec![crate::types::Type::String], crate::types::Type::String)),
                     "write_file" => Some((vec![crate::types::Type::String, crate::types::Type::String], crate::types::Type::Null)),
                     "exists" => Some((vec![crate::types::Type::String], crate::types::Type::Bool)),
+                    "args" => Some((vec![], crate::types::Type::Array(Box::new(crate::types::Type::String)))),
+                    "arg" => Some((vec![crate::types::Type::Number], crate::types::Type::String)),
                     "env" => Some((vec![crate::types::Type::String], crate::types::Type::String)),
                     "now_ms" | "now_s" => Some((vec![], crate::types::Type::Number)),
                     "sleep_ms" => Some((vec![crate::types::Type::Number], crate::types::Type::Null)),
@@ -435,6 +444,81 @@ impl Checker {
         }
     }
 
+    fn is_assignable_target(expr: &Expr) -> bool {
+        matches!(expr, Expr::Var(_) | Expr::Field(_, _) | Expr::Index(_, _))
+    }
+
+    fn check_assign_target(&mut self, target: &Expr, value: &Expr) {
+        if !Self::is_assignable_target(target) {
+            self.error("assignment target must be a variable, field, or index");
+            self.infer(value);
+            return;
+        }
+        match target {
+            Expr::Var(name) => {
+                let got = self.infer(value);
+                if let Some(old) = self.lookup(name) {
+                    if !old.compatible(&got) {
+                        self.error(format!("cannot assign {} to {} (expected {})", got.name(), name, old.name()));
+                    }
+                } else {
+                    self.define(name.clone(), got);
+                }
+            }
+            Expr::Field(base, field) => {
+                if !Self::is_assignable_target(base) {
+                    self.error("field assignment base must be a variable, field, or index");
+                }
+                let base_ty = self.infer(base);
+                let got = self.infer(value);
+                match base_ty {
+                    crate::types::Type::Struct(name) => {
+                        if let Some(fields) = self.structs.get(&name) {
+                            if let Some((_, expected)) = fields.iter().find(|(n, _)| *n == field) {
+                                if !expected.compatible(&got) {
+                                    self.error(format!("cannot assign {} to {}.{} (expected {})", got.name(), name, field, expected.name()));
+                                }
+                            } else {
+                                self.error(format!("unknown field {}.{}", name, field));
+                            }
+                        }
+                    }
+                    crate::types::Type::Any | crate::types::Type::Unknown => {}
+                    _ => self.error(format!("field assignment requires struct, got {}", base_ty.name())),
+                }
+            }
+            Expr::Index(base, index) => {
+                if !Self::is_assignable_target(base) {
+                    self.error("index assignment base must be a variable, field, or index");
+                }
+                let base_ty = self.infer(base);
+                let index_ty = self.infer(index);
+                let got = self.infer(value);
+                match base_ty {
+                    crate::types::Type::Array(inner) => {
+                        if !index_ty.compatible(&crate::types::Type::Number) {
+                            self.error("array index assignment expects a number");
+                        }
+                        if !inner.compatible(&got) {
+                            self.error(format!("cannot assign {} to array element (expected {})", got.name(), inner.name()));
+                        }
+                    }
+                    crate::types::Type::Generic(name, args) if name == "Map" && args.len() == 2 => {
+                        if !args[0].compatible(&index_ty) && !matches!(index_ty, crate::types::Type::Any) {
+                            self.error("map index assignment key type mismatch");
+                        }
+                        if !args[1].compatible(&got) {
+                            self.error(format!("cannot assign {} to map value (expected {})", got.name(), args[1].name()));
+                        }
+                    }
+                    crate::types::Type::Any | crate::types::Type::Unknown => {}
+                    _ => self.error(format!("index assignment requires array or Map, got {}", base_ty.name())),
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+
     fn check_stmt(&mut self, stmt: &Stmt, expected_return: Option<&crate::types::Type>) {
         match stmt {
             Stmt::Expr(e) | Stmt::Print(e) => { self.infer(e); }
@@ -457,6 +541,9 @@ impl Checker {
                 } else {
                     self.define(name.clone(), got);
                 }
+            }
+            Stmt::AssignTarget(target, e) => {
+                self.check_assign_target(target, e);
             }
             Stmt::Return(e) => {
                 let got = self.infer(e);

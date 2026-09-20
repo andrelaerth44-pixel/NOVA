@@ -1,0 +1,11 @@
+import "compiler.nova"
+
+cli = args()
+
+if len(cli) < 2 {
+    print "usage: nova-selfhost <input.nova> <output.c>"
+} else {
+    source = read_file(arg(0))
+    generated = compile_source(source)
+    write_file(arg(1), generated)
+}

@@ -19,3 +19,10 @@ match x {
         print "unexpected"
     }
 }
+
+
+if [1] and "x" {
+    print "truthy"
+} else {
+    print "unexpected"
+}

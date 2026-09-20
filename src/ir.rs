@@ -141,6 +141,7 @@ pub struct SsaBlock {
 pub struct SsaFunction {
     pub name: String,
     pub params: Vec<(String, IrType, ValueId)>,
+    pub captures: Vec<(String, IrType, ValueId)>,
     pub return_type: IrType,
     pub blocks: Vec<SsaBlock>,
 }
@@ -315,6 +316,11 @@ impl IrBuilder {
             crate::Stmt::Expr(e) => { self.lower_expr(e); self.push(Instr::Pop); }
             crate::Stmt::Let(n,_,e) | crate::Stmt::Assign(n,e) => {
                 self.lower_expr(e); self.push(Instr::Store(n.clone()));
+            }
+            crate::Stmt::AssignTarget(target, e) => {
+                self.lower_expr(target);
+                self.lower_expr(e);
+                self.push(Instr::Call { name: "assign_target".into(), argc: 2, result: IrType::Null });
             }
             crate::Stmt::Print(e) => {
                 self.lower_expr(e);
@@ -519,6 +525,11 @@ impl SsaFunction {
                 return Err(format!("SSA value {} is defined more than once", id));
             }
         }
+        for (_, _, id) in &self.captures {
+            if defs.insert(*id, (0, usize::MAX)).is_some() {
+                return Err(format!("SSA value {} is defined more than once", id));
+            }
+        }
 
         let check_use = |value: ValueId, use_block: usize, use_index: usize,
                          defs: &std::collections::HashMap<ValueId, (usize, usize)>,
@@ -527,7 +538,10 @@ impl SsaFunction {
             let (def_block, def_index) = defs.get(&value).copied()
                 .ok_or_else(|| format!("SSA value {} is undefined", value))?;
             if !dom[use_block].contains(&def_block) {
-                return Err(format!("SSA value {} does not dominate use in block {}", value, use_block));
+                return Err(format!(
+                    "SSA value {} defined in block {} does not dominate use in block {} at instruction {}",
+                    value, def_block, use_block, use_index
+                ));
             }
             if def_block == use_block && def_index != usize::MAX && def_index >= use_index {
                 return Err(format!("SSA value {} is used before its definition in block {}", value, use_block));
@@ -536,7 +550,7 @@ impl SsaFunction {
         };
 
         for block in &self.blocks {
-            for (idx, (_, instr)) in block.instrs.iter().enumerate() {
+            for (idx, (instr_id, instr)) in block.instrs.iter().enumerate() {
                 match instr {
                     SsaInstr::Const(_) | SsaInstr::Load { .. } => {}
                     SsaInstr::Store { value, .. } |
@@ -579,6 +593,19 @@ impl SsaFunction {
                             return Err(format!("SSA phi in block {} has predecessors {:?}, expected {:?}", block.id, actual, expected));
                         }
                         for (pred, value) in incomings {
+                            // A loop-carried Phi may legally feed its own
+                            // previous-iteration value back through a
+                            // back-edge: x = phi(init, x). The normal
+                            // dominance rule would reject this because the
+                            // Phi is defined in the header, not in the
+                            // predecessor block. Allow the self-reference
+                            // only when the Phi block dominates that
+                            // predecessor, proving that the edge is a
+                            // back-edge.
+                            if *value == *instr_id && dom[*pred].contains(&block.id) {
+                                continue;
+                            }
+
                             let pred_block = by_id[*pred].unwrap();
                             let use_index = pred_block.instrs.len();
                             check_use(*value, *pred, use_index, &defs, &dom)?;
@@ -600,5 +627,66 @@ impl SsaFunction {
         }
 
         Ok(())
+    }
+}
+
+
+#[cfg(test)]
+mod phi_self_reference_tests {
+    use super::{IrType, SsaBlock, SsaFunction, SsaInstr, SsaValue, Terminator};
+
+    #[test]
+    fn loop_carried_phi_may_reference_itself_on_backedge() {
+        let function = SsaFunction {
+            name: "phi_loop".into(),
+            params: Vec::new(),
+            captures: Vec::new(),
+            return_type: IrType::Number,
+            blocks: vec![
+                SsaBlock {
+                    id: 0,
+                    params: Vec::new(),
+                    instrs: vec![
+                        (0, SsaInstr::Const(SsaValue::Number(0.0))),
+                    ],
+                    terminator: Some(Terminator::Jump(1)),
+                },
+                SsaBlock {
+                    id: 1,
+                    params: Vec::new(),
+                    instrs: vec![
+                        (1, SsaInstr::Phi {
+                            incomings: vec![(0, 0), (2, 1)],
+                            ty: IrType::Number,
+                        }),
+                        (2, SsaInstr::Binary {
+                            op: "Lt".into(),
+                            left: 1,
+                            right: 0,
+                            ty: IrType::Bool,
+                        }),
+                    ],
+                    terminator: Some(Terminator::Branch {
+                        condition: 2,
+                        then_block: 2,
+                        else_block: 3,
+                    }),
+                },
+                SsaBlock {
+                    id: 2,
+                    params: Vec::new(),
+                    instrs: Vec::new(),
+                    terminator: Some(Terminator::Jump(1)),
+                },
+                SsaBlock {
+                    id: 3,
+                    params: Vec::new(),
+                    instrs: Vec::new(),
+                    terminator: Some(Terminator::Return(Some(1))),
+                },
+            ],
+        };
+
+        function.verify_operands().expect("self-referential loop Phi should be valid");
     }
 }
