@@ -54,8 +54,7 @@ fn emit_expr(node: Node) -> string {
             op = "&&"
         } else {
             if op == "or" {
-            op = "||"
-        }
+                op = "||"
             }
         }
         return "(" + left + " " + op + " " + right + ")"
