@@ -212,15 +212,7 @@ jobs:
           cargo run --release -- build-native-ssa examples/selfhost_compile.nova /tmp/nova-selfhost-compiler
           test -x /tmp/nova-selfhost-compiler
           /tmp/nova-selfhost-compiler > /tmp/selfhost-compiler.out
-          cat /tmp/selfhost-compiler.out
-          ls -l /tmp/nova-selfhost-generated.c || true
           test -s /tmp/nova-selfhost-generated.c
-          cat /tmp/nova-selfhost-generated.c
-          if ! cc -O2 -std=c11 /tmp/nova-selfhost-generated.c -o /tmp/nova-selfhost-generated > /tmp/nova-selfhost-cc.out 2>&1; then
-            cat /tmp/nova-selfhost-cc.out
-            exit 1
-          fi
+          cc -O2 -std=c11 /tmp/nova-selfhost-generated.c -o /tmp/nova-selfhost-generated
           test -x /tmp/nova-selfhost-generated
-          /tmp/nova-selfhost-generated > /tmp/nova-selfhost-generated.out
-          cat /tmp/nova-selfhost-generated.out
-          test "$(cat /tmp/nova-selfhost-generated.out)" = "42"
+          test "$(/tmp/nova-selfhost-generated)" = "42"
