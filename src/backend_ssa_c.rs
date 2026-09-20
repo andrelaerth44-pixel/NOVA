@@ -1152,6 +1152,23 @@ static NovaValue nova_sqrt(NovaValue value) {
   return nova_num(sqrt(value.number));
 }
 
+static NovaValue nova_args(void) {
+  size_t count = nova_cli_argc > 1 ? (size_t)(nova_cli_argc - 1) : 0;
+  NovaArray* array = (NovaArray*)calloc(1, sizeof(NovaArray));
+  if (!array) return nova_null();
+  array->len = count;
+  array->items = count ? (NovaValue*)calloc(count, sizeof(NovaValue)) : NULL;
+  if (count && !array->items) return nova_null();
+  for (size_t i = 0; i < count; i++) array->items[i] = nova_string(nova_dup(nova_cli_argv[i + 1]));
+  return nova_array_value(array);
+}
+
+static NovaValue nova_arg(NovaValue index) {
+  if (index.tag != NOVA_NUMBER || index.number < 0 || (double)(size_t)index.number != index.number) return nova_null();
+  size_t i = (size_t)index.number;
+  if (nova_cli_argc <= 1 || i >= (size_t)(nova_cli_argc - 1)) return nova_null();
+  return nova_string(nova_dup(nova_cli_argv[i + 1]));
+}
 static NovaValue nova_env(NovaValue key) {
   if (key.tag != NOVA_STRING || !key.string) return nova_null();
   const char* value = getenv(key.string);
