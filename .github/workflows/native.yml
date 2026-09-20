@@ -112,6 +112,10 @@ jobs:
           2
           3
           100
+          true
+          true
+          true
+          true
           EOF
           diff -u /tmp/collections.expected /tmp/collections.out
 
