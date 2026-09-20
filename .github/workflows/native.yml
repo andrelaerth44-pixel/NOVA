@@ -215,6 +215,9 @@ jobs:
           cat /tmp/selfhost-compiler.out
           ls -l /tmp/nova-selfhost-generated.c || true
           test -s /tmp/nova-selfhost-generated.c
+          cat /tmp/nova-selfhost-generated.c
           cc -O2 -std=c11 /tmp/nova-selfhost-generated.c -o /tmp/nova-selfhost-generated
           test -x /tmp/nova-selfhost-generated
-          test "$(/tmp/nova-selfhost-generated)" = "42"
+          /tmp/nova-selfhost-generated > /tmp/nova-selfhost-generated.out
+          cat /tmp/nova-selfhost-generated.out
+          test "$(cat /tmp/nova-selfhost-generated.out)" = "42"
