@@ -1,0 +1,16 @@
+fn calc(limit) {
+    let total = 0
+    while total < limit {
+        total = total + 1
+    }
+    return total
+}
+
+let x = 0
+if 1 < 2 {
+    x = calc(42)
+} else {
+    x = 0
+}
+
+print x
