@@ -489,8 +489,11 @@ impl Builder {
                             });
                             self.bind(name, phi);
                         }
-                        (Some(x), None) | (None, Some(x)) => self.bind(name, x),
-                        (None, None) => {}
+                        (Some(x), None) if !else_live => self.bind(name, x),
+                        (None, Some(x)) if !then_live => self.bind(name, x),
+                        // A variable introduced in only one live branch is
+                        // not definitely initialized after the merge.
+                        (Some(_), None) | (None, Some(_)) | (None, None) => {}
                     }
                 }
             }
