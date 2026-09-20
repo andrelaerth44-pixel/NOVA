@@ -590,6 +590,19 @@ impl SsaFunction {
                             return Err(format!("SSA phi in block {} has predecessors {:?}, expected {:?}", block.id, actual, expected));
                         }
                         for (pred, value) in incomings {
+                            // A loop-carried Phi may legally feed its own
+                            // previous-iteration value back through a
+                            // back-edge: x = phi(init, x). The normal
+                            // dominance rule would reject this because the
+                            // Phi is defined in the header, not in the
+                            // predecessor block. Allow the self-reference
+                            // only when the Phi block dominates that
+                            // predecessor, proving that the edge is a
+                            // back-edge.
+                            if *value == *id && dom[*pred].contains(&block.id) {
+                                continue;
+                            }
+
                             let pred_block = by_id[*pred].unwrap();
                             let use_index = pred_block.instrs.len();
                             check_use(*value, *pred, use_index, &defs, &dom)?;
@@ -611,5 +624,66 @@ impl SsaFunction {
         }
 
         Ok(())
+    }
+}
+
+
+#[cfg(test)]
+mod phi_self_reference_tests {
+    use super::{IrType, SsaBlock, SsaFunction, SsaInstr, SsaValue, Terminator};
+
+    #[test]
+    fn loop_carried_phi_may_reference_itself_on_backedge() {
+        let function = SsaFunction {
+            name: "phi_loop".into(),
+            params: Vec::new(),
+            captures: Vec::new(),
+            return_type: IrType::Number,
+            blocks: vec![
+                SsaBlock {
+                    id: 0,
+                    params: Vec::new(),
+                    instrs: vec![
+                        (0, SsaInstr::Const(SsaValue::Number(0.0))),
+                    ],
+                    terminator: Some(Terminator::Jump(1)),
+                },
+                SsaBlock {
+                    id: 1,
+                    params: Vec::new(),
+                    instrs: vec![
+                        (1, SsaInstr::Phi {
+                            incomings: vec![(0, 0), (2, 1)],
+                            ty: IrType::Number,
+                        }),
+                        (2, SsaInstr::Binary {
+                            op: "Lt".into(),
+                            left: 1,
+                            right: 0,
+                            ty: IrType::Bool,
+                        }),
+                    ],
+                    terminator: Some(Terminator::Branch {
+                        condition: 2,
+                        then_block: 2,
+                        else_block: 3,
+                    }),
+                },
+                SsaBlock {
+                    id: 2,
+                    params: Vec::new(),
+                    instrs: Vec::new(),
+                    terminator: Some(Terminator::Jump(1)),
+                },
+                SsaBlock {
+                    id: 3,
+                    params: Vec::new(),
+                    instrs: Vec::new(),
+                    terminator: Some(Terminator::Return(Some(1))),
+                },
+            ],
+        };
+
+        function.verify_operands().expect("self-referential loop Phi should be valid");
     }
 }
