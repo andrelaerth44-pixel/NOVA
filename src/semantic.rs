@@ -88,6 +88,9 @@ impl Checker {
         match e {
             Expr::Val(v) => self.value_type(v),
             Expr::Var(n) => {
+                if n == "null" {
+                    return crate::types::Type::Null;
+                }
                 if n == "None" {
                     return crate::types::Type::Generic("Option".into(), vec![crate::types::Type::Any]);
                 }
