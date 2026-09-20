@@ -475,6 +475,16 @@ impl Vm {
                         v => Ok(v),
                     };
                 }
+                if n == "args" {
+                    if !a.is_empty() { return Err("args expects 0 arguments".into()); }
+                    let values = std::env::args().skip(1).map(Value::Str).collect::<Vec<_>>();
+                    return Ok(Value::Array(values));
+                }
+                if n == "arg" {
+                    if a.len() != 1 { return Err("arg expects 1 argument".into()); }
+                    let index = num(self.eval(&a[0])?)? as usize;
+                    return Ok(std::env::args().nth(index + 1).map(Value::Str).unwrap_or(Value::Null));
+                }
                 if n == "env" {
                     if a.len() != 1 { return Err("env expects 1 argument".into()); }
                     let key = self.eval(&a[0])?;
