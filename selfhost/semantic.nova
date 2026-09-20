@@ -1,0 +1,174 @@
+import "lexer.nova"
+import "parser.nova"
+
+fn builtin_type(name: string) -> string {
+    if name == "len" { return "number" }
+    if name == "ord" { return "number" }
+    if name == "chr" { return "string" }
+    if name == "str" { return "string" }
+    if name == "abs" { return "number" }
+    if name == "sqrt" { return "number" }
+    if name == "now_s" { return "number" }
+    if name == "now_ms" { return "number" }
+    return ""
+}
+
+fn infer_expr(node: Node, scope: any) -> string {
+    if node.kind == "number" { return "number" }
+    if node.kind == "string" { return "string" }
+    if node.kind == "bool" { return "bool" }
+
+    if node.kind == "ident" {
+        ty = map_get(scope, node.text)
+        if ty != null {
+            return ty
+        }
+        return "unknown"
+    }
+
+    if node.kind == "unary" {
+        return infer_expr(node.children[0], scope)
+    }
+
+    if node.kind == "binary" {
+        left = infer_expr(node.children[0], scope)
+        right = infer_expr(node.children[1], scope)
+
+        if node.text == "+" {
+            if left == "string" and right == "string" {
+                return "string"
+            }
+            return "number"
+        }
+
+        if node.text == "-" or node.text == "*" or node.text == "/" or node.text == "%" {
+            return "number"
+        }
+
+        return "bool"
+    }
+
+    if node.kind == "call" {
+        built = builtin_type(node.text)
+        if built != "" {
+            return built
+        }
+
+        return map_get(scope, "fn:" + node.text)
+    }
+
+    if node.kind == "index" {
+        return "unknown"
+    }
+
+    if node.kind == "field" {
+        return "unknown"
+    }
+
+    if node.kind == "expr" {
+        return infer_expr(node.children[0], scope)
+    }
+
+    return "unknown"
+}
+
+fn check_statement(node: Node, scope: any, errors: string[]) -> string[] {
+    if node.kind == "let" {
+        ty = infer_expr(node.children[0], scope)
+        map_set(scope, node.text, ty)
+        return errors
+    }
+
+    if node.kind == "assign" {
+        ty = infer_expr(node.children[0], scope)
+        old = map_get(scope, node.text)
+        if old != null and old != ty and ty != "unknown" {
+            errors = push(errors, "cannot assign " + ty + " to " + node.text)
+        }
+        if old == null {
+            map_set(scope, node.text, ty)
+        }
+        return errors
+    }
+
+    if node.kind == "return" {
+        return errors
+    }
+
+    if node.kind == "print" or node.kind == "expr" {
+        if node.kind == "print" {
+            infer_expr(node.children[0], scope)
+        } else {
+            infer_expr(node.children[0], scope)
+        }
+        return errors
+    }
+
+    if node.kind == "if" {
+        infer_expr(node.children[0], scope)
+        errors = check_statement(node.children[1], scope, errors)
+        if len(node.children) > 2 {
+            errors = check_statement(node.children[2], scope, errors)
+        }
+        return errors
+    }
+
+    if node.kind == "while" {
+        infer_expr(node.children[0], scope)
+        return check_statement(node.children[1], scope, errors)
+    }
+
+    if node.kind == "block" {
+        i = 0
+        while i < len(node.children) {
+            errors = check_statement(node.children[i], scope, errors)
+            i = i + 1
+        }
+        return errors
+    }
+
+    if node.kind == "fn" {
+        fn_scope = map {}
+        i = 0
+        while i < len(node.children) {
+            child = node.children[i]
+            if child.kind == "param" {
+                map_set(fn_scope, child.text, "number")
+            }
+            i = i + 1
+        }
+
+        map_set(scope, "fn:" + node.text, "number")
+
+        i = 0
+        while i < len(node.children) {
+            child = node.children[i]
+            if child.kind != "param" {
+                errors = check_statement(child, fn_scope, errors)
+            }
+            i = i + 1
+        }
+        return errors
+    }
+
+    return errors
+}
+
+fn check_program(tree: Node) -> string[] {
+    scope = map {}
+    errors = []
+    i = 0
+
+    while i < len(tree.children) {
+        errors = check_statement(tree.children[i], scope, errors)
+        i = i + 1
+    }
+
+    return errors
+}
+
+fn analyze(source: string) -> string[] {
+    tokens = lex(source)
+    tree = parse_program(tokens)
+    return check_program(tree)
+}
