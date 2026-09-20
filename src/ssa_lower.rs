@@ -423,8 +423,11 @@ impl Builder {
                 let condition = self.expr(cond);
                 let then_id = self.new_block();
                 let else_id = self.new_block();
-                let merge_id = self.new_block();
-                self.blocks[self.current].terminator = Some(Terminator::Branch { condition, then_block: then_id, else_block: else_id });
+                self.blocks[self.current].terminator = Some(Terminator::Branch {
+                    condition,
+                    then_block: then_id,
+                    else_block: else_id,
+                });
 
                 let incoming = self.vars.last().cloned().unwrap_or_default();
 
@@ -432,7 +435,8 @@ impl Builder {
                 self.push_scope();
                 self.stmt_list(then_body);
                 let then_vars = self.vars.last().cloned().unwrap_or_default();
-                if self.blocks[self.current].terminator.is_none() { self.blocks[self.current].terminator = Some(Terminator::Jump(merge_id)); }
+                let then_end = self.current;
+                let then_live = self.blocks[then_end].terminator.is_none();
                 self.pop_scope();
 
                 self.set_current(else_id);
@@ -440,21 +444,53 @@ impl Builder {
                 self.push_scope();
                 self.stmt_list(else_body);
                 let else_vars = self.vars.last().cloned().unwrap_or_default();
-                if self.blocks[self.current].terminator.is_none() { self.blocks[self.current].terminator = Some(Terminator::Jump(merge_id)); }
+                let else_end = self.current;
+                let else_live = self.blocks[else_end].terminator.is_none();
                 self.pop_scope();
+
+                // If both branches terminate (for example both return), the
+                // if has no fallthrough successor. Keep the current block
+                // terminated and do not manufacture an unreachable merge.
+                if !then_live && !else_live {
+                    self.set_current(then_end);
+                    return;
+                }
+
+                let merge_id = self.new_block();
+                if then_live {
+                    self.blocks[then_end].terminator = Some(Terminator::Jump(merge_id));
+                }
+                if else_live {
+                    self.blocks[else_end].terminator = Some(Terminator::Jump(merge_id));
+                }
 
                 self.set_current(merge_id);
                 self.vars.last_mut().unwrap().clone_from(&incoming);
-                let keys = then_vars.keys().chain(else_vars.keys()).cloned().collect::<std::collections::BTreeSet<_>>();
+
+                let keys = then_vars.keys()
+                    .chain(else_vars.keys())
+                    .cloned()
+                    .collect::<std::collections::BTreeSet<_>>();
+
                 for name in keys {
-                    let a = then_vars.get(&name).copied().or_else(|| incoming.get(&name).copied());
-                    let b = else_vars.get(&name).copied().or_else(|| incoming.get(&name).copied());
-                    if let (Some(x), Some(y)) = (a, b) {
-                        if x == y { self.bind(name, x); }
-                        else {
-                            let phi = self.emit(SsaInstr::Phi { incomings: vec![(then_id, x), (else_id, y)], ty: IrType::Any });
+                    let a = then_live
+                        .then(|| then_vars.get(&name).copied().or_else(|| incoming.get(&name).copied()))
+                        .flatten();
+                    let b = else_live
+                        .then(|| else_vars.get(&name).copied().or_else(|| incoming.get(&name).copied()))
+                        .flatten();
+
+                    match (a, b) {
+                        (Some(x), Some(y)) if x == y => self.bind(name, x),
+                        (Some(x), Some(y)) => {
+                            let phi = self.emit(SsaInstr::Phi {
+                                incomings: vec![(then_end, x), (else_end, y)],
+                                ty: IrType::Any,
+                            });
                             self.bind(name, phi);
                         }
+                        (Some(x), None) | (None, Some(x)) => self.bind(name, x),
+                        (None, None) => {}
                     }
                 }
             }
