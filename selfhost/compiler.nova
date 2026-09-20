@@ -149,6 +149,7 @@ fn emit_function(node: Node) -> string {
     out = emit_function_signature(node) + " {"
 
     returned = false
+    i = 0
     while i < len(node.children) {
         stmt = node.children[i]
         code = emit_statement(stmt)
