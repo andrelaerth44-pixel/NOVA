@@ -448,11 +448,14 @@ fn parse_statement(state: ParserState) -> Node {
     }
 
     if kind == "ident" {
-        expr = parse_expression(state, 1)
-        if expr.kind == "ident" and accept(state, "=") {
-            assign = make_node("assign", expr.text)
+        if kind_at(state, 1) == "=" {
+            name = take_token(state)
+            take_token(state)
+            assign = make_node("assign", name.lexeme)
             return add_child(assign, parse_expression(state, 1))
         }
+
+        expr = parse_expression(state, 1)
         if (expr.kind == "field" or expr.kind == "index") and accept(state, "=") {
             assign = make_node("assign_target", "")
             assign = add_child(assign, expr)
