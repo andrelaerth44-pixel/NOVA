@@ -163,7 +163,8 @@ jobs:
         run: |
           cargo run --release -- check examples/selfhost_parser.nova
           cargo run --release -- ssa-raw examples/selfhost_parser.nova > /tmp/nova-selfhost-parser.raw-ssa
-          grep -n -B4 -A8 '%218' /tmp/nova-selfhost-parser.raw-ssa || true
+          grep -n -B6 -A18 '^block 62' /tmp/nova-selfhost-parser.raw-ssa || true
+          grep -n -B6 -A8 -E '%(21[0-9]|22[0-9]) =' /tmp/nova-selfhost-parser.raw-ssa || true
           cargo run --release -- build-native-ssa examples/selfhost_parser.nova /tmp/nova-selfhost-parser
           /tmp/nova-selfhost-parser > /tmp/nova-selfhost-parser.out
           cat > /tmp/nova-selfhost-parser.expected <<'EOF'
