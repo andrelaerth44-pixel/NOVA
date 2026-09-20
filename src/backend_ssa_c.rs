@@ -1919,41 +1919,9 @@ static NovaValue nova_collect(NovaValue value) {
 }
 
 static NovaValue nova_index(NovaValue base, NovaValue index) {
-  if (base.tag == NOVA_STRING && base.string && index.tag == NOVA_NUMBER) {
-    size_t target = (size_t)index.number;
-    if (index.number < 0 || (double)target != index.number) return nova_null();
-
-    size_t offset = 0;
-    size_t current = 0;
-    size_t bytes = strlen(base.string);
-    while (offset < bytes && current < target) {
-      unsigned char c = (unsigned char)base.string[offset];
-      offset += nova_utf8_width(c);
-      current++;
-    }
-    if (offset >= bytes || current != target) return nova_null();
-
-    size_t width = nova_utf8_width((unsigned char)base.string[offset]);
-    if (offset + width > bytes) width = 1;
-    char* out = (char*)calloc(width + 1, 1);
-    if (!out) return nova_null();
-    memcpy(out, base.string + offset, width);
-    return nova_string(out);
+  if (base.tag == NOVA_STRING) {
+    return nova_string_index(base, index);
   }
-
-  if (base.tag == NOVA_ARRAY && base.array && index.tag == NOVA_NUMBER) {
-    size_t i = (size_t)index.number;
-    if (index.number >= 0 && (double)i == index.number && i < base.array->len)
-      return base.array->items[i];
-  }
-  if (base.tag == NOVA_MAP && base.map) {
-    for (size_t i = 0; i < base.map->len; i++) {
-      if (nova_equal(base.map->keys[i], index)) return base.map->values[i];
-    }
-  }
-  return nova_null();
-}
-  if (base.tag == NOVA_STRING) return nova_string_index(base, index);
   if (base.tag == NOVA_ARRAY && base.array && index.tag == NOVA_NUMBER) {
     size_t i = (size_t)index.number;
     if (index.number >= 0 && (double)i == index.number && i < base.array->len)
