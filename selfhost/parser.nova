@@ -31,6 +31,14 @@ fn peek_kind(state: ParserState) -> string {
     return token_at(state, 0).kind
 }
 
+fn kind_at(state: ParserState, offset: f64) -> string {
+    p = state.pos + offset
+    if p >= len(state.tokens) {
+        return "eof"
+    }
+    return state.tokens[p].kind
+}
+
 fn peek_text(state: ParserState) -> string {
     return token_at(state, 0).lexeme
 }
@@ -154,8 +162,8 @@ fn parse_atom(state: ParserState) -> Node {
         }
 
         if peek_kind(state) == "{" and
-           token_at(state, 1).kind == "ident" and
-           token_at(state, 2).kind == ":" {
+           kind_at(state, 1) == "ident" and
+           kind_at(state, 2) == ":" {
             take_token(state)
             node.kind = "struct"
             more = true
