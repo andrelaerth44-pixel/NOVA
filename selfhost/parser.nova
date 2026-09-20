@@ -97,8 +97,11 @@ fn parse_atom(state: ParserState) -> Node {
         return make_node("string", token.lexeme)
     }
 
-    if kind == "true" or kind == "false" {
+    if kind == "true" or kind == "false" or kind == "null" {
         token = take_token(state)
+        if kind == "null" {
+            return make_node("null", "null")
+        }
         return make_node("bool", token.lexeme)
     }
 
