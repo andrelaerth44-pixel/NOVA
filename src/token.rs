@@ -6,6 +6,6 @@ pub enum Token {
     LParen, RParen, LBrace, RBrace, LBracket, RBracket,
     Comma, Semi, Dot, Bang, Question, Colon, Arrow, And, Or,
     If, Else, While, Fn, Return, True, False, Let,
-    Print, In, For, Import, Match, Eof,
+    Print, In, For, Import, Match, Null, Eof,
 }
 
