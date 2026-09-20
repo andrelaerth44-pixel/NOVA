@@ -1530,12 +1530,6 @@ static NovaValue nova_json_stringify(NovaValue value) {
   return nova_string(buf.data ? buf.data : nova_dup(""));
 }
 
-static NovaValue nova_env(NovaValue name) {
-  if (name.tag != NOVA_STRING || !name.string) return nova_string(nova_dup(""));
-  const value = getenv(name.string);
-  return nova_string(nova_dup(value ? value : ""));
-}
-
 static NovaValue nova_read_file(NovaValue path) {
   if (path.tag != NOVA_STRING || !path.string) return nova_null();
   FILE* file = fopen(path.string, "rb");
