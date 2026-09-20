@@ -93,7 +93,16 @@ fn main(){
     };
 
     if a[1]=="ssa-raw"{
-        let functions = ssa_lower::lower_program_tree(&program);
+        let mut functions = ssa_lower::lower_program_tree(&program);
+        for stmt in &program {
+            if let Stmt::Fn(name, _generics, args, ret, body) = stmt {
+                for function in ssa_lower::lower_function_tree(name, args, ret, body) {
+                    if !functions.iter().any(|existing| existing.name == function.name) {
+                        functions.push(function);
+                    }
+                }
+            }
+        }
         print!("{}", compiler::format_ssa_module(&functions));
         return
     }
