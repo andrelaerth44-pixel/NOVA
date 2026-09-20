@@ -1,14 +1,14 @@
 struct Node {
     kind: string
     text: string
-    children: any[]
+    children: Node[]
 }
 
 fn make_node(kind: string, text: string) -> Node {
     return Node { kind: kind, text: text, children: [] }
 }
 
-fn add_child(node: Node, child: any) -> Node {
+fn add_child(node: Node, child: Node) -> Node {
     node.children = push(node.children, child)
     return node
 }
