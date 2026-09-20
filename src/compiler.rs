@@ -20,8 +20,8 @@ pub fn parse_source(source: &str) -> Result<Vec<Stmt>, String> {
 }
 
 fn verify_ssa(function: &SsaFunction) -> Result<(), String> {
-    function.validate()?;
-    function.verify_operands()
+    function.validate().map_err(|err| format!("{}: {}", function.name, err))?;
+    function.verify_operands().map_err(|err| format!("{}: {}", function.name, err))
 }
 
 pub fn compile_program(program: Vec<Stmt>) -> Result<Compilation, String> {
