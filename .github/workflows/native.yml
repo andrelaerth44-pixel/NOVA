@@ -212,6 +212,8 @@ jobs:
           cargo run --release -- build-native-ssa examples/selfhost_compile.nova /tmp/nova-selfhost-compiler
           test -x /tmp/nova-selfhost-compiler
           /tmp/nova-selfhost-compiler > /tmp/selfhost-compiler.out
+          cat /tmp/selfhost-compiler.out
+          ls -l /tmp/nova-selfhost-generated.c || true
           test -s /tmp/nova-selfhost-generated.c
           cc -O2 -std=c11 /tmp/nova-selfhost-generated.c -o /tmp/nova-selfhost-generated
           test -x /tmp/nova-selfhost-generated
