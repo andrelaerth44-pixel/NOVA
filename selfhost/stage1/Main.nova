@@ -1,11 +1,15 @@
+import "Diagnostics.nova"
+import "AST.nova"
 import "Lexer.nova"
 import "Parser.nova"
 import "IR.nova"
+import "SSA.nova"
+import "BackendX86.nova"
+import "Compiler.nova"
 
 fn main() {
-    source = "print 42"
-    tokens = lex(source)
-    tree = parse(tokens)
-    module = lower(tree)
-    print module
+    source = read_file("selfhost/fixtures/hello.nova")
+    assembly = Compiler.compile(source)
+    write_file("target/nova-stage1-hello.s", assembly)
+    print "NOVA Stage 1 compiler emitted target/nova-stage1-hello.s"
 }
