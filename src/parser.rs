@@ -217,7 +217,7 @@ impl Parser {
                 let _ret=if self.eat(&Token::Arrow){Some(self.type_name()?)}else{None};
                 Expr::Closure(args,self.block()?)
             },
-            t=>return Err(format!("unexpected token {:?}",t))};
+            t=>return Err(format!("unexpected token {:?} at token index {}",t,self.p.saturating_sub(1)))};
         let mut x = x;
         loop {
             if self.eat(&Token::Dot) {
