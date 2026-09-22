@@ -8,9 +8,7 @@ import "BackendX86.nova"
 import "Compiler.nova"
 
 make_dir("target")
-
-    source = read_file("selfhost/fixtures/hello.nova")
-    assembly = compile(source)
-    write_file("target/nova-stage1-hello.s", assembly)
-    print "NOVA Stage 1 compiler emitted target/nova-stage1-hello.s"
-}
+source = read_file("selfhost/fixtures/hello.nova")
+assembly = compile(source)
+write_file("target/nova-stage1-hello.s", assembly)
+print "NOVA Stage 1 compiler emitted target/nova-stage1-hello.s"
