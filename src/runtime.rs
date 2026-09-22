@@ -319,6 +319,15 @@ impl Vm {
                     if a.len() != 1 { return Err("str expects 1 argument".into()); }
                     return Ok(Value::Str(self.eval(&a[0])?.to_string()));
                 }
+                if n == "array_push" {
+                    if a.len() != 2 { return Err("array_push expects 2 arguments".into()); }
+                    let array = self.eval(&a[0])?;
+                    let value = self.eval(&a[1])?;
+                    match array {
+                        Value::Array(mut values) => { values.push(value); return Ok(Value::Array(values)); }
+                        _ => return Err("array_push expects an array".into()),
+                    }
+                }
                 if n == "len" {
                     if a.len() != 1 { return Err("len expects 1 argument".into()); }
                     let v = self.eval(&a[0])?;
