@@ -345,15 +345,24 @@ impl Builder {
                 let then_id = self.new_block();
                 let else_id = self.new_block();
                 let merge_id = self.new_block();
-                self.blocks[self.current].terminator = Some(Terminator::Branch { condition, then_block: then_id, else_block: else_id });
+                self.blocks[self.current].terminator = Some(Terminator::Branch {
+                    condition,
+                    then_block: then_id,
+                    else_block: else_id,
+                });
 
                 let incoming = self.vars.last().cloned().unwrap_or_default();
 
                 self.set_current(then_id);
+                self.vars.last_mut().unwrap().clone_from(&incoming);
                 self.push_scope();
                 self.stmt_list(then_body);
                 let then_vars = self.vars.last().cloned().unwrap_or_default();
-                if self.blocks[self.current].terminator.is_none() { self.blocks[self.current].terminator = Some(Terminator::Jump(merge_id)); }
+                let then_falls_through = self.blocks[self.current].terminator.is_none();
+                let then_pred = self.current;
+                if then_falls_through {
+                    self.blocks[then_pred].terminator = Some(Terminator::Jump(merge_id));
+                }
                 self.pop_scope();
 
                 self.set_current(else_id);
@@ -361,20 +370,59 @@ impl Builder {
                 self.push_scope();
                 self.stmt_list(else_body);
                 let else_vars = self.vars.last().cloned().unwrap_or_default();
-                if self.blocks[self.current].terminator.is_none() { self.blocks[self.current].terminator = Some(Terminator::Jump(merge_id)); }
+                let else_falls_through = self.blocks[self.current].terminator.is_none();
+                let else_pred = self.current;
+                if else_falls_through {
+                    self.blocks[else_pred].terminator = Some(Terminator::Jump(merge_id));
+                }
                 self.pop_scope();
+
+                let fallthroughs = [
+                    then_falls_through.then_some((then_pred, then_vars)),
+                    else_falls_through.then_some((else_pred, else_vars)),
+                ];
+                let active = fallthroughs.iter().filter_map(|x| x.as_ref()).collect::<Vec<_>>();
 
                 self.set_current(merge_id);
                 self.vars.last_mut().unwrap().clone_from(&incoming);
-                let keys = then_vars.keys().chain(else_vars.keys()).cloned().collect::<std::collections::BTreeSet<_>>();
-                for name in keys {
-                    let a = then_vars.get(&name).copied().or_else(|| incoming.get(&name).copied());
-                    let b = else_vars.get(&name).copied().or_else(|| incoming.get(&name).copied());
-                    if let (Some(x), Some(y)) = (a, b) {
-                        if x == y { self.bind(name, x); }
-                        else {
-                            let phi = self.emit(SsaInstr::Phi { incomings: vec![(then_id, x), (else_id, y)], ty: IrType::Any });
-                            self.bind(name, phi);
+
+                if active.is_empty() {
+                    // Both arms terminate; keep a synthetic return so the block
+                    // remains a valid CFG node while carrying no live values.
+                    self.blocks[merge_id].terminator = Some(Terminator::Return(None));
+                } else {
+                    let keys = active
+                        .iter()
+                        .flat_map(|(_, vars)| vars.keys())
+                        .chain(incoming.keys())
+                        .cloned()
+                        .collect::<std::collections::BTreeSet<_>>();
+
+                    for name in keys {
+                        let values = active
+                            .iter()
+                            .map(|(_, vars)| vars.get(&name).copied().or_else(|| incoming.get(&name).copied()))
+                            .collect::<Vec<_>>();
+                        let first = values.first().copied().flatten();
+                        if values.iter().all(|value| *value == first) {
+                            if let Some(value) = first {
+                                self.bind(name, value);
+                            }
+                        } else {
+                            let incomings = active
+                                .iter()
+                                .zip(values.iter())
+                                .filter_map(|((pred, _), value)| value.map(|v| (*pred, v)))
+                                .collect::<Vec<_>>();
+                            if incomings.len() == 1 {
+                                self.bind(name, incomings[0].1);
+                            } else if !incomings.is_empty() {
+                                let phi = self.emit(SsaInstr::Phi {
+                                    incomings,
+                                    ty: IrType::Any,
+                                });
+                                self.bind(name, phi);
+                            }
                         }
                     }
                 }
