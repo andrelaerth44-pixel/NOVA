@@ -270,3 +270,40 @@ jobs:
 
           cargo run --release -- package-init /tmp/nova-pkg demo
           test -f /tmp/nova-pkg/nova.toml
+
+      - name: Android native toolchain
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform, build-tools and NDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;30.0.16248370"
+
+      - name: Native Android APK smoke test
+        shell: bash
+        run: |
+          export NOVA_ANDROID_SDK="$ANDROID_SDK_ROOT"
+          export NOVA_ANDROID_NDK="$ANDROID_SDK_ROOT/ndk/30.0.16248370"
+          export NOVA_ANDROID_BUILD_TOOLS="$ANDROID_SDK_ROOT/build-tools/35.0.0"
+          rm -f /tmp/nova-obra360.apk
+          cargo run --release -- build-apk examples/obra360.nova /tmp/nova-obra360.apk
+          test -s /tmp/nova-obra360.apk
+          "$NOVA_ANDROID_BUILD_TOOLS/aapt2" dump badging /tmp/nova-obra360.apk | tee /tmp/nova-badging.out
+          grep -Fq "com.nova.generated" /tmp/nova-badging.out
+          grep -Fq "launchable-activity" /tmp/nova-badging.out
+          "$NOVA_ANDROID_BUILD_TOOLS/apksigner" verify --verbose /tmp/nova-obra360.apk
+          rm -rf /tmp/nova-apk-unpack
+          mkdir /tmp/nova-apk-unpack
+          unzip -q /tmp/nova-obra360.apk -d /tmp/nova-apk-unpack
+          test -f /tmp/nova-apk-unpack/assets/Main.nova
+          test -f /tmp/nova-apk-unpack/assets/nova.toml
+          test -f /tmp/nova-apk-unpack/lib/arm64-v8a/libnova_main.so
+          ! find /tmp/nova-apk-unpack -type f \( -name "*.kt" -o -name "*.java" -o -name "*.c" -o -name "*.cc" -o -name "*.cpp" -o -name "*.gradle" -o -name "*.gradle.kts" \) | grep -q .
+          "$NOVA_ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -Ws /tmp/nova-apk-unpack/lib/arm64-v8a/libnova_main.so | grep -Fq "ANativeActivity_onCreate"
+
+      - name: Upload native NOVA APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nova-obra360-native-apk
+          path: /tmp/nova-obra360.apk
