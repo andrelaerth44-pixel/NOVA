@@ -16,3 +16,10 @@ print json_stringify(map {
     "variable_b": ast_variable("b"),
     "expression": parser_source("a + b")
 })
+
+lex_simple = lex_source("a + b")
+p_simple = parser_state(map_get(lex_simple, "tokens"))
+t0 = parser_advance(p_simple)
+t1 = parser_advance(p_simple)
+t2 = parser_advance(p_simple)
+print json_stringify([t0, t1, t2])
