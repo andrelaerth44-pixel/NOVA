@@ -237,6 +237,38 @@ impl Parser {
         }
         Ok(x)
     }
+    #[test]
+    fn parses_stage1_ir_statement_function() {
+        let source = r#"
+            fn ir_stmt(ir, node) {
+                k = map_get(node, "kind")
+                if k == "let" {
+                    value = ir_expr(ir, map_get(node, "value"))
+                    item = ir_instruction("store")
+                    map_set(item, "name", map_get(node, "name"))
+                    map_set(item, "value", value)
+                    ir_emit(ir, item)
+                    return
+                }
+                if k == "assign" {
+                    value = ir_expr(ir, map_get(node, "value"))
+                    item = ir_instruction("store")
+                    map_set(item, "name", map_get(node, "name"))
+                    map_set(item, "value", value)
+                    ir_emit(ir, item)
+                    return
+                }
+                if k == "print" {
+                    value = ir_expr(ir, map_get(node, "value"))
+                    item = ir_instruction("print")
+                    map_set(item, "value", value)
+                    ir_emit(ir, item)
+                    return
+                }
+            }
+        "#;
+        Parser::new(crate::lex(source).expect("lex")).program().expect("IR statement function should parse");
+    }
 }
 
 
