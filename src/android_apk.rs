@@ -116,6 +116,12 @@ fn native_arm64_source(app: &AppDeclRoot) -> String {
 .global ANativeActivity_onCreate
 .type ANativeActivity_onCreate, %function
 ANativeActivity_onCreate:
+    mov w0, #4
+    adrp x1, nova_log_tag
+    add x1, x1, :lo12:nova_log_tag
+    adrp x2, nova_log_message
+    add x2, x2, :lo12:nova_log_message
+    bl __android_log_write
     ret
 .size ANativeActivity_onCreate, .-ANativeActivity_onCreate
 
@@ -129,6 +135,10 @@ nova_main:
 .p2align 3
 nova_app_name:
     .asciz "{}"
+nova_log_tag:
+    .asciz "NOVA"
+nova_log_message:
+    .asciz "NOVA native Android runtime loaded"
 "#, name)
 }
 
@@ -176,6 +186,7 @@ pub fn build_apk(app: &AppDeclRoot, output: &Path) -> Result<PathBuf, String> {
         "-fPIC".into(),
         "-nostdlib".into(),
         "-Wl,-soname,libnova_main.so".into(),
+        "-llog".into(),
         "-Wl,-z,max-page-size=16384".into(),
         "-o".into(), lib.display().to_string(),
         work.join("nova_main.S").display().to_string(),
