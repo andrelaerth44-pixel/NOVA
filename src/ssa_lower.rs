@@ -403,20 +403,24 @@ impl Builder {
                             .iter()
                             .map(|(_, vars)| vars.get(&name).copied().or_else(|| incoming.get(&name).copied()))
                             .collect::<Vec<_>>();
-                        let first = values.first().copied().flatten();
-                        if values.iter().all(|value| *value == first) {
-                            if let Some(value) = first {
+
+                        if active.len() == 1 {
+                            if let Some(value) = values[0] {
                                 self.bind(name, value);
                             }
-                        } else {
-                            let incomings = active
-                                .iter()
-                                .zip(values.iter())
-                                .filter_map(|((pred, _), value)| value.map(|v| (*pred, v)))
-                                .collect::<Vec<_>>();
-                            if incomings.len() == 1 {
-                                self.bind(name, incomings[0].1);
-                            } else if !incomings.is_empty() {
+                            continue;
+                        }
+
+                        if values.iter().all(Option::is_some) {
+                            let concrete = values.iter().map(|value| value.unwrap()).collect::<Vec<_>>();
+                            if concrete.iter().all(|value| *value == concrete[0]) {
+                                self.bind(name, concrete[0]);
+                            } else {
+                                let incomings = active
+                                    .iter()
+                                    .zip(concrete.iter())
+                                    .map(|((pred, _), value)| (*pred, *value))
+                                    .collect::<Vec<_>>();
                                 let phi = self.emit(SsaInstr::Phi {
                                     incomings,
                                     ty: IrType::Any,
