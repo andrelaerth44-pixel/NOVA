@@ -27,6 +27,7 @@ mod targets;
 mod media;
 mod stdlib_ext;
 mod self_host;
+mod android_apk;
 
 pub use token::Token;
 pub use ast::{Expr, Stmt, Value, Pattern, MapKey, EnvFrame, EnvRef, to_map_key};
@@ -50,7 +51,7 @@ fn load_program(path: &str) -> Result<Vec<Stmt>, String> {
 fn main(){
     let a:Vec<String>=env::args().collect();
     if a.len()<2 {
-        eprintln!("NOVA 2.0.0-dev\nusage: nova run <file> | nova check <file> | nova ir <file> | nova ssa <file> | nova abi <file> | nova build-c <file> [output.c] | nova build-native <file> [output] | nova app-check <file> | nova build-android <file> [output-dir] | nova build-android-project <file> [output-dir] | nova package-check <manifest-or-dir> | nova package-lock <manifest-or-dir> | nova package-init [dir] [name] | nova package-install [manifest-or-dir] | nova ai-train-xor [epochs] | nova concurrency-demo | nova gpu-kernels | nova media-demo <dir> | nova selfhost-check | nova build-x86 <file> [output.s] | nova build-arm64 <file> [output.s] | nova build-wasm <file> [output.wat] | nova version");
+        eprintln!("NOVA 2.0.0-dev\nusage: nova run <file> | nova check <file> | nova ir <file> | nova ssa <file> | nova abi <file> | nova build-c <file> [output.c] | nova build-native <file> [output] | nova app-check <file> | nova build-android <file> [output-dir] | nova build-android-project <file> [output-dir] | nova build-apk <file> [output.apk] | nova package-check <manifest-or-dir> | nova package-lock <manifest-or-dir> | nova package-init [dir] [name] | nova package-install [manifest-or-dir] | nova ai-train-xor [epochs] | nova concurrency-demo | nova gpu-kernels | nova media-demo <dir> | nova selfhost-check | nova build-x86 <file> [output.s] | nova build-arm64 <file> [output.s] | nova build-wasm <file> [output.wat] | nova version");
         return
     }
     if a[1]=="version"{println!("NOVA 2.0.0-dev");return}
@@ -119,6 +120,17 @@ fn main(){
             if let Err(e)=fs::write(&target,text){eprintln!("cannot write {}: {}",target.display(),e);std::process::exit(1)}
         }
         println!("{}",dir.display());
+        return
+    }
+
+    if a[1]=="build-apk" {
+        let src=match fs::read_to_string(&a[2]){Ok(x)=>x,Err(e)=>{eprintln!("{}",e);std::process::exit(1)}};
+        let app=match app_parser::AppParser::new(&src).parse(){Ok(x)=>x,Err(e)=>{eprintln!("app parse error: {}",e);std::process::exit(1)}};
+        let out=std::path::Path::new(a.get(3).map(String::as_str).unwrap_or("nova-app.apk"));
+        match android_apk::build_apk(&app,out){
+            Ok(path)=>println!("{}",path.display()),
+            Err(e)=>{eprintln!("Android APK error: {}",e);std::process::exit(1)}
+        }
         return
     }
 
