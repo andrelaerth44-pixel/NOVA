@@ -1,0 +1,11 @@
+import "Lexer.nova"
+import "Parser.nova"
+import "IR.nova"
+
+fn main() {
+    source = "print 42"
+    tokens = Lexer.lex(source)
+    tree = Parser.parse(tokens)
+    module = IR.lower(tree)
+    print module
+}
