@@ -87,7 +87,7 @@ impl Parser {
         match self.peek() {
             Token::Let=>{self.take();let n=match self.take(){Token::Ident(x)=>x,_=>return Err("expected identifier".into())};let ty=if self.eat(&Token::Colon){Some(self.type_name()?)}else{None};if !self.eat(&Token::Eq){return Err("expected =".into())}Ok(Stmt::Let(n,ty,self.expr()?))},
             Token::Print=>{self.take();Ok(Stmt::Print(self.expr()?))},
-            Token::Return=>{self.take();Ok(Stmt::Return(self.expr()?))},
+            Token::Return=>{self.take();if matches!(self.peek(),Token::RBrace|Token::Semi|Token::Eof){Ok(Stmt::Return(Expr::Val(Value::Null)))}else{Ok(Stmt::Return(self.expr()?))}},
             Token::If=>{self.take();let c=self.expr()?;let a=self.block()?;let b=if self.eat(&Token::Else){if *self.peek()==Token::If{vec![self.stmt()?]}else{self.block()?}}else{vec![]};Ok(Stmt::If(c,a,b))},
             Token::While=>{self.take();let c=self.expr()?;Ok(Stmt::While(c,self.block()?))},
             Token::For=>{self.take();let n=match self.take(){Token::Ident(x)=>x,_=>return Err("expected loop variable".into())};if !self.eat(&Token::In){return Err("expected in".into())}let it=self.expr()?;Ok(Stmt::For(n,it,self.block()?))},
