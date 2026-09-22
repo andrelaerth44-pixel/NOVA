@@ -38,6 +38,7 @@ jobs:
           cargo run --release -- selfhost-check | tee /tmp/nova-selfhost.out
           grep -Fq 'Stage 1=NOVA compiler sources validated' /tmp/nova-selfhost.out
           rm -f target/nova-stage1-hello.s /tmp/nova-stage1-hello
+          cargo run --release -- run selfhost/stage1/Debug.nova | tee /tmp/nova-stage1-debug.out
           cargo run --release -- run selfhost/stage1/Main.nova | tee /tmp/nova-stage1.out
           grep -Fxq 'NOVA Stage 1 compiler emitted target/nova-stage1-hello.s' /tmp/nova-stage1.out
           test -s target/nova-stage1-hello.s
