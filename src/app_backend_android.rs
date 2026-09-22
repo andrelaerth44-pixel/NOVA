@@ -74,7 +74,7 @@ pub fn emit_android_project_files(app: &AppDeclRoot) -> Result<Vec<(String,Strin
     // entry point. Application logic remains entirely in NOVA and is expected
     // to be compiled to the native Android ABI by the NOVA compiler.
     let manifest = format!(r#"<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="{}">
+    <application android:hasCode="false" android:extractNativeLibs="true" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="{}">
         <activity android:name="android.app.NativeActivity" android:exported="true">
             <meta-data android:name="android.app.lib_name" android:value="nova_main"/>
             <intent-filter>
