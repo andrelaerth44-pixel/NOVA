@@ -1,0 +1,12 @@
+import "AST.nova"
+import "Lexer.nova"
+import "Parser.nova"
+import "IR.nova"
+import "SSA.nova"
+
+source = read_file("selfhost/fixtures/hello.nova")
+lexed = lex_source(source)
+parsed = parser_source(source)
+ir = ir_lower(map_get(parsed, "ast"))
+ssa = ssa_run(ir)
+print json_stringify(map { "lexed": lexed, "parsed": parsed, "ir": ir, "ssa": ssa })
