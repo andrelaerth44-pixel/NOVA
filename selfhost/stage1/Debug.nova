@@ -23,3 +23,7 @@ t0 = parser_advance(p_simple)
 t1 = parser_advance(p_simple)
 t2 = parser_advance(p_simple)
 print json_stringify([t0, t1, t2])
+
+p_primary = parser_state(map_get(lex_simple, "tokens"))
+primary0 = parser_primary(p_primary)
+print json_stringify(primary0)
