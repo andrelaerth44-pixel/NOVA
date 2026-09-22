@@ -31,7 +31,7 @@ fn ast_let_stmt(name, value) {
 }
 
 fn ast_assign(name, value) {
-    return map { "kind": "ast_assign", "name": name, "value": value }
+    return map { "kind": "assign", "name": name, "value": value }
 }
 
 fn ast_print_stmt(value) {
