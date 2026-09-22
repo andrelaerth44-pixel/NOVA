@@ -2,60 +2,59 @@
 
 Simple. Native. Fast. Universal. Beautiful.
 
-NOVA is a general-purpose programming language designed to make applications, services, tools, games, graphics, automation, data systems, networking, native integrations and AI systems easier to build without removing access to the machine.
+NOVA is a general-purpose programming language for applications, services, tools, games, graphics, automation, data systems, networking, native integrations and AI.
 
-Current development line: **1.7.0**
+Current development line: **2.0.0-dev**
 
-The implementation is deliberately honest: a capability is documented as implemented only after executable code and validation exist.
+The repository keeps implementation claims honest: a capability is considered supported only after executable code and validation exist.
 
-## Current executable core
+## Implemented core
 
-- variables and assignment
-- numbers, strings, booleans and arrays
-- arithmetic, comparisons and boolean operators
-- functions and return
-- if / else
-- while
-- for / in
-- range
-- len
-- str
-- imports and module graph validation
-- structs and enums
-- generic functions and type inference
-- Option / Result and `?` propagation in the VM
-- maps, sets and indexed collection access
-- lexical closures
-- first-class iterators (`iter`, `next`, `has_next`, `collect`)
-- filesystem, environment, path, time and JSON runtime builtins
-- deterministic compiler pipeline API (`compile_source` / `compile_program`)
-- CLI run/check/ir/ssa/version
+- variables, assignment, numbers, strings, booleans and arrays
+- arithmetic, comparisons, boolean operators and control flow
+- functions, return, imports and module graph validation
+- structs, enums, pattern matching and generic functions
+- type inference, Option / Result and \`?\` propagation
+- maps, sets, indexed access, lexical closures and first-class iterators
+- deterministic compiler pipeline, legacy stack IR and SSA inspection/verification
+- constant folding and branch simplification in the optimization pass
+- filesystem, environment, paths, time and JSON runtime services
+- process handles, channels and parallel numeric helpers
+- HTTP (plain HTTP), process execution and SHA-256 runtime helpers
+- dependency-free tensor/matrix operations and a small trainable MLP
+- CUDA, Vulkan and Metal kernel-source generation
+- SVG, WAV, HTML and ffmpeg media helpers
+- package initialization, local/path/git/registry resolution and lockfile generation
+- Android project generation with Gradle/Kotlin/Compose source
 
-The current 1.x line is still being hardened. Static typing, diagnostics, IR, native code generation, standard-library breadth, concurrency, package management, UI, graphics, GPU and platform backends remain separate implementation stages.
+## Development targets
 
-NOVA does not claim to be universally native or faster than every other language until those backends are actually implemented and tested.
+The following are present as explicit implementation layers but are not yet equivalent to mature production backends:
 
-```nova
-fn add(a, b) {
-    return a + b
-}
+- C backend: executable numeric subset already used by CI
+- x86-64 and ARM64: target emitters for a small verified subset
+- WebAssembly: WAT emitter for a small verified subset
+- Android: generated project; a full end-to-end APK build still requires the Android toolchain
+- GPU: kernel/shader emitters; device execution is target-runtime dependent
+- self-hosting: bootstrap boundary is defined, while the trusted compiler remains Rust
 
-values = [1, 2, 3, 4]
-total = 0
+## CLI examples
 
-for x in values {
-    total = total + x
-}
+\`\`\`text
+nova run examples/hello.nova
+nova check examples/hello.nova
+nova ir examples/hello.nova
+nova ssa examples/ssa.nova
 
-print "sum=" + str(total)
-print add(20, 22)
+nova ai-train-xor 500
+nova concurrency-demo
+nova gpu-kernels
+nova media-demo ./nova-media
+nova selfhost-check
 
-match total {
-    10 {
-        print "ten"
-    }
-    else {
-        print "other"
-    }
-}
-```
+nova package-init ./my-app my-app
+nova package-install ./my-app
+nova build-android-project examples/obra360.nova ./android-project
+\`\`\`
+
+NOVA 2.0 is therefore a real expansion of the language/runtime architecture, not a claim that every long-term backend is already production complete.
