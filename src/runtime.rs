@@ -934,3 +934,34 @@ fn mod2(a: Value, b: Value) -> Result<Value, RuntimeError> {
     if y == 0.0 { return Err("modulo by zero".into()); }
     Ok(Value::Num(x % y))
 }
+
+#[cfg(test)]
+mod lexical_scope_tests {
+    use super::*;
+
+    #[test]
+    fn named_function_locals_do_not_mutate_caller_locals() {
+        let source = r#"
+            fn inner() {
+                left = 2
+                return left
+            }
+
+            fn outer() {
+                left = 10
+                value = inner()
+                return left + value
+            }
+
+            result = outer()
+            if result != 12 {
+                return 1
+            }
+            return 0
+        "#;
+
+        let program = crate::compiler::parse_source(source).expect("source should parse");
+        let mut vm = Vm::new();
+        vm.exec(&program).expect("runtime should succeed");
+    }
+}
