@@ -25,7 +25,7 @@ The repository keeps implementation claims honest: a capability is considered su
 - CUDA, Vulkan and Metal kernel-source generation
 - SVG, WAV, HTML and ffmpeg media helpers
 - package initialization, local/path/git/registry resolution and lockfile generation
-- Android project generation with Gradle/Kotlin/Compose source
+- Android-native project generation with `Main.nova` source and Android platform NativeActivity metadata; no Kotlin/Java source is generated
 
 ## Development targets
 
@@ -34,9 +34,9 @@ The following are present as explicit implementation layers but are not yet equi
 - C backend: executable numeric subset already used by CI
 - x86-64 and ARM64: target emitters for a small verified subset
 - WebAssembly: WAT emitter for a small verified subset
-- Android: generated project; a full end-to-end APK build still requires the Android toolchain
+- Android: native NOVA source/package target is defined; final APK linking still requires the NOVA ARM64 Android runtime/linker implementation
 - GPU: kernel/shader emitters; device execution is target-runtime dependent
-- self-hosting: bootstrap boundary is defined, while the trusted compiler remains Rust
+- self-hosting: bootstrap boundary is defined, but the trusted compiler remains Rust until the NOVA compiler is completely bootstrapped
 
 ## CLI examples
 
@@ -57,4 +57,4 @@ nova package-install ./my-app
 nova build-android-project examples/obra360.nova ./android-project
 \`\`\`
 
-NOVA 2.0 is therefore a real expansion of the language/runtime architecture, not a claim that every long-term backend is already production complete.
+NOVA 2.0 is an active native-language implementation line. The project deliberately distinguishes implemented subsets from production-complete compiler targets; no foreign language is part of NOVA application source.
