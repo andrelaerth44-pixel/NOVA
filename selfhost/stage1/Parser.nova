@@ -81,7 +81,7 @@ fn parser_primary(p) {
     if parser_accept(p, "bang") {
         return ast_unary("!", parser_primary(p))
     }
-    return string("ERROR:unexpected " + k)
+    return ast_string("ERROR:unexpected " + k)
 }
 
 fn parser_not_accept(p, wanted) {
@@ -117,7 +117,7 @@ fn parser_compare(p) {
     while parser_kind(p) == "lt" or parser_kind(p) == "le" or parser_kind(p) == "gt" or parser_kind(p) == "ge" or parser_kind(p) == "eqeq" or parser_kind(p) == "ne" {
         op = map_get(parser_advance(p), "text")
         right = parser_term(p)
-        left = binary(op, left, right)
+        left = ast_binary(op, left, right)
     }
     return left
 }
