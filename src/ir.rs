@@ -529,7 +529,7 @@ impl SsaFunction {
             let (def_block, def_index) = defs.get(&value).copied()
                 .ok_or_else(|| format!("SSA value {} is undefined", value))?;
             if !dom[use_block].contains(&def_block) {
-                return Err(format!("SSA value {} defined in block {} does not dominate use in block {}", value, def_block, use_block));
+                return Err(format!("SSA value {} defined in block {} does not dominate use in block {} at instruction {}", value, def_block, use_block, use_index));
             }
             if def_block == use_block && def_index != usize::MAX && def_index >= use_index {
                 return Err(format!("SSA value {} is used before its definition in block {}", value, use_block));
