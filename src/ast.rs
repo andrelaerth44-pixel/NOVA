@@ -84,7 +84,7 @@ impl Value {
     pub fn truth(&self)->bool {
         match self {
             Value::Bool(x)=>*x, Value::Num(x)=>*x!=0.0, Value::Str(x)=>!x.is_empty(),
-            Value::Array(x)=>!x.is_empty(), Value::Map(x)=>!x.borrow().is_empty(), Value::Set(x)=>!x.borrow().is_empty(), Value::Struct{..}=>true, Value::Enum{..}=>true, Value::Closure{..}=>true, Value::Iterator(x)=>x.borrow().index < x.borrow().values.len(), Value::Null=>false
+            Value::Array(x)=>!x.is_empty(), Value::Map(x)=>!x.borrow().is_empty(), Value::Set(x)=>!x.borrow().is_empty(), Value::Struct{..}=>true, Value::Enum{..}=>true, Value::Closure{..}=>true, Value::Iterator(x)=>x.borrow().index < x.borrow().values.len(), Value::Channel(_)=>true, Value::Process(_)=>true, Value::Null=>false
         }
     }
 }
