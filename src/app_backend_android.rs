@@ -15,43 +15,44 @@ pub fn validate_android_target(app: &AppDeclRoot) -> Result<(), String> {
 
 pub fn emit_android_project(app: &AppDeclRoot) -> Result<String, String> {
     validate_android_target(app)?;
-    let package = format!("com.nova.generated.{}", sanitize(&app.name));
-    let routes = app.declarations.iter().find_map(|d| {
-        if let AppDecl::Navigation(r) = d { Some(r.clone()) } else { None }
-    }).unwrap_or_default();
-    let mut route_code = String::new();
-    for route in &routes {
-        route_code.push_str(&format!("    composable(\"{}\") {{ Text(\"{}\") }}\n", route.name, route.name));
+    // Android is a native NOVA target. The generated Main.nova is the application
+    // source itself; no Kotlin/Java/C++ bridge is generated.
+    let mut source = format!("app \"{}\" {{\n", app.name);
+    for decl in &app.declarations {
+        match decl {
+            AppDecl::Auth(x) => {
+                source.push_str("    auth {\n");
+                for p in &x.providers { source.push_str(&format!("        provider {}\n", p)); }
+                source.push_str("    }\n");
+            }
+            AppDecl::Database(x) => {
+                source.push_str(&format!("    database {} {{\n", x.provider));
+                for t in &x.tables { source.push_str(&format!("        table {}\n", t)); }
+                source.push_str("    }\n");
+            }
+            AppDecl::Storage(x) => {
+                source.push_str("    storage {\n");
+                for b in &x.buckets { source.push_str(&format!("        bucket {}\n", b)); }
+                source.push_str("    }\n");
+            }
+            AppDecl::Navigation(routes) => {
+                source.push_str("    navigation {\n");
+                for r in routes { source.push_str(&format!("        {}\n", r.name)); }
+                source.push_str("    }\n");
+            }
+            AppDecl::Screen(x) => {
+                source.push_str(&format!("    screen \"{}\" {{\n", x.name));
+                for item in &x.items {
+                    match item {
+                        ScreenItem::List { resource } => source.push_str(&format!("        list {}\n", resource)),
+                        ScreenItem::Button { label, action } => source.push_str(&format!("        button \"{}\" {{ {} }}\n", label, action)),
+                    }
+                }
+                source.push_str("    }\n");
+            }
+        }
     }
-    let source = format!(r#"package {package}
-
-import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
-
-class MainActivity : ComponentActivity() {{
-    override fun onCreate(savedInstanceState: Bundle?) {{
-        super.onCreate(savedInstanceState)
-        setContent {{ NovaApp() }}
-    }}
-}}
-
-@Composable
-fun NovaApp() {{
-    val nav = rememberNavController()
-    MaterialTheme {{
-        NavHost(navController = nav, startDestination = "{start}") {{
-{routes}
-        }}
-    }}
-}}
-"#, package=package, start=routes.first().map(|r| r.name.clone()).unwrap_or_else(|| "home".into()), routes=route_code);
+    source.push_str("}\n");
     Ok(source)
 }
 
@@ -64,13 +65,18 @@ fn sanitize(name: &str) -> String {
 }
 
 
-pub fn emit_android_project_files(app:&AppDeclRoot)->Result<Vec<(String,String)>,String>{
+pub fn emit_android_project_files(app: &AppDeclRoot) -> Result<Vec<(String,String)>,String>{
     validate_android_target(app)?;
-    let package=format!("com.nova.generated.{}",sanitize(&app.name));
-    let activity=emit_android_project(app)?;
-    let manifest=format!(r#"<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:theme="@style/Theme.Material3.DayNight.NoActionBar" android:label="{}">
-        <activity android:name=".MainActivity" android:exported="true">
+    let package = format!("com.nova.generated.{}", sanitize(&app.name));
+    let source = emit_android_project(app)?;
+
+    // The manifest names Android's platform NativeActivity only as the host
+    // entry point. Application logic remains entirely in NOVA and is expected
+    // to be compiled to the native Android ABI by the NOVA compiler.
+    let manifest = format!(r#"<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="{}">
+        <activity android:name="android.app.NativeActivity" android:exported="true">
+            <meta-data android:name="android.app.lib_name" android:value="nova_main"/>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -78,50 +84,30 @@ pub fn emit_android_project_files(app:&AppDeclRoot)->Result<Vec<(String,String)>
         </activity>
     </application>
 </manifest>
-"#,app.name);
-    let settings=r#"pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
-dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
-rootProject.name = "NOVA-Android"
-include(":app")
+"#, app.name);
+    let settings = r#"rootProject.name = "NOVA-Android"
 "#.to_string();
-    let root=r#"plugins {
-    id("com.android.application") version "8.7.2" apply false
-    id("org.jetbrains.kotlin.android") version "2.0.21" apply false
-}
+    let build = r#"// NOVA native Android package metadata.
+// No Kotlin or Java source is generated by NOVA.
 "#.to_string();
-    let gradle_properties="org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8\nandroid.useAndroidX=true\nkotlin.code.style=official\n".to_string();
-    let app_gradle=format!(r#"plugins {{
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-}}
-android {{
-    namespace = "{package}"
-    compileSdk = 35
-    defaultConfig {{
-        applicationId = "{package}"
-        minSdk = 26
-        targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
-    }}
-}}
-dependencies {{
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.activity:activity-compose:1.10.0")
-    implementation("androidx.compose.ui:ui:1.7.6")
-    implementation("androidx.compose.material3:material3:1.3.1")
-    implementation("androidx.navigation:navigation-compose:2.8.5")
-}}
-"#);
-    let strings=r#"<resources><string name="app_name">NOVA</string></resources>"#.to_string();
-    let values_dir=format!("app/src/main/res/values/strings.xml");
+    let nova_toml = format!(r#"[package]
+name = "{}"
+version = "0.1.0"
+language = "nova"
+
+[target.android]
+abi = ["arm64-v8a", "armeabi-v7a"]
+entry = "Main.nova"
+package = "{}"
+"#, sanitize(&app.name), package);
+
     Ok(vec![
-        ("settings.gradle.kts".into(),settings),
-        ("build.gradle.kts".into(),root),
-        ("gradle.properties".into(),gradle_properties),
-        ("app/build.gradle.kts".into(),app_gradle),
-        ("app/src/main/AndroidManifest.xml".into(),manifest),
-        (format!("app/src/main/java/{}/MainActivity.kt",package.replace(".", "/")),activity),
-        (values_dir,strings),
+        ("settings.gradle.kts".into(), settings),
+        ("Main.nova".into(), source),
+        ("nova.toml".into(), nova_toml),
+        ("app/src/main/AndroidManifest.xml".into(), manifest),
+        ("README.nova-target".into(), "This Android application contains NOVA source only. Build with the NOVA native Android compiler.".into()),
     ])
 }
+
+
