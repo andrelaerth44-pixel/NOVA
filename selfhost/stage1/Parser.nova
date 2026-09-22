@@ -15,11 +15,11 @@ fn parser_advance(p) {
 }
 
 fn parser_kind(p) {
-    return map_get(parser_peek(p), "parser_kind")
+    return map_get(parser_peek(p), "kind")
 }
 
 fn parser_text(p) {
-    return map_get(parser_peek(p), "parser_text")
+    return map_get(parser_peek(p), "text")
 }
 
 fn parser_accept(p, wanted) {
@@ -40,10 +40,10 @@ fn parser_expect(p, wanted) {
 fn parser_primary(p) {
     k = parser_kind(p)
     if k == "number" {
-        return number(map_get(parser_advance(p), "parser_text"))
+        return ast_number(map_get(parser_advance(p), "parser_text"))
     }
     if k == "string" {
-        return string(map_get(parser_advance(p), "parser_text"))
+        return ast_string(map_get(parser_advance(p), "parser_text"))
     }
     if k == "true" or k == "false" {
         value = map_get(parser_advance(p), "parser_text")
@@ -65,9 +65,9 @@ fn parser_primary(p) {
                     }
                 }
             }
-            return call(name, args)
+            return ast_call(name, args)
         }
-        return variable(name)
+        return ast_variable(name)
     }
     if parser_accept(p, "lparen") {
         value = parser_expr(p)
@@ -75,7 +75,7 @@ fn parser_primary(p) {
         return value
     }
     if parser_accept(p, "minus") {
-        return unary("-", parser_primary(p))
+        return ast_unary("-", parser_primary(p))
     }
     if parser_accept(p, "bang") {
         return unary("!", parser_primary(p))
@@ -96,7 +96,7 @@ fn parser_factor(p) {
     while parser_kind(p) == "star" or parser_kind(p) == "slash" or parser_kind(p) == "percent" {
         op = map_get(parser_advance(p), "parser_text")
         right = parser_primary(p)
-        left = binary(op, left, right)
+        left = ast_binary(op, left, right)
     }
     return left
 }
@@ -155,7 +155,7 @@ fn parser_fn(p) {
         parser_advance(p)
     }
     body = parser_block(p)
-    return fn_decl(name, params, body)
+    return ast_fn_decl(name, params, body)
 }
 
 fn parser_stmt(p) {
@@ -166,29 +166,29 @@ fn parser_stmt(p) {
         name = parser_text(p)
         parser_expect(p, "ident")
         parser_expect(p, "eq")
-        return let_stmt(name, parser_expr(p))
+        return ast_let_stmt(name, parser_expr(p))
     }
     if k == "print" {
         parser_advance(p)
-        return print_stmt(parser_expr(p))
+        return ast_print_stmt(parser_expr(p))
     }
     if k == "return" {
         parser_advance(p)
-        return return_stmt(parser_expr(p))
+        return ast_return_stmt(parser_expr(p))
     }
     if k == "ident" {
         name = parser_text(p)
         parser_advance(p)
         if parser_accept(p, "eq") {
-            return assign(name, parser_expr(p))
+            return ast_assign(name, parser_expr(p))
         }
         map_set(p, "pos", map_get(p, "pos") - 1)
     }
-    return expr_stmt(parser_expr(p))
+    return ast_expr_stmt(parser_expr(p))
 }
 
 fn parser_source(source) {
-    tokens_result = lex(source)
+    tokens_result = lex_source(source)
     if map_get(tokens_result, "ok") == false {
         return map { "ok": false, "errors": map_get(tokens_result, "errors"), "ast": [] }
     }
@@ -198,5 +198,5 @@ fn parser_source(source) {
         statements = array_push(statements, parser_stmt(p))
         parser_accept(p, "semi")
     }
-    return map { "ok": true, "errors": [], "ast": program(statements) }
+    return map { "ok": true, "errors": [], "ast": ast_program(statements) }
 }
