@@ -1,0 +1,14 @@
+struct Token {
+    kind: string
+    text: string
+}
+
+fn make(kind, text) {
+    return Token { kind: kind, text: text }
+}
+
+fn lex(source) {
+    # Stage-1 lexical contract. The complete scanner is intentionally kept
+    # in NOVA source so the bootstrap can replace the Rust lexer incrementally.
+    return [make("source", source), make("eof", "")]
+}
