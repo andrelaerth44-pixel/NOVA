@@ -37,3 +37,94 @@ pub fn install(path:&Path)->Result<PathBuf,String>{
     }
     write_lock(&manifest.path)
 }
+
+
+pub fn init_app(dir:&Path,name:&str)->Result<PathBuf,String>{
+    fs::create_dir_all(dir).map_err(|e|e.to_string())?;
+    let manifest=dir.join("nova.toml");
+    if manifest.exists(){return Err(format!("{} already exists",manifest.display()));}
+    let pkg=sanitize_name(name);
+    let files:[(&str,&str);9]=[
+        ("Main.nova", r#"import "Activity.nova"
+
+fn main() {
+    Activity.start("MainLayout")
+}
+"#),
+        ("Activity.nova", r#"import "MainLayout.nova"
+
+fn start(layout) {
+    print "NOVA Activity.start -> " + layout
+    MainLayout.render()
+}
+"#),
+        ("MainLayout.nova", r#"import "EditText.nova"
+import "NotesAdapter.nova"
+
+fn render() {
+    title = "NOVA Notes"
+    editor = EditText.create("Write a note...")
+    adapter = NotesAdapter.create()
+    print title
+    print editor
+    print adapter
+}
+"#),
+        ("EditText.nova", r#"fn create(hint) {
+    return "EditText(hint=" + hint + ")"
+}
+"#),
+        ("NotesAdapter.nova", r#"import "Repository.nova"
+
+fn create() {
+    notes = Repository.all()
+    return "NotesAdapter(count=" + len(notes) + ")"
+}
+"#),
+        ("Repository.nova", r#"import "DAO.nova"
+
+fn all() {
+    return DAO.find_all()
+}
+
+fn save(note) {
+    return DAO.insert(note)
+}
+"#),
+        ("DAO.nova", r#"import "Note.nova"
+
+fn find_all() {
+    return [Note.create("Welcome to NOVA")]
+}
+
+fn insert(note) {
+    print "DAO.insert"
+    return note
+}
+"#),
+        ("Note.nova", r#"struct Note {
+    title: string
+}
+
+fn create(title) {
+    return Note { title: title }
+}
+"#),
+        ("README.nova", r#"# NOVA application source
+# Every application source module is .nova.
+# Entry point: Main.nova
+"#),
+    ];
+    for (path,text) in files {
+        fs::write(dir.join(path),text).map_err(|e|format!("cannot write {}: {}",path,e))?;
+    }
+    let manifest_text=format!("[package]\nname = \\\"{}\\\"\nversion = \\\"0.1.0\\\"\nlanguage = \\\"nova\\\"\nentry = \\\"Main.nova\\\"\n\n[dependencies]\n",pkg);
+    fs::write(&manifest,manifest_text).map_err(|e|e.to_string())?;
+    Ok(manifest)
+}
+
+fn sanitize_name(name:&str)->String{
+    let mut out=String::new();
+    for ch in name.chars(){ if ch.is_ascii_alphanumeric()||ch=='-'||ch=='_' {out.push(ch.to_ascii_lowercase())}else{out.push('-')} }
+    if out.is_empty(){"nova-app".into()}else{out}
+}
