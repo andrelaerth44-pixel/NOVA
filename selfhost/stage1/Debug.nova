@@ -27,3 +27,8 @@ print json_stringify([t0, t1, t2])
 p_primary = parser_state(map_get(lex_simple, "tokens"))
 primary0 = parser_primary(p_primary)
 print json_stringify(primary0)
+
+print json_stringify(ast_binary("+", ast_variable("a"), ast_variable("b")))
+p_term = parser_state(map_get(lex_simple, "tokens"))
+term0 = parser_term(p_term)
+print json_stringify(term0)
