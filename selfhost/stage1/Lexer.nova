@@ -52,14 +52,14 @@ fn lex(source) {
                 text = text + source[i]
                 i = i + 1
             }
-            tokens = tokens + [token("number", text)]
+            tokens = array_push(tokens, token("number", text))
         } else if is_alpha(c) {
             text = ""
             while i < n and is_alnum(source[i]) {
                 text = text + source[i]
                 i = i + 1
             }
-            tokens = tokens + [token(keyword(text), text)]
+            tokens = array_push(tokens, token(keyword(text), text))
         } else if c == """ {
             i = i + 1
             text = ""
@@ -85,72 +85,72 @@ fn lex(source) {
                 }
             }
             if closed {
-                tokens = tokens + [token("string", text)]
+                tokens = array_push(tokens, token("string", text))
             } else {
                 return map { "ok": false, "errors": ["unterminated string literal"], "tokens": tokens }
             }
         } else if c == "+" {
-            tokens = tokens + [token("plus", "+")]
+            tokens = array_push(tokens, token("plus", "+"))
             i = i + 1
         } else if c == "-" {
-            tokens = tokens + [token("minus", "-")]
+            tokens = array_push(tokens, token("minus", "-"))
             i = i + 1
         } else if c == "*" {
-            tokens = tokens + [token("star", "*")]
+            tokens = array_push(tokens, token("star", "*"))
             i = i + 1
         } else if c == "/" {
-            tokens = tokens + [token("slash", "/")]
+            tokens = array_push(tokens, token("slash", "/"))
             i = i + 1
         } else if c == "%" {
-            tokens = tokens + [token("percent", "%")]
+            tokens = array_push(tokens, token("percent", "%"))
             i = i + 1
         } else if c == "=" and i + 1 < n and source[i + 1] == "=" {
-            tokens = tokens + [token("eqeq", "==")]
+            tokens = array_push(tokens, token("eqeq", "=="))
             i = i + 2
         } else if c == "!" and i + 1 < n and source[i + 1] == "=" {
-            tokens = tokens + [token("ne", "!=")]
+            tokens = array_push(tokens, token("ne", "!="))
             i = i + 2
         } else if c == "<" and i + 1 < n and source[i + 1] == "=" {
-            tokens = tokens + [token("le", "<=")]
+            tokens = array_push(tokens, token("le", "<="))
             i = i + 2
         } else if c == ">" and i + 1 < n and source[i + 1] == "=" {
-            tokens = tokens + [token("ge", ">=")]
+            tokens = array_push(tokens, token("ge", ">="))
             i = i + 2
         } else if c == "=" {
-            tokens = tokens + [token("eq", "=")]
+            tokens = array_push(tokens, token("eq", "="))
             i = i + 1
         } else if c == "<" {
-            tokens = tokens + [token("lt", "<")]
+            tokens = array_push(tokens, token("lt", "<"))
             i = i + 1
         } else if c == ">" {
-            tokens = tokens + [token("gt", ">")]
+            tokens = array_push(tokens, token("gt", ">"))
             i = i + 1
         } else if c == "!" {
-            tokens = tokens + [token("bang", "!")]
+            tokens = array_push(tokens, token("bang", "!"))
             i = i + 1
         } else if c == "(" {
-            tokens = tokens + [token("lparen", "(")]
+            tokens = array_push(tokens, token("lparen", "("))
             i = i + 1
         } else if c == ")" {
-            tokens = tokens + [token("rparen", ")")]
+            tokens = array_push(tokens, token("rparen", ")"))
             i = i + 1
         } else if c == "{" {
-            tokens = tokens + [token("lbrace", "{")]
+            tokens = array_push(tokens, token("lbrace", "{"))
             i = i + 1
         } else if c == "}" {
-            tokens = tokens + [token("rbrace", "}")]
+            tokens = array_push(tokens, token("rbrace", "}"))
             i = i + 1
         } else if c == "," {
-            tokens = tokens + [token("comma", ",")]
+            tokens = array_push(tokens, token("comma", ","))
             i = i + 1
         } else if c == ";" {
-            tokens = tokens + [token("semi", ";")]
+            tokens = array_push(tokens, token("semi", ";"))
             i = i + 1
         } else {
             return map { "ok": false, "errors": ["unexpected character " + c], "tokens": tokens }
         }
     }
 
-    tokens = tokens + [token("eof", "")]
+    tokens = array_push(tokens, token("eof", ""))
     return map { "ok": true, "errors": [], "tokens": tokens }
 }
