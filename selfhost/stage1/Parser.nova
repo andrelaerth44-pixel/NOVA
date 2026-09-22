@@ -1,66 +1,66 @@
-fn state(tokens) {
+fn parser_state(tokens) {
     return map { "tokens": tokens, "pos": 0 }
 }
 
-fn peek(p) {
+fn parser_peek(p) {
     pos = map_get(p, "pos")
     tokens = map_get(p, "tokens")
     return tokens[pos]
 }
 
-fn advance(p) {
-    value = peek(p)
+fn parser_advance(p) {
+    value = parser_peek(p)
     map_set(p, "pos", map_get(p, "pos") + 1)
     return value
 }
 
-fn kind(p) {
-    return map_get(peek(p), "kind")
+fn parser_kind(p) {
+    return map_get(parser_peek(p), "parser_kind")
 }
 
-fn text(p) {
-    return map_get(peek(p), "text")
+fn parser_text(p) {
+    return map_get(parser_peek(p), "parser_text")
 }
 
-fn accept(p, wanted) {
-    if kind(p) == wanted {
-        advance(p)
+fn parser_accept(p, wanted) {
+    if parser_kind(p) == wanted {
+        parser_advance(p)
         return true
     }
     return false
 }
 
-fn expect(p, wanted) {
-    if accept(p, wanted) {
+fn parser_expect(p, wanted) {
+    if parser_accept(p, wanted) {
         return ""
     }
-    return "expected " + wanted + ", got " + kind(p)
+    return "expected " + wanted + ", got " + parser_kind(p)
 }
 
-fn parse_primary(p) {
-    k = kind(p)
+fn parser_primary(p) {
+    k = parser_kind(p)
     if k == "number" {
-        return number(map_get(advance(p), "text"))
+        return number(map_get(parser_advance(p), "parser_text"))
     }
     if k == "string" {
-        return string(map_get(advance(p), "text"))
+        return string(map_get(parser_advance(p), "parser_text"))
     }
     if k == "true" or k == "false" {
-        value = map_get(advance(p), "text")
+        value = map_get(parser_advance(p), "parser_text")
         return number(if value == "true" { "1" } else { "0" })
     }
     if k == "ident" {
-        name = map_get(advance(p), "text")
-        if accept(p, "lparen") {
+        name = map_get(parser_advance(p), "parser_text")
+        if parser_accept(p, "lparen") {
             args = []
-            if not_accept(p, "rparen") {
+            if parser_not_accept(p, "rparen") {
                 loop = true
                 while loop {
-                    args = array_push(args, parse_expr(p))
-                    if accept(p, "rparen") {
+                    args = array_push(args, parser_expr(p))
+                    if parser_accept(p, "rparen") {
                         loop = false
                     } else {
-                        err = expect(p, "comma")
+                        err = parser_expect(p, "comma")
                         if err != "" { return string("ERROR:" + err) }
                     }
                 }
@@ -69,134 +69,134 @@ fn parse_primary(p) {
         }
         return variable(name)
     }
-    if accept(p, "lparen") {
-        value = parse_expr(p)
-        expect(p, "rparen")
+    if parser_accept(p, "lparen") {
+        value = parser_expr(p)
+        parser_expect(p, "rparen")
         return value
     }
-    if accept(p, "minus") {
-        return unary("-", parse_primary(p))
+    if parser_accept(p, "minus") {
+        return unary("-", parser_primary(p))
     }
-    if accept(p, "bang") {
-        return unary("!", parse_primary(p))
+    if parser_accept(p, "bang") {
+        return unary("!", parser_primary(p))
     }
     return string("ERROR:unexpected " + k)
 }
 
-fn not_accept(p, wanted) {
-    if kind(p) == wanted {
-        advance(p)
+fn parser_not_accept(p, wanted) {
+    if parser_kind(p) == wanted {
+        parser_advance(p)
         return false
     }
     return true
 }
 
-fn parse_factor(p) {
-    left = parse_primary(p)
-    while kind(p) == "star" or kind(p) == "slash" or kind(p) == "percent" {
-        op = map_get(advance(p), "text")
-        right = parse_primary(p)
+fn parser_factor(p) {
+    left = parser_primary(p)
+    while parser_kind(p) == "star" or parser_kind(p) == "slash" or parser_kind(p) == "percent" {
+        op = map_get(parser_advance(p), "parser_text")
+        right = parser_primary(p)
         left = binary(op, left, right)
     }
     return left
 }
 
-fn parse_term(p) {
-    left = parse_factor(p)
-    while kind(p) == "plus" or kind(p) == "minus" {
-        op = map_get(advance(p), "text")
-        right = parse_factor(p)
+fn parser_term(p) {
+    left = parser_factor(p)
+    while parser_kind(p) == "plus" or parser_kind(p) == "minus" {
+        op = map_get(parser_advance(p), "parser_text")
+        right = parser_factor(p)
         left = binary(op, left, right)
     }
     return left
 }
 
-fn parse_compare(p) {
-    left = parse_term(p)
-    while kind(p) == "lt" or kind(p) == "le" or kind(p) == "gt" or kind(p) == "ge" or kind(p) == "eqeq" or kind(p) == "ne" {
-        op = map_get(advance(p), "text")
-        right = parse_term(p)
+fn parser_compare(p) {
+    left = parser_term(p)
+    while parser_kind(p) == "lt" or parser_kind(p) == "le" or parser_kind(p) == "gt" or parser_kind(p) == "ge" or parser_kind(p) == "eqeq" or parser_kind(p) == "ne" {
+        op = map_get(parser_advance(p), "parser_text")
+        right = parser_term(p)
         left = binary(op, left, right)
     }
     return left
 }
 
-fn parse_expr(p) {
-    return parse_compare(p)
+fn parser_expr(p) {
+    return parser_compare(p)
 }
 
-fn parse_block(p) {
+fn parser_block(p) {
     body = []
-    err = expect(p, "lbrace")
+    err = parser_expect(p, "lbrace")
     if err != "" { return [] }
-    while kind(p) != "rbrace" and kind(p) != "eof" {
-        body = array_push(body, parse_stmt(p))
-        accept(p, "semi")
+    while parser_kind(p) != "rbrace" and parser_kind(p) != "eof" {
+        body = array_push(body, parser_stmt(p))
+        parser_accept(p, "semi")
     }
-    accept(p, "rbrace")
+    parser_accept(p, "rbrace")
     return body
 }
 
-fn parse_fn(p) {
-    advance(p)
-    name = text(p)
-    expect(p, "ident")
-    expect(p, "lparen")
+fn parser_fn(p) {
+    parser_advance(p)
+    name = parser_text(p)
+    parser_expect(p, "ident")
+    parser_expect(p, "lparen")
     params = []
-    if kind(p) != "rparen" {
+    if parser_kind(p) != "rparen" {
         loop = true
         while loop {
-            params = array_push(params, text(p))
-            expect(p, "ident")
-            if accept(p, "rparen") { loop = false }
-            else { expect(p, "comma") }
+            params = array_push(params, parser_text(p))
+            parser_expect(p, "ident")
+            if parser_accept(p, "rparen") { loop = false }
+            else { parser_expect(p, "comma") }
         }
     } else {
-        advance(p)
+        parser_advance(p)
     }
-    body = parse_block(p)
+    body = parser_block(p)
     return fn_decl(name, params, body)
 }
 
-fn parse_stmt(p) {
-    k = kind(p)
-    if k == "fn" { return parse_fn(p) }
+fn parser_stmt(p) {
+    k = parser_kind(p)
+    if k == "fn" { return parser_fn(p) }
     if k == "let" {
-        advance(p)
-        name = text(p)
-        expect(p, "ident")
-        expect(p, "eq")
-        return let_stmt(name, parse_expr(p))
+        parser_advance(p)
+        name = parser_text(p)
+        parser_expect(p, "ident")
+        parser_expect(p, "eq")
+        return let_stmt(name, parser_expr(p))
     }
     if k == "print" {
-        advance(p)
-        return print_stmt(parse_expr(p))
+        parser_advance(p)
+        return print_stmt(parser_expr(p))
     }
     if k == "return" {
-        advance(p)
-        return return_stmt(parse_expr(p))
+        parser_advance(p)
+        return return_stmt(parser_expr(p))
     }
     if k == "ident" {
-        name = text(p)
-        advance(p)
-        if accept(p, "eq") {
-            return assign(name, parse_expr(p))
+        name = parser_text(p)
+        parser_advance(p)
+        if parser_accept(p, "eq") {
+            return assign(name, parser_expr(p))
         }
         map_set(p, "pos", map_get(p, "pos") - 1)
     }
-    return expr_stmt(parse_expr(p))
+    return expr_stmt(parser_expr(p))
 }
 
-fn parse(source) {
+fn parser_source(source) {
     tokens_result = lex(source)
     if map_get(tokens_result, "ok") == false {
         return map { "ok": false, "errors": map_get(tokens_result, "errors"), "ast": [] }
     }
-    p = state(map_get(tokens_result, "tokens"))
+    p = parser_state(map_get(tokens_result, "tokens"))
     statements = []
-    while kind(p) != "eof" {
-        statements = array_push(statements, parse_stmt(p))
-        accept(p, "semi")
+    while parser_kind(p) != "eof" {
+        statements = array_push(statements, parser_stmt(p))
+        parser_accept(p, "semi")
     }
     return map { "ok": true, "errors": [], "ast": program(statements) }
 }
