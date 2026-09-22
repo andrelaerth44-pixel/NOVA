@@ -143,8 +143,8 @@ impl Checker {
                     for (key, value) in entries.iter().skip(1) {
                         let kt = self.infer(key);
                         let vt = self.infer(value);
-                        if !key_ty.compatible(&kt) { self.error("map keys have incompatible types"); }
-                        if !value_ty.compatible(&vt) { self.error("map values have incompatible types"); }
+                        if !key_ty.compatible(&kt) { key_ty = crate::types::Type::Any; }
+                        if !value_ty.compatible(&vt) { value_ty = crate::types::Type::Any; }
                     }
                 }
                 crate::types::Type::Generic("Map".into(), vec![key_ty, value_ty])
