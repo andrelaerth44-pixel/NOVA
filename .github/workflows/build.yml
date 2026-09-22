@@ -248,9 +248,9 @@ jobs:
 
           cargo run --release -- selfhost-check | grep -q 'trusted bootstrap=Rust'
 
-          cargo run --release -- build-x86 examples/hello.nova /tmp/nova-x86.s
-          cargo run --release -- build-arm64 examples/hello.nova /tmp/nova-arm64.s
-          cargo run --release -- build-wasm examples/hello.nova /tmp/nova.wat
+          cargo run --release -- build-x86 examples/targets.nova /tmp/nova-x86.s
+          cargo run --release -- build-arm64 examples/targets.nova /tmp/nova-arm64.s
+          cargo run --release -- build-wasm examples/targets.nova /tmp/nova.wat
           test -s /tmp/nova-x86.s
           test -s /tmp/nova-arm64.s
           test -s /tmp/nova.wat
