@@ -1,8 +1,109 @@
-struct Module {
-    kind: string
-    body: string
+fn instruction(kind) {
+    return map { "kind": kind }
 }
 
-fn lower(tree) {
-    return Module { kind: tree.kind, body: tree.value }
+fn emit(ir, item) {
+    code = map_get(ir, "code")
+    map_set(ir, "code", code + [item])
+}
+
+fn new_id(ir) {
+    id = map_get(ir, "next")
+    map_set(ir, "next", id + 1)
+    return id
+}
+
+fn expr(ir, node) {
+    k = map_get(node, "kind")
+    if k == "number" {
+        id = new_id(ir)
+        item = instruction("const")
+        map_set(item, "id", id)
+        map_set(item, "value", map_get(node, "value"))
+        emit(ir, item)
+        return id
+    }
+    if k == "string" {
+        id = new_id(ir)
+        item = instruction("string")
+        map_set(item, "id", id)
+        map_set(item, "value", map_get(node, "value"))
+        emit(ir, item)
+        return id
+    }
+    if k == "variable" {
+        id = new_id(ir)
+        item = instruction("load")
+        map_set(item, "id", id)
+        map_set(item, "name", map_get(node, "name"))
+        emit(ir, item)
+        return id
+    }
+    if k == "unary" {
+        value = expr(ir, map_get(node, "value"))
+        id = new_id(ir)
+        item = instruction("unary")
+        map_set(item, "id", id)
+        map_set(item, "op", map_get(node, "op"))
+        map_set(item, "value", value)
+        emit(ir, item)
+        return id
+    }
+    if k == "binary" {
+        left = expr(ir, map_get(node, "left"))
+        right = expr(ir, map_get(node, "right"))
+        id = new_id(ir)
+        item = instruction("binary")
+        map_set(item, "id", id)
+        map_set(item, "op", map_get(node, "op"))
+        map_set(item, "left", left)
+        map_set(item, "right", right)
+        emit(ir, item)
+        return id
+    }
+    if k == "call" {
+        return -1
+    }
+    return -1
+}
+
+fn stmt(ir, node) {
+    k = map_get(node, "kind")
+    if k == "let" or k == "assign" {
+        value = expr(ir, map_get(node, "value"))
+        item = instruction("store")
+        map_set(item, "name", map_get(node, "name"))
+        map_set(item, "value", value)
+        emit(ir, item)
+        return
+    }
+    if k == "print" {
+        value = expr(ir, map_get(node, "value"))
+        item = instruction("print")
+        map_set(item, "value", value)
+        emit(ir, item)
+        return
+    }
+    if k == "return" {
+        value = expr(ir, map_get(node, "value"))
+        item = instruction("return")
+        map_set(item, "value", value)
+        emit(ir, item)
+        return
+    }
+    if k == "expr" {
+        expr(ir, map_get(node, "value"))
+    }
+}
+
+fn lower(ast) {
+    ir = map { "code": [], "next": 0 }
+    body = map_get(ast, "body")
+    for node in body {
+        if map_get(node, "kind") == "fn" {
+            continue
+        }
+        stmt(ir, node)
+    }
+    return ir
 }
