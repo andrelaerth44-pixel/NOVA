@@ -261,6 +261,12 @@ jobs:
           test -f /tmp/nova-android/Main.nova
           test -f /tmp/nova-android/app/src/main/AndroidManifest.xml
           ! find /tmp/nova-android -type f \( -name "*.kt" -o -name "*.java" -o -name "*.cpp" -o -name "*.cc" -o -name "*.c" \) | grep -q .
+          ! find /tmp/nova-android -type f \( -name "*.gradle" -o -name "*.gradle.kts" \) | grep -q .
+          rm -rf /tmp/nova-android-alias
+          cargo run --release -- build-android examples/obra360.nova /tmp/nova-android-alias
+          test -f /tmp/nova-android-alias/Main.nova
+          test -f /tmp/nova-android-alias/nova.toml
+          ! find /tmp/nova-android-alias -type f \( -name "*.kt" -o -name "*.java" -o -name "*.cpp" -o -name "*.cc" -o -name "*.c" -o -name "*.gradle" -o -name "*.gradle.kts" \) | grep -q .
 
           cargo run --release -- package-init /tmp/nova-pkg demo
           test -f /tmp/nova-pkg/nova.toml
