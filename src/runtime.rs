@@ -319,6 +319,19 @@ impl Vm {
                     if a.len() != 1 { return Err("str expects 1 argument".into()); }
                     return Ok(Value::Str(self.eval(&a[0])?.to_string()));
                 }
+                if n == "char_is_digit" || n == "char_is_alpha" || n == "char_is_alnum" || n == "char_is_space" {
+                    if a.len() != 1 { return Err(format!("{} expects 1 argument", n).into()); }
+                    let value = match self.eval(&a[0])? { Value::Str(v) => v, _ => return Err(format!("{} expects a string", n).into()) };
+                    let mut chars = value.chars();
+                    let c = chars.next().ok_or_else(|| format!("{} expects a non-empty character", n))?;
+                    let result = match n.as_str() {
+                        "char_is_digit" => c.is_ascii_digit(),
+                        "char_is_alpha" => c.is_ascii_alphabetic() || c == '_',
+                        "char_is_alnum" => c.is_ascii_alphanumeric() || c == '_',
+                        _ => c.is_ascii_whitespace(),
+                    };
+                    return Ok(Value::Bool(result));
+                }
                 if n == "array_push" {
                     if a.len() != 2 { return Err("array_push expects 2 arguments".into()); }
                     let array = self.eval(&a[0])?;
