@@ -26,7 +26,7 @@ kernel void nova_vector_add(device const float*a[[buffer(0)]],device const float
 }
 pub fn validate_sources()->Result<(),String>{
     for (name,src) in [("CUDA",emit_cuda_vector_add()),("Vulkan",emit_vulkan_vector_add()),("Metal",emit_metal_vector_add())]{
-        if !src.contains("nova_vector_add"){return Err(format!("{} kernel missing",name));}
+        let valid=match name{"CUDA"|"Metal"=>src.contains("nova_vector_add"),"Vulkan"=>src.contains("gl_GlobalInvocationID")&&src.contains("local_size_x"),_=>false}; if !valid{return Err(format!("{} vector-add kernel missing",name));}
     }
     Ok(())
 }
