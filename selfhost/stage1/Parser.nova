@@ -40,34 +40,34 @@ fn expect(p, wanted) {
 fn parse_primary(p) {
     k = kind(p)
     if k == "number" {
-        return AST.number(advance(p).text)
+        return number(map_get(advance(p), "text"))
     }
     if k == "string" {
-        return AST.string(advance(p).text)
+        return string(map_get(advance(p), "text"))
     }
     if k == "true" or k == "false" {
-        value = advance(p).text
-        return AST.number(if value == "true" { "1" } else { "0" })
+        value = map_get(advance(p), "text")
+        return number(if value == "true" { "1" } else { "0" })
     }
     if k == "ident" {
-        name = advance(p).text
+        name = map_get(advance(p), "text")
         if accept(p, "lparen") {
             args = []
             if not_accept(p, "rparen") {
                 loop = true
                 while loop {
-                    args = args + [parse_expr(p)]
+                    args = array_push(args, parse_expr(p))
                     if accept(p, "rparen") {
                         loop = false
                     } else {
                         err = expect(p, "comma")
-                        if err != "" { return AST.string("ERROR:" + err) }
+                        if err != "" { return string("ERROR:" + err) }
                     }
                 }
             }
-            return AST.call(name, args)
+            return call(name, args)
         }
-        return AST.variable(name)
+        return variable(name)
     }
     if accept(p, "lparen") {
         value = parse_expr(p)
@@ -75,12 +75,12 @@ fn parse_primary(p) {
         return value
     }
     if accept(p, "minus") {
-        return AST.unary("-", parse_primary(p))
+        return unary("-", parse_primary(p))
     }
     if accept(p, "bang") {
-        return AST.unary("!", parse_primary(p))
+        return unary("!", parse_primary(p))
     }
-    return AST.string("ERROR:unexpected " + k)
+    return string("ERROR:unexpected " + k)
 }
 
 fn not_accept(p, wanted) {
@@ -94,9 +94,9 @@ fn not_accept(p, wanted) {
 fn parse_factor(p) {
     left = parse_primary(p)
     while kind(p) == "star" or kind(p) == "slash" or kind(p) == "percent" {
-        op = advance(p).text
+        op = map_get(advance(p), "text")
         right = parse_primary(p)
-        left = AST.binary(op, left, right)
+        left = binary(op, left, right)
     }
     return left
 }
@@ -104,9 +104,9 @@ fn parse_factor(p) {
 fn parse_term(p) {
     left = parse_factor(p)
     while kind(p) == "plus" or kind(p) == "minus" {
-        op = advance(p).text
+        op = map_get(advance(p), "text")
         right = parse_factor(p)
-        left = AST.binary(op, left, right)
+        left = binary(op, left, right)
     }
     return left
 }
@@ -114,9 +114,9 @@ fn parse_term(p) {
 fn parse_compare(p) {
     left = parse_term(p)
     while kind(p) == "lt" or kind(p) == "le" or kind(p) == "gt" or kind(p) == "ge" or kind(p) == "eqeq" or kind(p) == "ne" {
-        op = advance(p).text
+        op = map_get(advance(p), "text")
         right = parse_term(p)
-        left = AST.binary(op, left, right)
+        left = binary(op, left, right)
     }
     return left
 }
@@ -130,7 +130,7 @@ fn parse_block(p) {
     err = expect(p, "lbrace")
     if err != "" { return [] }
     while kind(p) != "rbrace" and kind(p) != "eof" {
-        body = body + [parse_stmt(p)]
+        body = array_push(body, parse_stmt(p))
         accept(p, "semi")
     }
     accept(p, "rbrace")
@@ -146,7 +146,7 @@ fn parse_fn(p) {
     if kind(p) != "rparen" {
         loop = true
         while loop {
-            params = params + [text(p)]
+            params = array_push(params, text(p))
             expect(p, "ident")
             if accept(p, "rparen") { loop = false }
             else { expect(p, "comma") }
@@ -155,7 +155,7 @@ fn parse_fn(p) {
         advance(p)
     }
     body = parse_block(p)
-    return AST.fn_decl(name, params, body)
+    return fn_decl(name, params, body)
 }
 
 fn parse_stmt(p) {
@@ -166,37 +166,37 @@ fn parse_stmt(p) {
         name = text(p)
         expect(p, "ident")
         expect(p, "eq")
-        return AST.let_stmt(name, parse_expr(p))
+        return let_stmt(name, parse_expr(p))
     }
     if k == "print" {
         advance(p)
-        return AST.print_stmt(parse_expr(p))
+        return print_stmt(parse_expr(p))
     }
     if k == "return" {
         advance(p)
-        return AST.return_stmt(parse_expr(p))
+        return return_stmt(parse_expr(p))
     }
     if k == "ident" {
         name = text(p)
         advance(p)
         if accept(p, "eq") {
-            return AST.assign(name, parse_expr(p))
+            return assign(name, parse_expr(p))
         }
         map_set(p, "pos", map_get(p, "pos") - 1)
     }
-    return AST.expr_stmt(parse_expr(p))
+    return expr_stmt(parse_expr(p))
 }
 
 fn parse(source) {
-    tokens_result = Lexer.lex(source)
-    if not map_get(tokens_result, "ok") {
+    tokens_result = lex(source)
+    if map_get(tokens_result, "ok") == false {
         return map { "ok": false, "errors": map_get(tokens_result, "errors"), "ast": [] }
     }
     p = state(map_get(tokens_result, "tokens"))
     statements = []
     while kind(p) != "eof" {
-        statements = statements + [parse_stmt(p)]
+        statements = array_push(statements, parse_stmt(p))
         accept(p, "semi")
     }
-    return map { "ok": true, "errors": [], "ast": AST.program(statements) }
+    return map { "ok": true, "errors": [], "ast": program(statements) }
 }
