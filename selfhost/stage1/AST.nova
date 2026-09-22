@@ -1,0 +1,51 @@
+fn program(statements) {
+    return map { "kind": "program", "body": statements }
+}
+
+fn number(text) {
+    return map { "kind": "number", "value": text }
+}
+
+fn string(text) {
+    return map { "kind": "string", "value": text }
+}
+
+fn variable(name) {
+    return map { "kind": "variable", "name": name }
+}
+
+fn unary(op, value) {
+    return map { "kind": "unary", "op": op, "value": value }
+}
+
+fn binary(op, left, right) {
+    return map { "kind": "binary", "op": op, "left": left, "right": right }
+}
+
+fn call(name, args) {
+    return map { "kind": "call", "name": name, "args": args }
+}
+
+fn let_stmt(name, value) {
+    return map { "kind": "let", "name": name, "value": value }
+}
+
+fn assign(name, value) {
+    return map { "kind": "assign", "name": name, "value": value }
+}
+
+fn print_stmt(value) {
+    return map { "kind": "print", "value": value }
+}
+
+fn return_stmt(value) {
+    return map { "kind": "return", "value": value }
+}
+
+fn fn_decl(name, params, body) {
+    return map { "kind": "fn", "name": name, "params": params, "body": body }
+}
+
+fn expr_stmt(value) {
+    return map { "kind": "expr", "value": value }
+}
