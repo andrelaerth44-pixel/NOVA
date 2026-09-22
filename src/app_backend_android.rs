@@ -73,7 +73,7 @@ pub fn emit_android_project_files(app: &AppDeclRoot) -> Result<Vec<(String,Strin
     // The manifest names Android's platform NativeActivity only as the host
     // entry point. Application logic remains entirely in NOVA and is expected
     // to be compiled to the native Android ABI by the NOVA compiler.
-    let manifest = format!(r#"<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    let manifest = format!(r#"<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="{}">
     <application android:hasCode="false" android:extractNativeLibs="true" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="{}">
         <activity android:name="android.app.NativeActivity" android:exported="true">
             <meta-data android:name="android.app.lib_name" android:value="nova_main"/>
@@ -84,7 +84,7 @@ pub fn emit_android_project_files(app: &AppDeclRoot) -> Result<Vec<(String,Strin
         </activity>
     </application>
 </manifest>
-"#, app.name);
+"#, package, app.name);
     let nova_toml = format!(r#"[package]
 name = "{}"
 version = "0.1.0"
