@@ -62,3 +62,67 @@ fn sanitize(name: &str) -> String {
     }
     if out.is_empty() { "app".into() } else { out }
 }
+
+
+pub fn emit_android_project_files(app:&AppDeclRoot)->Result<Vec<(String,String)>,String>{
+    validate_android_target(app)?;
+    let package=format!("com.nova.generated.{}",sanitize(&app.name));
+    let activity=emit_android_project(app)?;
+    let manifest=format!(r#"<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:theme="@style/Theme.Material3.DayNight.NoActionBar" android:label="{}">
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+"#,app.name);
+    let settings=r#"pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+rootProject.name = "NOVA-Android"
+include(":app")
+"#.to_string();
+    let root=r#"plugins {
+    id("com.android.application") version "8.7.2" apply false
+    id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+}
+"#.to_string();
+    let gradle_properties="org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8\nandroid.useAndroidX=true\nkotlin.code.style=official\n".to_string();
+    let app_gradle=format!(r#"plugins {{
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}}
+android {{
+    namespace = "{package}"
+    compileSdk = 35
+    defaultConfig {{
+        applicationId = "{package}"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0"
+    }}
+}}
+dependencies {{
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.activity:activity-compose:1.10.0")
+    implementation("androidx.compose.ui:ui:1.7.6")
+    implementation("androidx.compose.material3:material3:1.3.1")
+    implementation("androidx.navigation:navigation-compose:2.8.5")
+}}
+"#);
+    let strings=r#"<resources><string name="app_name">NOVA</string></resources>"#.to_string();
+    let values_dir=format!("app/src/main/res/values/strings.xml");
+    Ok(vec![
+        ("settings.gradle.kts".into(),settings),
+        ("build.gradle.kts".into(),root),
+        ("gradle.properties".into(),gradle_properties),
+        ("app/build.gradle.kts".into(),app_gradle),
+        ("app/src/main/AndroidManifest.xml".into(),manifest),
+        ("app/src/main/java/".into(),String::new()),
+        (format!("app/src/main/java/{}/MainActivity.kt",package.replace('.','/')),activity),
+        (values_dir,strings),
+    ])
+}
