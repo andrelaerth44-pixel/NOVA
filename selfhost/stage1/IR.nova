@@ -4,7 +4,7 @@ fn instruction(kind) {
 
 fn emit(ir, item) {
     code = map_get(ir, "code")
-    map_set(ir, "code", code + [item])
+    map_set(ir, "code", array_push(code, item))
 }
 
 fn new_id(ir) {
