@@ -28,6 +28,7 @@ mod media;
 mod stdlib_ext;
 mod self_host;
 mod android_apk;
+mod project;
 
 pub use token::Token;
 pub use ast::{Expr, Stmt, Value, Pattern, MapKey, EnvFrame, EnvRef, to_map_key};
@@ -51,7 +52,7 @@ fn load_program(path: &str) -> Result<Vec<Stmt>, String> {
 fn main(){
     let a:Vec<String>=env::args().collect();
     if a.len()<2 {
-        eprintln!("NOVA 2.0.0-dev\nusage: nova run <file> | nova check <file> | nova ir <file> | nova ssa <file> | nova abi <file> | nova build-c <file> [output.c] | nova build-native <file> [output] | nova app-check <file> | nova build-android <file> [output-dir] | nova build-android-project <file> [output-dir] | nova build-apk <file> [output.apk] | nova package-check <manifest-or-dir> | nova package-lock <manifest-or-dir> | nova package-init [dir] [name] | nova app-init [dir] [name] | nova package-install [manifest-or-dir] | nova ai-train-xor [epochs] | nova concurrency-demo | nova gpu-kernels | nova media-demo <dir> | nova selfhost-check | nova build-x86 <file> [output.s] | nova build-arm64 <file> [output.s] | nova build-wasm <file> [output.wat] | nova version");
+        eprintln!("NOVA 2.0.0-dev\nusage: nova run <file> | nova check <file> | nova ir <file> | nova ssa <file> | nova abi <file> | nova build-c <file> [output.c] | nova build-native <file> [output] | nova app-check <file> | nova build-android <file> [output-dir] | nova build-android-project <file> [output-dir] | nova build-apk <file> [output.apk] | nova package-check <manifest-or-dir> | nova package-lock <manifest-or-dir> | nova package-init [dir] [name] | nova app-init [dir] [name] | nova package-install [manifest-or-dir] | nova build [project-dir] | nova run [file-or-project] | nova ai-train-xor [epochs] | nova concurrency-demo | nova gpu-kernels | nova media-demo <dir> | nova selfhost-stage1 [source] [output.s] | nova selfhost-check | nova build-x86 <file> [output.s] | nova build-arm64 <file> [output.s] | nova build-wasm <file> [output.wat] | nova version");
         return
     }
     if a[1]=="version"{println!("NOVA 2.0.0-dev");return}
@@ -66,6 +67,20 @@ fn main(){
         let dir=std::path::Path::new(a.get(2).map(String::as_str).unwrap_or("."));
         let name=a.get(3).map(String::as_str).unwrap_or("nova-app");
         match package_manager::init_app(dir,name){Ok(path)=>println!("{}",path.display()),Err(e)=>{eprintln!("app error: {}",e);std::process::exit(1)}}
+        return
+    }
+
+    if a[1]=="build" || (a[1]=="run" && a.get(2).map(|x| std::path::Path::new(x).is_dir()).unwrap_or(false)) || a[1]=="project-check" {
+        let dir=std::path::Path::new(a.get(2).map(String::as_str).unwrap_or("."));
+        let built=match project::load(dir){Ok(x)=>x,Err(e)=>{eprintln!("project error: {}",e);std::process::exit(1)}};
+        if let Err(e)=project::source_set_is_nova_only(&built.root){eprintln!("project source error: {}",e);std::process::exit(1)}
+        if a[1]=="project-check" || a[1]=="build" {
+            print!("{}",project::report(&built));
+            if a[1]=="build" { println!("status: semantic + IR + SSA build succeeded"); }
+            return
+        }
+        let mut vm=Vm::new();
+        if let Err(e)=vm.exec(&built.program){eprintln!("runtime error: {}",e);std::process::exit(1)}
         return
     }
 
@@ -176,6 +191,20 @@ fn main(){
         println!("{}",dir.display());
         return
     }
+    if a[1]=="selfhost-stage1" {
+        if a.len()<3 { eprintln!("missing NOVA source path"); std::process::exit(2); }
+        let input=&a[2];
+        let output=if a.len()>3 { &a[3] } else { "target/nova-stage1-output.s" };
+        std::env::set_var("NOVA_STAGE1_INPUT", input);
+        std::env::set_var("NOVA_STAGE1_OUTPUT", output);
+        let program=match load_program("selfhost/stage1/Main.nova"){
+            Ok(x)=>x,
+            Err(e)=>{eprintln!("selfhost stage1 load error: {}",e);std::process::exit(1)}
+        };
+        if let Err(e)=Vm::new().exec(&program){eprintln!("selfhost stage1 error: {}",e);std::process::exit(1)}
+        return
+    }
+
     if a[1]=="selfhost-check" {
         match self_host::validate_bootstrap_source(){
             Ok(())=>println!("{}",self_host::bootstrap_report()),

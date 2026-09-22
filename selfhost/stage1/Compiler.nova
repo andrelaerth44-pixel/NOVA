@@ -1,0 +1,20 @@
+fn nova1_compile(source) {
+    lexed = lex_source(source)
+    if map_get(lexed, "ok") == false {
+        return diag_format(map_get(lexed, "errors"))
+    }
+
+    parsed = parser_source(source)
+    if map_get(parsed, "ok") == false {
+        return diag_format(map_get(parsed, "errors"))
+    }
+
+    ir = ir_lower(map_get(parsed, "ast"))
+    ssa = ssa_run(ir)
+    errors = map_get(ssa, "errors")
+    if len(errors) > 0 {
+        return diag_format(errors)
+    }
+
+    return backend_build(ssa)
+}

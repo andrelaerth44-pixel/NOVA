@@ -143,8 +143,8 @@ impl Checker {
                     for (key, value) in entries.iter().skip(1) {
                         let kt = self.infer(key);
                         let vt = self.infer(value);
-                        if !key_ty.compatible(&kt) { self.error("map keys have incompatible types"); }
-                        if !value_ty.compatible(&vt) { self.error("map values have incompatible types"); }
+                        if !key_ty.compatible(&kt) { key_ty = crate::types::Type::Any; }
+                        if !value_ty.compatible(&vt) { value_ty = crate::types::Type::Any; }
                     }
                 }
                 crate::types::Type::Generic("Map".into(), vec![key_ty, value_ty])
@@ -371,7 +371,9 @@ impl Checker {
                     _ => {}
                 };
                 let builtin = match name.as_str() {
-                    "range" => Some((vec![crate::types::Type::Number], crate::types::Type::Array(Box::new(crate::types::Type::Number)))),
+                    "range" => Some((vec![crate::types::Type::Number, crate::types::Type::Number], crate::types::Type::Array(Box::new(crate::types::Type::Number)))),
+                    "array_push" => Some((vec![crate::types::Type::Array(Box::new(crate::types::Type::Any)), crate::types::Type::Any], crate::types::Type::Array(Box::new(crate::types::Type::Any)))),
+                    "char_is_digit" | "char_is_alpha" | "char_is_alnum" | "char_is_space" => Some((vec![crate::types::Type::String], crate::types::Type::Bool)),
                     "str" => Some((vec![crate::types::Type::Any], crate::types::Type::String)),
                     "len" => Some((vec![crate::types::Type::Any], crate::types::Type::Number)),
                     "abs" | "sqrt" => Some((vec![crate::types::Type::Number], crate::types::Type::Number)),

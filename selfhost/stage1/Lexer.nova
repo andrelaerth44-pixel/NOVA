@@ -1,0 +1,155 @@
+fn lex_token(kind, text) {
+    return map { "kind": kind, "text": text }
+}
+
+fn lex_is_space(c) {
+    return char_is_space(c)
+}
+
+fn lex_is_digit(c) {
+    return char_is_digit(c)
+}
+
+fn lex_is_alpha(c) {
+    return char_is_alpha(c)
+}
+
+fn lex_is_alnum(c) {
+    return lex_is_alpha(c) or lex_is_digit(c)
+}
+
+fn lex_keyword(word) {
+    if word == "fn" { return "fn" }
+    if word == "let" { return "let" }
+    if word == "return" { return "return" }
+    if word == "print" { return "print" }
+    if word == "true" { return "true" }
+    if word == "false" { return "false" }
+    if word == "if" { return "if" }
+    if word == "else" { return "else" }
+    if word == "while" { return "while" }
+    return "ident"
+}
+
+fn lex_source(source) {
+    tokens = []
+    i = 0
+    n = len(source)
+
+    while i < n {
+        c = source[i]
+
+        if lex_is_space(c) {
+            i = i + 1
+        } else if c == "#" {
+            i = i + 1
+            while i < n and source[i] != "\n" {
+                i = i + 1
+            }
+        } else if lex_is_digit(c) {
+            text = ""
+            while i < n and (lex_is_digit(source[i]) or source[i] == ".") {
+                text = text + source[i]
+                i = i + 1
+            }
+            tokens = array_push(tokens, lex_token("number", text))
+        } else if lex_is_alpha(c) {
+            text = ""
+            while i < n and lex_is_alnum(source[i]) {
+                text = text + source[i]
+                i = i + 1
+            }
+            tokens = array_push(tokens, lex_token(lex_keyword(text), text))
+        } else if c == "\"" {
+            i = i + 1
+            text = ""
+            closed = false
+            while i < n and source[i] != "\"" {
+                c2 = source[i]
+                if c2 == "\\" and i + 1 < n {
+                    i = i + 1
+                    escaped = source[i]
+                    if escaped == "n" { text = text + "\n" }
+                    else if escaped == "r" { text = text + "\r" }
+                    else if escaped == "t" { text = text + "\t" }
+                    else { text = text + escaped }
+                    i = i + 1
+                } else {
+                    text = text + c2
+                    i = i + 1
+                }
+            }
+            if i < n and source[i] == "\"" {
+                i = i + 1
+                closed = true
+            }
+            if closed {
+                tokens = array_push(tokens, lex_token("string", text))
+            } else {
+                return map { "ok": false, "errors": ["unterminated string literal"], "tokens": tokens }
+            }
+        } else if c == "+" {
+            tokens = array_push(tokens, lex_token("plus", "+"))
+            i = i + 1
+        } else if c == "-" {
+            tokens = array_push(tokens, lex_token("minus", "-"))
+            i = i + 1
+        } else if c == "*" {
+            tokens = array_push(tokens, lex_token("star", "*"))
+            i = i + 1
+        } else if c == "/" {
+            tokens = array_push(tokens, lex_token("slash", "/"))
+            i = i + 1
+        } else if c == "%" {
+            tokens = array_push(tokens, lex_token("percent", "%"))
+            i = i + 1
+        } else if c == "=" and i + 1 < n and source[i + 1] == "=" {
+            tokens = array_push(tokens, lex_token("eqeq", "=="))
+            i = i + 2
+        } else if c == "!" and i + 1 < n and source[i + 1] == "=" {
+            tokens = array_push(tokens, lex_token("ne", "!="))
+            i = i + 2
+        } else if c == "<" and i + 1 < n and source[i + 1] == "=" {
+            tokens = array_push(tokens, lex_token("le", "<="))
+            i = i + 2
+        } else if c == ">" and i + 1 < n and source[i + 1] == "=" {
+            tokens = array_push(tokens, lex_token("ge", ">="))
+            i = i + 2
+        } else if c == "=" {
+            tokens = array_push(tokens, lex_token("eq", "="))
+            i = i + 1
+        } else if c == "<" {
+            tokens = array_push(tokens, lex_token("lt", "<"))
+            i = i + 1
+        } else if c == ">" {
+            tokens = array_push(tokens, lex_token("gt", ">"))
+            i = i + 1
+        } else if c == "!" {
+            tokens = array_push(tokens, lex_token("bang", "!"))
+            i = i + 1
+        } else if c == "(" {
+            tokens = array_push(tokens, lex_token("lparen", "("))
+            i = i + 1
+        } else if c == ")" {
+            tokens = array_push(tokens, lex_token("rparen", ")"))
+            i = i + 1
+        } else if c == "{" {
+            tokens = array_push(tokens, lex_token("lbrace", "{"))
+            i = i + 1
+        } else if c == "}" {
+            tokens = array_push(tokens, lex_token("rbrace", "}"))
+            i = i + 1
+        } else if c == "," {
+            tokens = array_push(tokens, lex_token("comma", ","))
+            i = i + 1
+        } else if c == ";" {
+            tokens = array_push(tokens, lex_token("semi", ";"))
+            i = i + 1
+        } else {
+            return map { "ok": false, "errors": ["unexpected character " + c], "tokens": tokens }
+        }
+    }
+
+    tokens = array_push(tokens, lex_token("eof", ""))
+    return map { "ok": true, "errors": [], "tokens": tokens }
+}

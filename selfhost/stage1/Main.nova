@@ -1,0 +1,20 @@
+import "Diagnostics.nova"
+import "AST.nova"
+import "Lexer.nova"
+import "Parser.nova"
+import "IR.nova"
+import "SSA.nova"
+import "BackendX86.nova"
+import "Compiler.nova"
+
+make_dir("target")
+input_value = env("NOVA_STAGE1_INPUT")
+output_value = env("NOVA_STAGE1_OUTPUT")
+input_path = str(input_value)
+output_path = str(output_value)
+if input_path == "null" { input_path = "selfhost/fixtures/hello.nova" }
+if output_path == "null" { output_path = "target/nova-stage1-hello.s" }
+source = read_file(input_path)
+assembly = nova1_compile(source)
+write_file(output_path, assembly)
+print "NOVA Stage 1 compiler emitted " + output_path

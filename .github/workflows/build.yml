@@ -32,6 +32,35 @@ jobs:
           grep -Fxq "Hello NOVA" /tmp/hello.out
           grep -Fxq "42" /tmp/hello.out
 
+      - name: NOVA Stage 1 self-host compiler smoke test
+        shell: bash
+        run: |
+          cargo run --release -- selfhost-check | tee /tmp/nova-selfhost.out
+          grep -Fq 'Stage 1=NOVA compiler sources validated' /tmp/nova-selfhost.out
+          rm -f target/nova-stage1-hello.s /tmp/nova-stage1-hello
+          cargo run --release -- run selfhost/stage1/Debug.nova | tee /tmp/nova-stage1-debug.out
+          cargo run --release -- run selfhost/stage1/Main.nova | tee /tmp/nova-stage1.out
+          grep -Fxq 'NOVA Stage 1 compiler emitted target/nova-stage1-hello.s' /tmp/nova-stage1.out
+          test -s target/nova-stage1-hello.s
+          grep -Fq '.globl main' target/nova-stage1-hello.s || { cat target/nova-stage1-hello.s; exit 1; }
+          grep -Fq 'printf@PLT' target/nova-stage1-hello.s || { cat target/nova-stage1-hello.s; exit 1; }
+          cat target/nova-stage1-hello.s
+          set +e
+          cc -O2 target/nova-stage1-hello.s -o /tmp/nova-stage1-hello
+          link_status=$?
+          echo "stage1-link-status=$link_status"
+          if [ "$link_status" -ne 0 ]; then
+            sed -n '1,240p' target/nova-stage1-hello.s
+            exit "$link_status"
+          fi
+          output=$(/tmp/nova-stage1-hello)
+          run_status=$?
+          echo "stage1-run-status=$run_status"
+          printf 'stage1-output=<%s>\\n' "$output"
+          set -e
+          test "$run_status" -eq 0
+          test "$output" = "42"
+
       - name: Native backend smoke test
         shell: bash
         run: |
@@ -246,7 +275,7 @@ jobs:
           test -s /tmp/nova-media/nova.wav
           test -s /tmp/nova-media/index.html
 
-          cargo run --release -- selfhost-check | grep -q 'trusted bootstrap=Rust'
+          cargo run --release -- selfhost-check | grep -Fq 'Stage 1=NOVA compiler sources validated'
 
           cargo run --release -- build-x86 examples/targets.nova /tmp/nova-x86.s
           cargo run --release -- build-arm64 examples/targets.nova /tmp/nova-arm64.s

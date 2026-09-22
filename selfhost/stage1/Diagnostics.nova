@@ -1,0 +1,15 @@
+fn diag_empty() {
+    return []
+}
+
+fn diag_add(errors, message) {
+    return array_push(errors, message)
+}
+
+fn diag_format(errors) {
+    out = ""
+    for error in errors {
+        out = out + "NOVA1: " + error + "\n"
+    }
+    return out
+}

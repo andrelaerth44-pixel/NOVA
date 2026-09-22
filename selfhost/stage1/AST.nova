@@ -1,0 +1,51 @@
+fn ast_program(statements) {
+    return map { "kind": "program", "body": statements }
+}
+
+fn ast_number(text) {
+    return map { "kind": "number", "value": text }
+}
+
+fn ast_string(text) {
+    return map { "kind": "string", "value": text }
+}
+
+fn ast_variable(name_value) {
+    return map { "kind": "variable", "name": name_value }
+}
+
+fn ast_unary(op, value) {
+    return map { "kind": "unary", "op": op, "value": value }
+}
+
+fn ast_binary(op_value, left_value, right_value) {
+    return map { "kind": "binary", "op": op_value, "left": left_value, "right": right_value }
+}
+
+fn ast_call(name, args) {
+    return map { "kind": "call", "name": name, "args": args }
+}
+
+fn ast_let_stmt(name, value) {
+    return map { "kind": "let", "name": name, "value": value }
+}
+
+fn ast_assign(name, value) {
+    return map { "kind": "assign", "name": name, "value": value }
+}
+
+fn ast_print_stmt(value) {
+    return map { "kind": "print", "value": value }
+}
+
+fn ast_return_stmt(value) {
+    return map { "kind": "return", "value": value }
+}
+
+fn ast_fn_decl(name, params, body) {
+    return map { "kind": "fn", "name": name, "params": params, "body": body }
+}
+
+fn ast_expr_stmt(value) {
+    return map { "kind": "expr", "value": value }
+}

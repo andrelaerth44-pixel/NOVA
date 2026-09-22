@@ -87,8 +87,8 @@ impl Parser {
         match self.peek() {
             Token::Let=>{self.take();let n=match self.take(){Token::Ident(x)=>x,_=>return Err("expected identifier".into())};let ty=if self.eat(&Token::Colon){Some(self.type_name()?)}else{None};if !self.eat(&Token::Eq){return Err("expected =".into())}Ok(Stmt::Let(n,ty,self.expr()?))},
             Token::Print=>{self.take();Ok(Stmt::Print(self.expr()?))},
-            Token::Return=>{self.take();Ok(Stmt::Return(self.expr()?))},
-            Token::If=>{self.take();let c=self.expr()?;let a=self.block()?;let b=if self.eat(&Token::Else){self.block()?}else{vec![]};Ok(Stmt::If(c,a,b))},
+            Token::Return=>{self.take();if matches!(self.peek(),Token::RBrace|Token::Semi|Token::Eof){Ok(Stmt::Return(Expr::Val(Value::Null)))}else{Ok(Stmt::Return(self.expr()?))}},
+            Token::If=>{self.take();let c=self.expr()?;let a=self.block()?;let b=if self.eat(&Token::Else){if *self.peek()==Token::If{vec![self.stmt()?]}else{self.block()?}}else{vec![]};Ok(Stmt::If(c,a,b))},
             Token::While=>{self.take();let c=self.expr()?;Ok(Stmt::While(c,self.block()?))},
             Token::For=>{self.take();let n=match self.take(){Token::Ident(x)=>x,_=>return Err("expected loop variable".into())};if !self.eat(&Token::In){return Err("expected in".into())}let it=self.expr()?;Ok(Stmt::For(n,it,self.block()?))},
             Token::Import=>{self.take();match self.take(){Token::Str(x)=>Ok(Stmt::Import(x)),_=>Err("import expects a string path".into())}},
@@ -217,7 +217,7 @@ impl Parser {
                 let _ret=if self.eat(&Token::Arrow){Some(self.type_name()?)}else{None};
                 Expr::Closure(args,self.block()?)
             },
-            t=>return Err(format!("unexpected token {:?}",t))};
+            t=>return Err(format!("unexpected token {:?} at token index {}",t,self.p.saturating_sub(1)))};
         let mut x = x;
         loop {
             if self.eat(&Token::Dot) {
@@ -239,3 +239,62 @@ impl Parser {
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_adjacent_nested_conditionals() {
+        let source = r#"
+            fn f(k) {
+                if k == "let" {
+                    value = 1
+                    return value
+                }
+                if k == "assign" {
+                    value = 2
+                    return value
+                }
+            }
+        "#;
+        Parser::new(crate::lex(source).expect("lex"))
+            .program()
+            .expect("nested conditionals should parse");
+    }
+
+    #[test]
+    fn parses_stage1_ir_statement_function() {
+        let source = r#"
+            fn ir_stmt(ir, node) {
+                k = map_get(node, "kind")
+                if k == "let" {
+                    value = ir_expr(ir, map_get(node, "value"))
+                    item = ir_instruction("store")
+                    map_set(item, "name", map_get(node, "name"))
+                    map_set(item, "value", value)
+                    ir_emit(ir, item)
+                    return
+                }
+                if k == "assign" {
+                    value = ir_expr(ir, map_get(node, "value"))
+                    item = ir_instruction("store")
+                    map_set(item, "name", map_get(node, "name"))
+                    map_set(item, "value", value)
+                    ir_emit(ir, item)
+                    return
+                }
+                if k == "print" {
+                    value = ir_expr(ir, map_get(node, "value"))
+                    item = ir_instruction("print")
+                    map_set(item, "value", value)
+                    ir_emit(ir, item)
+                    return
+                }
+            }
+        "#;
+        Parser::new(crate::lex(source).expect("lex"))
+            .program()
+            .expect("IR statement function should parse");
+    }
+}

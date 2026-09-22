@@ -1,0 +1,116 @@
+fn ir_instruction(kind) {
+    return map { "kind": kind }
+}
+
+fn ir_emit(ir, item) {
+    code = map_get(ir, "code")
+    map_set(ir, "code", array_push(code, item))
+}
+
+fn ir_new_id(ir) {
+    id = map_get(ir, "next")
+    map_set(ir, "next", id + 1)
+    return id
+}
+
+fn ir_expr(ir, node) {
+    k = map_get(node, "kind")
+    if k == "number" {
+        id = ir_new_id(ir)
+        item = ir_instruction("const")
+        map_set(item, "id", id)
+        map_set(item, "value", map_get(node, "value"))
+        ir_emit(ir, item)
+        return id
+    }
+    if k == "string" {
+        id = ir_new_id(ir)
+        item = ir_instruction("string")
+        map_set(item, "id", id)
+        map_set(item, "value", map_get(node, "value"))
+        ir_emit(ir, item)
+        return id
+    }
+    if k == "variable" {
+        id = ir_new_id(ir)
+        item = ir_instruction("load")
+        map_set(item, "id", id)
+        map_set(item, "name", map_get(node, "name"))
+        ir_emit(ir, item)
+        return id
+    }
+    if k == "unary" {
+        value = ir_expr(ir, map_get(node, "value"))
+        id = ir_new_id(ir)
+        item = ir_instruction("unary")
+        map_set(item, "id", id)
+        map_set(item, "op", map_get(node, "op"))
+        map_set(item, "value", value)
+        ir_emit(ir, item)
+        return id
+    }
+    if k == "binary" {
+        left = ir_expr(ir, map_get(node, "left"))
+        right = ir_expr(ir, map_get(node, "right"))
+        id = ir_new_id(ir)
+        item = ir_instruction("binary")
+        map_set(item, "id", id)
+        map_set(item, "op", map_get(node, "op"))
+        map_set(item, "left", left)
+        map_set(item, "right", right)
+        ir_emit(ir, item)
+        return id
+    }
+    if k == "call" {
+        return -1
+    }
+    return -1
+}
+
+fn ir_stmt(ir, node) {
+    k = map_get(node, "kind")
+    if k == "let" {
+        value = ir_expr(ir, map_get(node, "value"))
+        item = ir_instruction("store")
+        map_set(item, "name", map_get(node, "name"))
+        map_set(item, "value", value)
+        ir_emit(ir, item)
+        return
+    }
+    if k == "assign" {
+        value = ir_expr(ir, map_get(node, "value"))
+        item = ir_instruction("store")
+        map_set(item, "name", map_get(node, "name"))
+        map_set(item, "value", value)
+        ir_emit(ir, item)
+        return
+    }
+    if k == "print" {
+        value = ir_expr(ir, map_get(node, "value"))
+        item = ir_instruction("print")
+        map_set(item, "value", value)
+        ir_emit(ir, item)
+        return
+    }
+    if k == "return" {
+        value = ir_expr(ir, map_get(node, "value"))
+        item = ir_instruction("return")
+        map_set(item, "value", value)
+        ir_emit(ir, item)
+        return
+    }
+    if k == "expr" {
+        ir_expr(ir, map_get(node, "value"))
+    }
+}
+
+fn ir_lower(ast) {
+    ir = map { "code": [], "next": 0 }
+    body = map_get(ast, "body")
+    for node in body {
+        if map_get(node, "kind") != "fn" {
+            ir_stmt(ir, node)
+        }
+    }
+    return ir
+}

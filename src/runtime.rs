@@ -27,6 +27,7 @@ struct Function { pub args: Vec<String>, pub body: Vec<Stmt> }
 
 pub struct Vm {
     env: EnvRef,
+    globals: EnvRef,
     fns: HashMap<String, Function>,
     enums: HashMap<String, HashMap<String, Option<crate::types::Type>>>,
     modules: HashMap<String, bool>,
@@ -35,8 +36,10 @@ pub struct Vm {
 
 impl Vm {
     pub fn new() -> Self {
+        let globals = std::rc::Rc::new(std::cell::RefCell::new(EnvFrame { values: HashMap::new(), parent: None }));
         Self {
-            env: std::rc::Rc::new(std::cell::RefCell::new(EnvFrame { values: HashMap::new(), parent: None })),
+            env: globals.clone(),
+            globals,
             fns: HashMap::new(),
             enums: HashMap::new(),
             modules: HashMap::new(),
@@ -318,6 +321,28 @@ impl Vm {
                 if n == "str" {
                     if a.len() != 1 { return Err("str expects 1 argument".into()); }
                     return Ok(Value::Str(self.eval(&a[0])?.to_string()));
+                }
+                if n == "char_is_digit" || n == "char_is_alpha" || n == "char_is_alnum" || n == "char_is_space" {
+                    if a.len() != 1 { return Err(format!("{} expects 1 argument", n).into()); }
+                    let value = match self.eval(&a[0])? { Value::Str(v) => v, _ => return Err(format!("{} expects a string", n).into()) };
+                    let mut chars = value.chars();
+                    let c = chars.next().ok_or_else(|| format!("{} expects a non-empty character", n))?;
+                    let result = match n.as_str() {
+                        "char_is_digit" => c.is_ascii_digit(),
+                        "char_is_alpha" => c.is_ascii_alphabetic() || c == '_',
+                        "char_is_alnum" => c.is_ascii_alphanumeric() || c == '_',
+                        _ => c.is_ascii_whitespace(),
+                    };
+                    return Ok(Value::Bool(result));
+                }
+                if n == "array_push" {
+                    if a.len() != 2 { return Err("array_push expects 2 arguments".into()); }
+                    let array = self.eval(&a[0])?;
+                    let value = self.eval(&a[1])?;
+                    match array {
+                        Value::Array(mut values) => { values.push(value); return Ok(Value::Array(values)); }
+                        _ => return Err("array_push expects an array".into()),
+                    }
                 }
                 if n == "len" {
                     if a.len() != 1 { return Err("len expects 1 argument".into()); }
@@ -628,7 +653,7 @@ impl Vm {
                 let vals = a.iter().map(|e| self.eval(e)).collect::<Result<Vec<_>, _>>()?;
                 self.env = std::rc::Rc::new(std::cell::RefCell::new(EnvFrame {
                     values: HashMap::new(),
-                    parent: Some(caller_env.clone()),
+                    parent: Some(self.globals.clone()),
                 }));
                 for (i, k) in f.args.iter().enumerate() { self.define(k.clone(), vals[i].clone()); }
                 let result = self.exec(&f.body);
@@ -908,4 +933,36 @@ fn mod2(a: Value, b: Value) -> Result<Value, RuntimeError> {
     let x = num(a)?; let y = num(b)?;
     if y == 0.0 { return Err("modulo by zero".into()); }
     Ok(Value::Num(x % y))
+}
+
+#[cfg(test)]
+mod lexical_scope_tests {
+    use super::*;
+
+    #[test]
+    fn named_function_locals_do_not_mutate_caller_locals() {
+        let source = r#"
+            fn inner() {
+                left = 2
+                return left
+            }
+
+            fn outer() {
+                left = 10
+                value = inner()
+                return left + value
+            }
+
+            result = outer()
+            if result != 12 {
+                return 1
+            }
+            return 0
+        "#;
+
+        let program = crate::compiler::parse_source(source).expect("source should parse");
+        let mut vm = Vm::new();
+        let result = vm.exec(&program).expect("runtime should succeed").expect("program should return a value");
+        match result { crate::Value::Num(value) => assert_eq!(value, 0.0), other => panic!("unexpected result: {}", other) }
+    }
 }

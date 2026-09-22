@@ -1,0 +1,67 @@
+fn ssa_emit(out, item) {
+    code = map_get(out, "code")
+    map_set(out, "code", array_push(code, item))
+}
+
+fn ssa_add_diag(out, message) {
+    errors = map_get(out, "errors")
+    map_set(out, "errors", array_push(errors, message))
+}
+
+fn ssa_run(ir) {
+    out = map { "code": [], "errors": [], "env": map {}, "max_id": 0 }
+
+    for item in map_get(ir, "code") {
+        kind = map_get(item, "kind")
+
+        if kind == "const" {
+            id = map_get(item, "id")
+            ssa_emit(out, map {
+                "kind": "const",
+                "id": id,
+                "value": map_get(item, "value")
+            })
+            if id > map_get(out, "max_id") { map_set(out, "max_id", id) }
+        } else if kind == "string" {
+            ssa_add_diag(out, "native core backend currently accepts numeric values only")
+        } else if kind == "store" {
+            map_set(map_get(out, "env"), map_get(item, "name"), map_get(item, "value"))
+        } else if kind == "load" {
+            name = map_get(item, "name")
+            env = map_get(out, "env")
+            id = map_get(item, "id")
+            if map_has(env, name) == false {
+                ssa_add_diag(out, "undefined variable " + name)
+            } else {
+                value = map_get(env, name)
+                ssa_emit(out, map { "kind": "alias", "id": id, "value": value })
+                if id > map_get(out, "max_id") { map_set(out, "max_id", id) }
+            }
+        } else if kind == "binary" {
+            id = map_get(item, "id")
+            ssa_emit(out, map {
+                "kind": "binary",
+                "id": id,
+                "op": map_get(item, "op"),
+                "left": map_get(item, "left"),
+                "right": map_get(item, "right")
+            })
+            if id > map_get(out, "max_id") { map_set(out, "max_id", id) }
+        } else if kind == "unary" {
+            id = map_get(item, "id")
+            ssa_emit(out, map {
+                "kind": "unary",
+                "id": id,
+                "op": map_get(item, "op"),
+                "value": map_get(item, "value")
+            })
+            if id > map_get(out, "max_id") { map_set(out, "max_id", id) }
+        } else if kind == "print" {
+            ssa_emit(out, map { "kind": "print", "value": map_get(item, "value") })
+        } else if kind == "return" {
+            ssa_emit(out, map { "kind": "return", "value": map_get(item, "value") })
+        }
+    }
+
+    return out
+}
