@@ -44,7 +44,8 @@ jobs:
           grep -Fq '.globl main' target/nova-stage1-hello.s
           grep -Fq 'printf@PLT' target/nova-stage1-hello.s
           cc -O2 target/nova-stage1-hello.s -o /tmp/nova-stage1-hello
-          test "$(/tmp/nova-stage1-hello)" = "42"
+          output=$(/tmp/nova-stage1-hello || true)
+          test "$output" = "42"
 
       - name: Native backend smoke test
         shell: bash
