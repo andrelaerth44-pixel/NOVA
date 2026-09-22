@@ -1,11 +1,11 @@
 fn emit(out, item) {
     code = map_get(out, "code")
-    map_set(out, "code", code + [item])
+    map_set(out, "code", array_push(code, item))
 }
 
 fn add_diag(out, message) {
     errors = map_get(out, "errors")
-    map_set(out, "errors", errors + [message])
+    map_set(out, "errors", array_push(errors, message))
 }
 
 fn run(ir) {
@@ -25,7 +25,7 @@ fn run(ir) {
         } else if kind == "load" {
             name = map_get(item, "name")
             env = map_get(out, "env")
-            if not map_has(env, name) {
+            if map_has(env, name) == false {
                 add_diag(out, "undefined variable " + name)
             } else {
                 map_set(item, "resolved", map_get(env, name))
