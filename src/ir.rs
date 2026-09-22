@@ -225,6 +225,7 @@ impl IrBuilder {
             crate::Value::Null => IrType::Null,
             crate::Value::Closure { .. } => IrType::Any,
             crate::Value::Iterator(_) => IrType::Any,
+            crate::Value::Channel(_) | crate::Value::Process(_) => IrType::Any,
         }
     }
 
