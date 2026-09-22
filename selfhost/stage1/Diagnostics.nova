@@ -1,12 +1,12 @@
-fn empty() {
+fn diag_empty() {
     return []
 }
 
-fn add(errors, message) {
+fn diag_add(errors, message) {
     return array_push(errors, message)
 }
 
-fn format(errors) {
+fn diag_format(errors) {
     out = ""
     for error in errors {
         out = out + "NOVA1: " + error + "\n"
