@@ -55,6 +55,8 @@ pub enum Value {
     Enum { name: String, variant: String, value: Option<Box<Value>> },
     Closure { args: Vec<String>, body: Vec<Stmt>, env: EnvRef },
     Iterator(Rc<RefCell<IteratorState>>),
+    Channel(u64),
+    Process(u64),
     Null,
 }
 impl Value {
@@ -74,6 +76,8 @@ impl Value {
             (Value::Enum{name:an,variant:av,value:ax},Value::Enum{name:bn,variant:bv,value:bx})=>an==bn&&av==bv&&match (ax,bx){(None,None)=>true,(Some(a),Some(b))=>a.equals(b),_=>false},
             (Value::Closure{..},Value::Closure{..})=>false,
             (Value::Iterator(a),Value::Iterator(b))=>Rc::ptr_eq(a,b),
+            (Value::Channel(a),Value::Channel(b))=>a==b,
+            (Value::Process(a),Value::Process(b))=>a==b,
             _=>false
         }
     }
@@ -96,6 +100,8 @@ impl std::fmt::Display for Value {
             Value::Enum{name,variant,value}=>match value{Some(v)=>write!(f,"{}.{}({})",name,variant,v),None=>write!(f,"{}.{}",name,variant)},
             Value::Closure{..}=>write!(f,"<closure>"),
             Value::Iterator(_) => write!(f,"<iterator>"),
+            Value::Channel(id)=>write!(f,"<channel:{}>",id),
+            Value::Process(id)=>write!(f,"<process:{}>",id),
             Value::Null=>write!(f,"null")
         }
     }
