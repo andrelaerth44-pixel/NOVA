@@ -3,7 +3,7 @@ use crate::Value;
 use std::{collections::{HashMap,VecDeque},process::{Child,Command,Stdio},sync::{atomic::{AtomicU64,Ordering},Mutex,OnceLock},thread};
 
 fn processes()->&'static Mutex<HashMap<u64,Child>>{static S:OnceLock<Mutex<HashMap<u64,Child>>>=OnceLock::new();S.get_or_init(||Mutex::new(HashMap::new()))}
-fn channels()->&'static Mutex<HashMap<u64,VecDeque<Value>>>{static S:OnceLock<Mutex<HashMap<u64,VecDeque<Value>>>>=OnceLock::new();S.get_or_init(||Mutex::new(HashMap::new()))}
+fn channels()->&'static Mutex<HashMap<u64,VecDeque<String>>> { static S:OnceLock<Mutex<HashMap<u64,VecDeque<String>>>>=OnceLock::new(); S.get_or_init(||Mutex::new(HashMap::new())) }
 static NEXT:AtomicU64=AtomicU64::new(1);
 
 pub fn spawn_nova(path:&str)->Result<u64,String>{
