@@ -91,7 +91,7 @@ fn ir_stmt(ir, node) {
         ir_emit(ir, item)
         return
     }
-    if k == "ir_expr" {
+    if k == "expr" {
         ir_expr(ir, map_get(node, "value"))
     }
 }
