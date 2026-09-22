@@ -1,5 +1,5 @@
 use crate::{compiler, module_loader::ModuleLoader, package};
-use std::{collections::BTreeSet, fs, path::{Path, PathBuf}};
+use std::{fs, path::{Path, PathBuf}};
 
 #[derive(Debug)]
 pub struct ProjectBuild {
@@ -67,15 +67,18 @@ pub fn report(build: &ProjectBuild) -> String {
 }
 
 pub fn source_set_is_nova_only(dir: &Path) -> Result<(), String> {
-    let mut files = Vec::new();
-    collect_nova(dir, &mut files)?;
-    let forbidden = [".kt", ".java", ".c", ".cc", ".cpp", ".h", ".hpp", ".gradle", ".gradle.kts"];
-    for file in files {
-        if let Some(ext) = file.extension().and_then(|x| x.to_str()) {
-            if forbidden.iter().any(|x| x.trim_start_matches('.') == ext) {
-                return Err(format!("foreign application source is not allowed: {}", file.display()));
+    fn walk(root: &Path) -> Result<(), String> {
+        for entry in fs::read_dir(root).map_err(|e| format!("cannot scan {}: {}", root.display(), e))? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let path = entry.path();
+            if path.file_name().and_then(|x| x.to_str()) == Some(".nova") || path.file_name().and_then(|x| x.to_str()) == Some("target") { continue; }
+            if path.is_dir() { walk(&path)?; continue; }
+            let ext = path.extension().and_then(|x| x.to_str()).unwrap_or("");
+            if matches!(ext, "kt"|"java"|"c"|"cc"|"cpp"|"h"|"hpp"|"gradle") || path.file_name().and_then(|x| x.to_str()) == Some("build.gradle.kts") {
+                return Err(format!("foreign application source is not allowed: {}", path.display()));
             }
         }
+        Ok(())
     }
-    Ok(())
+    walk(dir)
 }
