@@ -237,6 +237,32 @@ impl Parser {
         }
         Ok(x)
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_adjacent_nested_conditionals() {
+        let source = r#"
+            fn f(k) {
+                if k == "let" {
+                    value = 1
+                    return value
+                }
+                if k == "assign" {
+                    value = 2
+                    return value
+                }
+            }
+        "#;
+        Parser::new(crate::lex(source).expect("lex"))
+            .program()
+            .expect("nested conditionals should parse");
+    }
+
     #[test]
     fn parses_stage1_ir_statement_function() {
         let source = r#"
@@ -267,31 +293,8 @@ impl Parser {
                 }
             }
         "#;
-        Parser::new(crate::lex(source).expect("lex")).program().expect("IR statement function should parse");
-    }
-}
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_adjacent_nested_conditionals() {
-        let source = r#"
-            fn f(k) {
-                if k == "let" {
-                    value = 1
-                    return value
-                }
-                if k == "assign" {
-                    value = 2
-                    return value
-                }
-            }
-        "#;
         Parser::new(crate::lex(source).expect("lex"))
             .program()
-            .expect("nested conditionals should parse");
+            .expect("IR statement function should parse");
     }
 }
