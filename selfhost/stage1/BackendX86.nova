@@ -1,29 +1,29 @@
-fn line(text) {
+fn backend_line(text) {
     return text + "\n"
 }
 
-fn slot(id) {
+fn backend_slot(id) {
     return "-" + str((id + 1) * 8) + "(%rbp)"
 }
 
-fn emit(out, text) {
-    return out + line(text)
+fn backend_emit(out, text) {
+    return out + backend_line(text)
 }
 
-fn build(ssa) {
+fn backend_build(ssa) {
     code = ""
-    code = emit(code, ".section .rodata")
-    code = emit(code, ".fmt:")
-    code = emit(code, "    .string \"%ld\\n\"")
-    code = emit(code, ".text")
-    code = emit(code, ".globl main")
-    code = emit(code, ".extern printf")
-    code = emit(code, "main:")
-    code = emit(code, "    push %rbp")
-    code = emit(code, "    mov %rsp, %rbp")
+    code = backend_emit(code, ".section .rodata")
+    code = backend_emit(code, ".fmt:")
+    code = backend_emit(code, "    .string \"%ld\\n\"")
+    code = backend_emit(code, ".text")
+    code = backend_emit(code, ".globl main")
+    code = backend_emit(code, ".extern printf")
+    code = backend_emit(code, "main:")
+    code = backend_emit(code, "    push %rbp")
+    code = backend_emit(code, "    mov %rsp, %rbp")
 
     max_id = map_get(ssa, "max_id")
-    code = emit(code, "    sub $" + str((max_id + 2) * 8) + ", %rsp")
+    code = backend_emit(code, "    sub $" + str((max_id + 2) * 8) + ", %rsp")
 
     for item in map_get(ssa, "code") {
         kind = map_get(item, "kind")
@@ -31,84 +31,84 @@ fn build(ssa) {
         if kind == "const" {
             id = map_get(item, "id")
             value = map_get(item, "value")
-            code = emit(code, "    mov $" + value + ", %rax")
-            code = emit(code, "    mov %rax, " + slot(id))
+            code = backend_emit(code, "    mov $" + value + ", %rax")
+            code = backend_emit(code, "    mov %rax, " + backend_slot(id))
         } else if kind == "alias" {
             id = map_get(item, "id")
             value = map_get(item, "value")
-            code = emit(code, "    mov " + slot(value) + ", %rax")
-            code = emit(code, "    mov %rax, " + slot(id))
+            code = backend_emit(code, "    mov " + backend_slot(value) + ", %rax")
+            code = backend_emit(code, "    mov %rax, " + backend_slot(id))
         } else if kind == "binary" {
             id = map_get(item, "id")
             left = map_get(item, "left")
             right = map_get(item, "right")
             op = map_get(item, "op")
-            code = emit(code, "    mov " + slot(left) + ", %rax")
-            code = emit(code, "    mov " + slot(right) + ", %rcx")
-            if op == "+" { code = emit(code, "    add %rcx, %rax") }
-            else if op == "-" { code = emit(code, "    sub %rcx, %rax") }
-            else if op == "*" { code = emit(code, "    imul %rcx, %rax") }
+            code = backend_emit(code, "    mov " + backend_slot(left) + ", %rax")
+            code = backend_emit(code, "    mov " + backend_slot(right) + ", %rcx")
+            if op == "+" { code = backend_emit(code, "    add %rcx, %rax") }
+            else if op == "-" { code = backend_emit(code, "    sub %rcx, %rax") }
+            else if op == "*" { code = backend_emit(code, "    imul %rcx, %rax") }
             else if op == "/" {
-                code = emit(code, "    cqo")
-                code = emit(code, "    idiv %rcx")
+                code = backend_emit(code, "    cqo")
+                code = backend_emit(code, "    idiv %rcx")
             } else if op == "%" {
-                code = emit(code, "    cqo")
-                code = emit(code, "    idiv %rcx")
-                code = emit(code, "    mov %rdx, %rax")
+                code = backend_emit(code, "    cqo")
+                code = backend_emit(code, "    idiv %rcx")
+                code = backend_emit(code, "    mov %rdx, %rax")
             } else if op == "==" {
-                code = emit(code, "    cmp %rcx, %rax")
-                code = emit(code, "    sete %al")
-                code = emit(code, "    movzbq %al, %rax")
+                code = backend_emit(code, "    cmp %rcx, %rax")
+                code = backend_emit(code, "    sete %al")
+                code = backend_emit(code, "    movzbq %al, %rax")
             } else if op == "!=" {
-                code = emit(code, "    cmp %rcx, %rax")
-                code = emit(code, "    setne %al")
-                code = emit(code, "    movzbq %al, %rax")
+                code = backend_emit(code, "    cmp %rcx, %rax")
+                code = backend_emit(code, "    setne %al")
+                code = backend_emit(code, "    movzbq %al, %rax")
             } else if op == "<" {
-                code = emit(code, "    cmp %rcx, %rax")
-                code = emit(code, "    setl %al")
-                code = emit(code, "    movzbq %al, %rax")
+                code = backend_emit(code, "    cmp %rcx, %rax")
+                code = backend_emit(code, "    setl %al")
+                code = backend_emit(code, "    movzbq %al, %rax")
             } else if op == "<=" {
-                code = emit(code, "    cmp %rcx, %rax")
-                code = emit(code, "    setle %al")
-                code = emit(code, "    movzbq %al, %rax")
+                code = backend_emit(code, "    cmp %rcx, %rax")
+                code = backend_emit(code, "    setle %al")
+                code = backend_emit(code, "    movzbq %al, %rax")
             } else if op == ">" {
-                code = emit(code, "    cmp %rcx, %rax")
-                code = emit(code, "    setg %al")
-                code = emit(code, "    movzbq %al, %rax")
+                code = backend_emit(code, "    cmp %rcx, %rax")
+                code = backend_emit(code, "    setg %al")
+                code = backend_emit(code, "    movzbq %al, %rax")
             } else if op == ">=" {
-                code = emit(code, "    cmp %rcx, %rax")
-                code = emit(code, "    setge %al")
-                code = emit(code, "    movzbq %al, %rax")
+                code = backend_emit(code, "    cmp %rcx, %rax")
+                code = backend_emit(code, "    setge %al")
+                code = backend_emit(code, "    movzbq %al, %rax")
             }
-            code = emit(code, "    mov %rax, " + slot(id))
+            code = backend_emit(code, "    mov %rax, " + backend_slot(id))
         } else if kind == "unary" {
             id = map_get(item, "id")
             value = map_get(item, "value")
             op = map_get(item, "op")
-            code = emit(code, "    mov " + slot(value) + ", %rax")
-            if op == "-" { code = emit(code, "    neg %rax") }
+            code = backend_emit(code, "    mov " + backend_slot(value) + ", %rax")
+            if op == "-" { code = backend_emit(code, "    neg %rax") }
             else if op == "!" {
-                code = emit(code, "    cmp $0, %rax")
-                code = emit(code, "    sete %al")
-                code = emit(code, "    movzbq %al, %rax")
+                code = backend_emit(code, "    cmp $0, %rax")
+                code = backend_emit(code, "    sete %al")
+                code = backend_emit(code, "    movzbq %al, %rax")
             }
-            code = emit(code, "    mov %rax, " + slot(id))
+            code = backend_emit(code, "    mov %rax, " + backend_slot(id))
         } else if kind == "print" {
             value = map_get(item, "value")
-            code = emit(code, "    mov " + slot(value) + ", %rsi")
-            code = emit(code, "    lea .fmt(%rip), %rdi")
-            code = emit(code, "    xor %eax, %eax")
-            code = emit(code, "    call printf@PLT")
+            code = backend_emit(code, "    mov " + backend_slot(value) + ", %rsi")
+            code = backend_emit(code, "    lea .fmt(%rip), %rdi")
+            code = backend_emit(code, "    xor %eax, %eax")
+            code = backend_emit(code, "    call printf@PLT")
         } else if kind == "return" {
             value = map_get(item, "value")
-            code = emit(code, "    mov " + slot(value) + ", %rax")
-            code = emit(code, "    leave")
-            code = emit(code, "    ret")
+            code = backend_emit(code, "    mov " + backend_slot(value) + ", %rax")
+            code = backend_emit(code, "    leave")
+            code = backend_emit(code, "    ret")
         }
     }
 
-    code = emit(code, "    mov $0, %eax")
-    code = emit(code, "    leave")
-    code = emit(code, "    ret")
+    code = backend_emit(code, "    mov $0, %eax")
+    code = backend_emit(code, "    leave")
+    code = backend_emit(code, "    ret")
     return code
 }
