@@ -6,14 +6,14 @@ fn nova1_compile(source) {
 
     parsed = parser_source(source)
     if map_get(parsed, "ok") == false {
-        return format(map_get(parsed, "errors"))
+        return diag_format(map_get(parsed, "errors"))
     }
 
     ir = ir_lower(map_get(parsed, "ast"))
     ssa = ssa_run(ir)
     errors = map_get(ssa, "errors")
     if len(errors) > 0 {
-        return format(errors)
+        return diag_format(errors)
     }
 
     return backend_build(ssa)
