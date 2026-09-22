@@ -10,8 +10,8 @@ fn ast_string(text) {
     return map { "kind": "string", "value": text }
 }
 
-fn ast_variable(name) {
-    return map { "kind": "variable", "name": name }
+fn ast_variable(name_value) {
+    return map { "kind": "variable", "name": name_value }
 }
 
 fn ast_unary(op, value) {
