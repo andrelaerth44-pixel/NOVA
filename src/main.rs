@@ -19,6 +19,13 @@ mod module_loader;
 mod package;
 mod compiler;
 mod abi;
+mod tensor;
+mod concurrency;
+mod gpu;
+mod targets;
+mod media;
+mod stdlib_ext;
+mod self_host;
 
 pub use token::Token;
 pub use ast::{Expr, Stmt, Value, Pattern, MapKey, EnvFrame, EnvRef, to_map_key};
@@ -42,7 +49,7 @@ fn load_program(path: &str) -> Result<Vec<Stmt>, String> {
 fn main(){
     let a:Vec<String>=env::args().collect();
     if a.len()<2 {
-        eprintln!("NOVA 1.7.0\nusage: nova run <file> | nova check <file> | nova ir <file> | nova ssa <file> | nova abi <file> | nova build-c <file> [output.c] | nova build-native <file> [output] | nova app-check <file> | nova build-android <file> [MainActivity.kt] | nova package-check <manifest-or-dir> | nova package-lock <manifest-or-dir> | nova version");
+        eprintln!("NOVA 2.0.0-dev\nusage: nova run <file> | nova check <file> | nova ir <file> | nova ssa <file> | nova abi <file> | nova build-c <file> [output.c] | nova build-native <file> [output] | nova app-check <file> | nova build-android <file> [MainActivity.kt] | nova package-check <manifest-or-dir> | nova package-lock <manifest-or-dir> | nova ai-train-xor [epochs] | nova concurrency-demo | nova gpu-kernels | nova media-demo <dir> | nova selfhost-check | nova build-x86 <file> [output.s] | nova build-arm64 <file> [output.s] | nova build-wasm <file> [output.wat] | nova version");
         return
     }
     if a[1]=="version"{println!("NOVA 1.7.0");return}
@@ -122,6 +129,15 @@ fn main(){
         let m=optimizer::optimize(lower::lower(&program));
         if let Err(e)=lower::verify(&m){eprintln!("{}",e);std::process::exit(1)}
         print!("{}",ir::format_module(&m));
+        return
+    }
+
+    if a[1]=="build-x86"||a[1]=="build-arm64"||a[1]=="build-wasm" {
+        let m=optimizer::optimize(lower::lower(&program));
+        if let Err(e)=lower::verify(&m){eprintln!("{}",e);std::process::exit(1)}
+        let out=if a.len()>3{&a[3]}else{if a[1]=="build-x86"{"nova.s"}else if a[1]=="build-arm64"{"nova-arm64.s"}else{"nova.wat"}};
+        let generated=match a[1].as_str(){ "build-x86"=>targets::emit_x86_64_gas(&m), "build-arm64"=>targets::emit_aarch64_gas(&m), _=>targets::emit_wat(&m) };
+        match generated{Ok(text)=>{if let Err(e)=fs::write(out,text){eprintln!("{}",e);std::process::exit(1)};println!("{}",out)},Err(e)=>{eprintln!("target backend error: {}",e);std::process::exit(1)}}
         return
     }
 
