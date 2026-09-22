@@ -222,3 +222,44 @@ jobs:
             exit 1
           fi
           grep -q "module import cycle" /tmp/nova-cycle.out
+
+
+      - name: NOVA 2.0 extension smoke test
+        shell: bash
+        run: |
+          cargo run --release -- ai-train-xor 500 > /tmp/nova-ai.out
+          grep -q '^epochs=500$' /tmp/nova-ai.out
+          grep -q '^0 1 -> ' /tmp/nova-ai.out
+          grep -q '^1 0 -> ' /tmp/nova-ai.out
+
+          cargo run --release -- concurrency-demo > /tmp/nova-concurrency.out
+          grep -Fxq 'parallel_sum=500500' /tmp/nova-concurrency.out
+
+          cargo run --release -- gpu-kernels > /tmp/nova-gpu.out
+          grep -Fq 'nova_vector_add' /tmp/nova-gpu.out
+          grep -Fq 'gl_GlobalInvocationID' /tmp/nova-gpu.out
+          grep -Fq 'thread_position_in_grid' /tmp/nova-gpu.out
+
+          rm -rf /tmp/nova-media /tmp/nova-android /tmp/nova-pkg
+          cargo run --release -- media-demo /tmp/nova-media
+          test -s /tmp/nova-media/nova.svg
+          test -s /tmp/nova-media/nova.wav
+          test -s /tmp/nova-media/index.html
+
+          cargo run --release -- selfhost-check | grep -q 'trusted bootstrap=Rust'
+
+          cargo run --release -- build-x86 examples/targets.nova /tmp/nova-x86.s
+          cargo run --release -- build-arm64 examples/targets.nova /tmp/nova-arm64.s
+          cargo run --release -- build-wasm examples/targets.nova /tmp/nova.wat
+          test -s /tmp/nova-x86.s
+          test -s /tmp/nova-arm64.s
+          test -s /tmp/nova.wat
+
+          cargo run --release -- app-check examples/obra360.nova
+          cargo run --release -- build-android-project examples/obra360.nova /tmp/nova-android
+          test -f /tmp/nova-android/settings.gradle.kts
+          test -f /tmp/nova-android/app/build.gradle.kts
+          test -f /tmp/nova-android/app/src/main/AndroidManifest.xml
+
+          cargo run --release -- package-init /tmp/nova-pkg demo
+          test -f /tmp/nova-pkg/nova.toml

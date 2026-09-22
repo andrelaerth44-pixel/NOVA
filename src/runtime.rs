@@ -546,6 +546,82 @@ impl Vm {
                     }
                 }
 
+                if n=="channel" {
+                    if !a.is_empty(){return Err("channel expects 0 arguments".into())}
+                    return Ok(Value::Channel(crate::concurrency::channel()));
+                }
+                if n=="send" {
+                    if a.len()!=2{return Err("send expects channel and value".into())}
+                    let channel=self.eval(&a[0])?;
+                    let value=self.eval(&a[1])?;
+                    let id=match channel{Value::Channel(id)=>id,_=>return Err("send expects a Channel".into())};
+                    crate::concurrency::send(id,value).map_err(RuntimeError::Failure)?;
+                    return Ok(Value::Null);
+                }
+                if n=="recv" {
+                    if a.len()!=1{return Err("recv expects 1 argument".into())}
+                    let channel=self.eval(&a[0])?;
+                    let id=match channel{Value::Channel(id)=>id,_=>return Err("recv expects a Channel".into())};
+                    return Ok(match crate::concurrency::recv(id).map_err(RuntimeError::Failure)? {
+                        Some(v)=>Value::Enum{name:"Option".into(),variant:"Some".into(),value:Some(Box::new(v))},
+                        None=>Value::Enum{name:"Option".into(),variant:"None".into(),value:None},
+                    });
+                }
+                if n=="spawn" {
+                    if a.len()!=1{return Err("spawn expects a NOVA source path".into())}
+                    let path=match self.eval(&a[0])?{Value::Str(v)=>v,_=>return Err("spawn expects a string path".into())};
+                    return Ok(Value::Process(crate::concurrency::spawn_nova(&path).map_err(RuntimeError::Failure)?));
+                }
+                if n=="join" {
+                    if a.len()!=1{return Err("join expects 1 process handle".into())}
+                    let process=self.eval(&a[0])?;
+                    let id=match process{Value::Process(id)=>id,_=>return Err("join expects a Process".into())};
+                    return Ok(Value::Num(crate::concurrency::join_nova(id).map_err(RuntimeError::Failure)? as f64));
+                }
+                if n=="parallel_sum" {
+                    if a.len()!=2{return Err("parallel_sum expects array and workers".into())}
+                    let values=self.eval(&a[0])?;
+                    let workers=num(self.eval(&a[1])?)? as usize;
+                    let values=match values{Value::Array(xs)=>xs.into_iter().map(num).collect::<Result<Vec<_>,_>>()?,_=>return Err("parallel_sum expects an array".into())};
+                    return Ok(Value::Num(crate::concurrency::parallel_sum(&values,workers)));
+                }
+                if n=="sha256" {
+                    if a.len()!=1{return Err("sha256 expects 1 string".into())}
+                    let value=match self.eval(&a[0])?{Value::Str(v)=>v,_=>return Err("sha256 expects a string".into())};
+                    return Ok(Value::Str(crate::stdlib_ext::sha256_hex(value.as_bytes())));
+                }
+                if n=="http_get" {
+                    if a.len()!=1{return Err("http_get expects 1 URL".into())}
+                    let url=match self.eval(&a[0])?{Value::Str(v)=>v,_=>return Err("http_get expects a string".into())};
+                    return Ok(Value::Str(crate::stdlib_ext::http_get(&url).map_err(RuntimeError::Failure)?));
+                }
+                if n=="exec" {
+                    if a.is_empty()||a.len()>2{return Err("exec expects program and optional string array".into())}
+                    let program=match self.eval(&a[0])?{Value::Str(v)=>v,_=>return Err("exec program must be string".into())};
+                    let args=if a.len()==2{
+                        match self.eval(&a[1])?{Value::Array(xs)=>xs.into_iter().map(|v|match v{Value::Str(s)=>Ok(s),_=>Err(RuntimeError::Failure("exec args must be strings".into()))}).collect::<Result<Vec<_>,_>>()?,_=>return Err("exec args must be an array".into())}
+                    }else{Vec::new()};
+                    return Ok(Value::Num(crate::stdlib_ext::run_process(&program,&args).map_err(RuntimeError::Failure)? as f64));
+                }
+                if n=="ai_train_xor" {
+                    let epochs=if a.is_empty(){500}else{num(self.eval(&a[0])?)? as usize};
+                    if a.len()>1{return Err("ai_train_xor expects 0 or 1 argument".into())}
+                    let (model,loss)=crate::tensor::train_xor(epochs).map_err(RuntimeError::Failure)?;
+                    let mut fields=HashMap::new();
+                    fields.insert("loss".into(),Value::Num(loss as f64));
+                    let mut predictions=Vec::new();
+                    for input in [[0.0f32,0.0f32],[0.0,1.0],[1.0,0.0],[1.0,1.0]]{
+                        predictions.push(Value::Num(model.predict(&input).map_err(RuntimeError::Failure)?[0] as f64));
+                    }
+                    fields.insert("predictions".into(),Value::Array(predictions));
+                    return Ok(Value::Map(std::rc::Rc::new(std::cell::RefCell::new(fields.into_iter().map(|(k,v)|(MapKey::String(k),v)).collect()))));
+                }
+                if n=="gpu_kernel" {
+                    if a.len()!=1{return Err("gpu_kernel expects cuda, vulkan or metal".into())}
+                    let name=match self.eval(&a[0])?{Value::Str(v)=>v,_=>return Err("gpu_kernel expects a string".into())};
+                    return Ok(Value::Str(match name.as_str(){"cuda"=>crate::gpu::emit_cuda_vector_add(),"vulkan"=>crate::gpu::emit_vulkan_vector_add(),"metal"=>crate::gpu::emit_metal_vector_add(),_=>return Err("unknown GPU backend".into())}));
+                }
+
                 let f = self.fns.get(n).cloned().ok_or_else(|| format!("undefined function {}", n))?;
                 if f.args.len() != a.len() { return Err(format!("{} expects {} arguments", n, f.args.len()).into()); }
                 let caller_env = self.env.clone();
@@ -797,8 +873,8 @@ fn value_to_json(value: &Value) -> Result<serde_json::Value, RuntimeError> {
             }).collect::<Result<Vec<_>, RuntimeError>>()?;
             Ok(serde_json::Value::Array(values))
         }
-        Value::Closure { .. } | Value::Iterator(_) => {
-            Err("json_stringify cannot encode closures or iterators".into())
+        Value::Closure { .. } | Value::Iterator(_) | Value::Channel(_) | Value::Process(_) => {
+            Err("json_stringify cannot encode closures, iterators, channels or processes".into())
         }
     }
 }

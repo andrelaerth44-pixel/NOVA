@@ -57,6 +57,8 @@ impl Checker {
             Value::Map(_) => crate::types::Type::Generic("Map".into(), vec![crate::types::Type::Any, crate::types::Type::Any]),
             Value::Set(_) => crate::types::Type::Generic("Set".into(), vec![crate::types::Type::Any]),
             Value::Iterator(_) => crate::types::Type::Generic("Iterator".into(), vec![crate::types::Type::Any]),
+            Value::Channel(_) => crate::types::Type::Generic("Channel".into(), vec![crate::types::Type::Any]),
+            Value::Process(_) => crate::types::Type::Generic("Process".into(), vec![]),
         }
     }
 

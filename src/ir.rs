@@ -225,6 +225,7 @@ impl IrBuilder {
             crate::Value::Null => IrType::Null,
             crate::Value::Closure { .. } => IrType::Any,
             crate::Value::Iterator(_) => IrType::Any,
+            crate::Value::Channel(_) | crate::Value::Process(_) => IrType::Any,
         }
     }
 
@@ -244,6 +245,7 @@ impl IrBuilder {
                     crate::Value::Enum { name, variant, .. } => self.push(Instr::Call { name: format!("{}.{}", name, variant), argc: 0, result: IrType::Enum(name.clone()) }),
                     crate::Value::Closure { .. } => self.push(Instr::Call { name: "closure".into(), argc: 0, result: IrType::Any }),
                     crate::Value::Iterator(_) => self.push(Instr::Call { name: "iterator".into(), argc: 0, result: IrType::Any }),
+                    crate::Value::Channel(_) | crate::Value::Process(_) => self.push(Instr::ConstNull),
                 }
                 ty
             }

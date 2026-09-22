@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, BTreeSet}, fs, path::{Path, PathBuf}};
+use std::{collections::{BTreeMap, BTreeSet}, fs, path::{Path, PathBuf}, process::Command};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Dependency {
@@ -171,7 +171,25 @@ fn visit(
             ));
         }
         if let Some(raw) = &dependency.git {
-            return Err(format!("dependency {} uses git {}, but git resolution is not enabled yet", alias, raw));
+            let cache = manifest.path.parent().unwrap_or_else(|| Path::new(".")).join(".nova").join("git").join(alias);
+            if !cache.exists() {
+                if let Some(parent) = cache.parent() { fs::create_dir_all(parent).map_err(|e| format!("cannot create git cache: {}",e))?; }
+                let status = Command::new("git").args(["clone","--depth","1",raw,cache.to_string_lossy().as_ref()]).status()
+                    .map_err(|e| format!("cannot invoke git for {}: {}",alias,e))?;
+                if !status.success() { return Err(format!("git clone failed for {}",alias)); }
+            }
+            let dependency_manifest=parse_manifest(&cache)?;
+            if dependency_manifest.name != *alias { return Err(format!("dependency alias {} does not match package name {}",alias,dependency_manifest.name)); }
+            visit(dependency_manifest,stack,active,seen,out,format!("git:{}",raw))?;
+        }
+        if let Some(version) = &dependency.version {
+            if dependency.path.is_none() && dependency.git.is_none() {
+                let registry = std::env::var("NOVA_REGISTRY").map_err(|_| format!("dependency {} needs NOVA_REGISTRY or a path/git source",alias))?;
+                let candidate=Path::new(&registry).join(alias).join(version.trim_start_matches(['^','~']));
+                let dependency_manifest=parse_manifest(&candidate)?;
+                if dependency_manifest.name != *alias { return Err(format!("registry package {} has manifest name {}",alias,dependency_manifest.name)); }
+                visit(dependency_manifest,stack,active,seen,out,format!("registry:{}@{}",alias,version))?;
+            }
         }
         if let Some(raw) = &dependency.path {
             let dependency_manifest = parse_manifest(&resolve_path(&manifest, raw)?)?;
