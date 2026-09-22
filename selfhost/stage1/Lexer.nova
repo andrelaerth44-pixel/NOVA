@@ -60,13 +60,13 @@ fn lex_source(source) {
                 i = i + 1
             }
             tokens = array_push(tokens, lex_token(lex_keyword(text), text))
-        } else if c == """ {
+        } else if c == "\"" {
             i = i + 1
             text = ""
             closed = false
             while i < n {
                 c2 = source[i]
-                if c2 == """ {
+                if c2 == "\"" {
                     closed = true
                     i = i + 1
                     break
