@@ -15,6 +15,7 @@ fn backend_build(ssa) {
     code = backend_emit(code, ".section .rodata")
     code = backend_emit(code, ".fmt:")
     code = backend_emit(code, "    .string \"%ld\\n\"")
+    code = backend_emit(code, ".section .note.GNU-stack,\"\",@progbits")
     code = backend_emit(code, ".text")
     code = backend_emit(code, ".globl main")
     code = backend_emit(code, ".extern printf")
@@ -23,7 +24,11 @@ fn backend_build(ssa) {
     code = backend_emit(code, "    mov %rsp, %rbp")
 
     max_id = map_get(ssa, "max_id")
-    code = backend_emit(code, "    sub $" + str((max_id + 2) * 8) + ", %rsp")
+    stack_slots = max_id + 2
+    if stack_slots % 2 != 0 {
+        stack_slots = stack_slots + 1
+    }
+    code = backend_emit(code, "    sub $" + str(stack_slots * 8) + ", %rsp")
 
     for item in map_get(ssa, "code") {
         kind = map_get(item, "kind")
