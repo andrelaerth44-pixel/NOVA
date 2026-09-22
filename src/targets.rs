@@ -30,7 +30,6 @@ pub fn emit_wat(m:&Module)->Result<String,String>{
     let value=first_number(m)?;
     Ok(format!(
         "(module (func (export \"main\") (result i32) i32.const {})) ;; NOVA WASM constant={}\n",
-        value,
         value
     ))
 }
