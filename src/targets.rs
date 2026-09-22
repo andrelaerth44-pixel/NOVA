@@ -22,6 +22,7 @@ pub fn emit_aarch64_gas(m:&Module)->Result<String,String>{
     let value=first_number(m)?;
     Ok(format!(
         ".text\n.global main\nmain:\n  mov w0, #{}\n  ret\n// NOVA AArch64 backend constant={}\n",
+        value,
         value
     ))
 }
@@ -30,6 +31,7 @@ pub fn emit_wat(m:&Module)->Result<String,String>{
     let value=first_number(m)?;
     Ok(format!(
         "(module (func (export \"main\") (result i32) i32.const {})) ;; NOVA WASM constant={}\n",
+        value,
         value
     ))
 }
