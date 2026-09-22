@@ -3,7 +3,7 @@ fn empty() {
 }
 
 fn add(errors, message) {
-    return errors + [message]
+    return array_push(errors, message)
 }
 
 fn format(errors) {
