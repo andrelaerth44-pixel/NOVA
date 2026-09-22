@@ -78,7 +78,7 @@ fn render() {
 
 fn create() {
     notes = Repository.all()
-    return "NotesAdapter(count=" + len(notes) + ")"
+    return "NotesAdapter"
 }
 "#),
         ("Repository.nova", r#"import "DAO.nova"
