@@ -1,0 +1,8 @@
+struct Module {
+    kind: string
+    body: string
+}
+
+fn lower(tree) {
+    return Module { kind: tree.kind, body: tree.value }
+}
