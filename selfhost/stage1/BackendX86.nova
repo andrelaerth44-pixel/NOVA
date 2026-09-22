@@ -22,22 +22,24 @@ fn build(ssa) {
     code = emit(code, "    push %rbp")
     code = emit(code, "    mov %rsp, %rbp")
 
-    count = len(map_get(ssa, "code"))
-    code = emit(code, "    sub $" + str((count + 2) * 8) + ", %rsp")
+    max_id = map_get(ssa, "max_id")
+    code = emit(code, "    sub $" + str((max_id + 2) * 8) + ", %rsp")
 
     for item in map_get(ssa, "code") {
         kind = map_get(item, "kind")
 
         if kind == "const" {
+            id = map_get(item, "id")
             value = map_get(item, "value")
-            id = 0
             code = emit(code, "    mov $" + value + ", %rax")
             code = emit(code, "    mov %rax, " + slot(id))
         } else if kind == "alias" {
+            id = map_get(item, "id")
             value = map_get(item, "value")
             code = emit(code, "    mov " + slot(value) + ", %rax")
-            code = emit(code, "    mov %rax, " + slot(value))
+            code = emit(code, "    mov %rax, " + slot(id))
         } else if kind == "binary" {
+            id = map_get(item, "id")
             left = map_get(item, "left")
             right = map_get(item, "right")
             op = map_get(item, "op")
@@ -78,8 +80,9 @@ fn build(ssa) {
                 code = emit(code, "    setge %al")
                 code = emit(code, "    movzbq %al, %rax")
             }
-            code = emit(code, "    mov %rax, " + slot(0))
+            code = emit(code, "    mov %rax, " + slot(id))
         } else if kind == "unary" {
+            id = map_get(item, "id")
             value = map_get(item, "value")
             op = map_get(item, "op")
             code = emit(code, "    mov " + slot(value) + ", %rax")
@@ -89,7 +92,7 @@ fn build(ssa) {
                 code = emit(code, "    sete %al")
                 code = emit(code, "    movzbq %al, %rax")
             }
-            code = emit(code, "    mov %rax, " + slot(0))
+            code = emit(code, "    mov %rax, " + slot(id))
         } else if kind == "print" {
             value = map_get(item, "value")
             code = emit(code, "    mov " + slot(value) + ", %rsi")
