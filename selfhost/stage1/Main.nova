@@ -4,8 +4,8 @@ import "IR.nova"
 
 fn main() {
     source = "print 42"
-    tokens = Lexer.lex(source)
-    tree = Parser.parse(tokens)
-    module = IR.lower(tree)
+    tokens = lex(source)
+    tree = parse(tokens)
+    module = lower(tree)
     print module
 }
