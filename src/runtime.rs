@@ -27,6 +27,7 @@ struct Function { pub args: Vec<String>, pub body: Vec<Stmt> }
 
 pub struct Vm {
     env: EnvRef,
+    globals: EnvRef,
     fns: HashMap<String, Function>,
     enums: HashMap<String, HashMap<String, Option<crate::types::Type>>>,
     modules: HashMap<String, bool>,
@@ -35,8 +36,10 @@ pub struct Vm {
 
 impl Vm {
     pub fn new() -> Self {
+        let globals = std::rc::Rc::new(std::cell::RefCell::new(EnvFrame { values: HashMap::new(), parent: None }));
         Self {
-            env: std::rc::Rc::new(std::cell::RefCell::new(EnvFrame { values: HashMap::new(), parent: None })),
+            env: globals.clone(),
+            globals,
             fns: HashMap::new(),
             enums: HashMap::new(),
             modules: HashMap::new(),
@@ -650,7 +653,7 @@ impl Vm {
                 let vals = a.iter().map(|e| self.eval(e)).collect::<Result<Vec<_>, _>>()?;
                 self.env = std::rc::Rc::new(std::cell::RefCell::new(EnvFrame {
                     values: HashMap::new(),
-                    parent: Some(caller_env.clone()),
+                    parent: Some(self.globals.clone()),
                 }));
                 for (i, k) in f.args.iter().enumerate() { self.define(k.clone(), vals[i].clone()); }
                 let result = self.exec(&f.body);
