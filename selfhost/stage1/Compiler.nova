@@ -1,4 +1,4 @@
-fn compile(source) {
+fn nova1_compile(source) {
     lexed = lex(source)
     if map_get(lexed, "ok") == false {
         return format(map_get(lexed, "errors"))
