@@ -4,6 +4,8 @@ use std::{collections::{HashMap,VecDeque},process::{Child,Command,Stdio},sync::{
 
 fn processes()->&'static Mutex<HashMap<u64,Child>>{static S:OnceLock<Mutex<HashMap<u64,Child>>>=OnceLock::new();S.get_or_init(||Mutex::new(HashMap::new()))}
 fn channels()->&'static Mutex<HashMap<u64,VecDeque<String>>> { static S:OnceLock<Mutex<HashMap<u64,VecDeque<String>>>>=OnceLock::new(); S.get_or_init(||Mutex::new(HashMap::new())) }
+fn encode(value:&Value)->Result<String,String>{match value{Value::Num(v)=>Ok(format!("N:{}",v)),Value::Str(v)=>Ok(format!("S:{}",v)),Value::Bool(v)=>Ok(format!("B:{}",v)),Value::Null=>Ok("Z:".into()),_=>Err("channels support only number/string/bool/null".into())}}
+fn decode(text:&str)->Result<Value,String>{let (kind,payload)=text.split_once(':').unwrap_or((text,""));match kind{"N"=>payload.parse::<f64>().map(Value::Num).map_err(|e|e.to_string()),"S"=>Ok(Value::Str(payload.to_string())),"B"=>Ok(Value::Bool(payload=="true")),"Z"=>Ok(Value::Null),_=>Err("invalid channel message".into())}}
 static NEXT:AtomicU64=AtomicU64::new(1);
 
 pub fn spawn_nova(path:&str)->Result<u64,String>{
@@ -23,10 +25,11 @@ pub fn channel()->u64{
     id
 }
 pub fn send(id:u64,value:Value)->Result<(),String>{
-    channels().lock().map_err(|_|"channel table poisoned")?.get_mut(&id).ok_or_else(||format!("unknown channel {}",id))?.push_back(value);Ok(())
+    channels().lock().map_err(|_|"channel table poisoned")?.get_mut(&id).ok_or_else(||format!("unknown channel {}",id))?.push_back(encode(&value)?);Ok(())
 }
 pub fn recv(id:u64)->Result<Option<Value>,String>{
-    Ok(channels().lock().map_err(|_|"channel table poisoned")?.get_mut(&id).ok_or_else(||format!("unknown channel {}",id))?.pop_front())
+    let value=channels().lock().map_err(|_|"channel table poisoned")?.get_mut(&id).ok_or_else(||format!("unknown channel {}",id))?.pop_front();
+    value.map(|v|decode(&v)).transpose()
 }
 pub fn parallel_sum(values:&[f64],workers:usize)->f64{
     if values.is_empty(){return 0.0;}
