@@ -1,19 +1,19 @@
 fn compile(source) {
-    lexed = Lexer.lex(source)
-    if not map_get(lexed, "ok") {
-        return Diagnostics.format(map_get(lexed, "errors"))
+    lexed = lex(source)
+    if map_get(lexed, "ok") == false {
+        return format(map_get(lexed, "errors"))
     }
 
-    parsed = Parser.parse(source)
-    if not map_get(parsed, "ok") {
-        return Diagnostics.format(map_get(parsed, "errors"))
+    parsed = parse(source)
+    if map_get(parsed, "ok") == false {
+        return format(map_get(parsed, "errors"))
     }
 
-    ir = IR.lower(map_get(parsed, "ast"))
-    ssa = SSA.run(ir)
+    ir = lower(map_get(parsed, "ast"))
+    ssa = run(ir)
     errors = map_get(ssa, "errors")
     if len(errors) > 0 {
-        return Diagnostics.format(errors)
+        return format(errors)
     }
 
     return BackendX86.build(ssa)
