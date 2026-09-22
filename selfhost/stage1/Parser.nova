@@ -40,17 +40,18 @@ fn parser_expect(p, wanted) {
 fn parser_primary(p) {
     k = parser_kind(p)
     if k == "number" {
-        return ast_number(map_get(parser_advance(p), "parser_text"))
+        return ast_number(map_get(parser_advance(p), "text"))
     }
     if k == "string" {
-        return ast_string(map_get(parser_advance(p), "parser_text"))
+        return ast_string(map_get(parser_advance(p), "text"))
     }
     if k == "true" or k == "false" {
-        value = map_get(parser_advance(p), "parser_text")
-        return number(if value == "true" { "1" } else { "0" })
+        value = map_get(parser_advance(p), "text")
+        if value == "true" { return ast_number("1") }
+        return ast_number("0")
     }
     if k == "ident" {
-        name = map_get(parser_advance(p), "parser_text")
+        name = map_get(parser_advance(p), "text")
         if parser_accept(p, "lparen") {
             args = []
             if parser_not_accept(p, "rparen") {
@@ -61,7 +62,7 @@ fn parser_primary(p) {
                         loop = false
                     } else {
                         err = parser_expect(p, "comma")
-                        if err != "" { return string("ERROR:" + err) }
+                        if err != "" { return ast_string("ERROR:" + err) }
                     }
                 }
             }
@@ -78,7 +79,7 @@ fn parser_primary(p) {
         return ast_unary("-", parser_primary(p))
     }
     if parser_accept(p, "bang") {
-        return unary("!", parser_primary(p))
+        return ast_unary("!", parser_primary(p))
     }
     return string("ERROR:unexpected " + k)
 }
@@ -94,7 +95,7 @@ fn parser_not_accept(p, wanted) {
 fn parser_factor(p) {
     left = parser_primary(p)
     while parser_kind(p) == "star" or parser_kind(p) == "slash" or parser_kind(p) == "percent" {
-        op = map_get(parser_advance(p), "parser_text")
+        op = map_get(parser_advance(p), "text")
         right = parser_primary(p)
         left = ast_binary(op, left, right)
     }
@@ -104,9 +105,9 @@ fn parser_factor(p) {
 fn parser_term(p) {
     left = parser_factor(p)
     while parser_kind(p) == "plus" or parser_kind(p) == "minus" {
-        op = map_get(parser_advance(p), "parser_text")
+        op = map_get(parser_advance(p), "text")
         right = parser_factor(p)
-        left = binary(op, left, right)
+        left = ast_binary(op, left, right)
     }
     return left
 }
@@ -114,7 +115,7 @@ fn parser_term(p) {
 fn parser_compare(p) {
     left = parser_term(p)
     while parser_kind(p) == "lt" or parser_kind(p) == "le" or parser_kind(p) == "gt" or parser_kind(p) == "ge" or parser_kind(p) == "eqeq" or parser_kind(p) == "ne" {
-        op = map_get(parser_advance(p), "parser_text")
+        op = map_get(parser_advance(p), "text")
         right = parser_term(p)
         left = binary(op, left, right)
     }
