@@ -27,7 +27,8 @@ mod targets;
 mod media;
 mod stdlib_ext;
 mod self_host;
-mod android_apk;\nmod project;
+mod android_apk;
+mod project;
 
 pub use token::Token;
 pub use ast::{Expr, Stmt, Value, Pattern, MapKey, EnvFrame, EnvRef, to_map_key};
