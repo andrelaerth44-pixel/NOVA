@@ -43,6 +43,7 @@ jobs:
           test -s target/nova-stage1-hello.s
           grep -Fq '.globl main' target/nova-stage1-hello.s || { cat target/nova-stage1-hello.s; exit 1; }
           grep -Fq 'printf@PLT' target/nova-stage1-hello.s || { cat target/nova-stage1-hello.s; exit 1; }
+          cat target/nova-stage1-hello.s
           set +e
           cc -O2 target/nova-stage1-hello.s -o /tmp/nova-stage1-hello
           link_status=$?
