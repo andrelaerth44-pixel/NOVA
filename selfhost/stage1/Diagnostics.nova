@@ -1,0 +1,15 @@
+fn empty() {
+    return []
+}
+
+fn add(errors, message) {
+    return errors + [message]
+}
+
+fn format(errors) {
+    out = ""
+    for error in errors {
+        out = out + "NOVA1: " + error + "\n"
+    }
+    return out
+}
