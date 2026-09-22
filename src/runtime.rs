@@ -962,6 +962,7 @@ mod lexical_scope_tests {
 
         let program = crate::compiler::parse_source(source).expect("source should parse");
         let mut vm = Vm::new();
-        vm.exec(&program).expect("runtime should succeed");
+        let result = vm.exec(&program).expect("runtime should succeed").expect("program should return a value");
+        match result { crate::Value::Num(value) => assert_eq!(value, 0.0), other => panic!("unexpected result: {}", other) }
     }
 }
