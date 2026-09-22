@@ -257,9 +257,10 @@ jobs:
 
           cargo run --release -- app-check examples/obra360.nova
           cargo run --release -- build-android-project examples/obra360.nova /tmp/nova-android
-          test -f /tmp/nova-android/settings.gradle.kts
-          test -f /tmp/nova-android/app/build.gradle.kts
+          test -f /tmp/nova-android/nova.toml
+          test -f /tmp/nova-android/Main.nova
           test -f /tmp/nova-android/app/src/main/AndroidManifest.xml
+          ! find /tmp/nova-android -type f \( -name "*.kt" -o -name "*.java" -o -name "*.cpp" -o -name "*.cc" -o -name "*.c" \) | grep -q .
 
           cargo run --release -- package-init /tmp/nova-pkg demo
           test -f /tmp/nova-pkg/nova.toml
