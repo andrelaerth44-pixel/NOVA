@@ -9,15 +9,19 @@ fn add_diag(out, message) {
 }
 
 fn run(ir) {
-    out = map { "code": [], "errors": [], "env": map {} }
+    out = map { "code": [], "errors": [], "env": map {}, "max_id": 0 }
 
     for item in map_get(ir, "code") {
         kind = map_get(item, "kind")
 
         if kind == "const" {
-            ssa = map { "kind": "const", "value": map_get(item, "value") }
-            map_set(item, "ssa", "true")
-            emit(out, ssa)
+            id = map_get(item, "id")
+            emit(out, map {
+                "kind": "const",
+                "id": id,
+                "value": map_get(item, "value")
+            })
+            if id > map_get(out, "max_id") { map_set(out, "max_id", id) }
         } else if kind == "string" {
             add_diag(out, "native core backend currently accepts numeric values only")
         } else if kind == "store" {
@@ -25,25 +29,33 @@ fn run(ir) {
         } else if kind == "load" {
             name = map_get(item, "name")
             env = map_get(out, "env")
+            id = map_get(item, "id")
             if map_has(env, name) == false {
                 add_diag(out, "undefined variable " + name)
             } else {
-                map_set(item, "resolved", map_get(env, name))
-                emit(out, map { "kind": "alias", "value": map_get(env, name) })
+                value = map_get(env, name)
+                emit(out, map { "kind": "alias", "id": id, "value": value })
+                if id > map_get(out, "max_id") { map_set(out, "max_id", id) }
             }
         } else if kind == "binary" {
+            id = map_get(item, "id")
             emit(out, map {
                 "kind": "binary",
+                "id": id,
                 "op": map_get(item, "op"),
                 "left": map_get(item, "left"),
                 "right": map_get(item, "right")
             })
+            if id > map_get(out, "max_id") { map_set(out, "max_id", id) }
         } else if kind == "unary" {
+            id = map_get(item, "id")
             emit(out, map {
                 "kind": "unary",
+                "id": id,
                 "op": map_get(item, "op"),
                 "value": map_get(item, "value")
             })
+            if id > map_get(out, "max_id") { map_set(out, "max_id", id) }
         } else if kind == "print" {
             emit(out, map { "kind": "print", "value": map_get(item, "value") })
         } else if kind == "return" {
