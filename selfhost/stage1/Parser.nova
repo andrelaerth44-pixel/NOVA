@@ -1,0 +1,11 @@
+struct Tree {
+    kind: string
+    value: string
+}
+
+fn parse(tokens) {
+    if len(tokens) == 0 {
+        return Tree { kind: "empty", value: "" }
+    }
+    return Tree { kind: "program", value: tokens[0].text }
+}
