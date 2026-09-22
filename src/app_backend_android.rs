@@ -102,11 +102,10 @@ package = "{}"
 "#, sanitize(&app.name), package);
 
     Ok(vec![
-        ("settings.gradle.kts".into(), settings),
         ("Main.nova".into(), source),
         ("nova.toml".into(), nova_toml),
         ("app/src/main/AndroidManifest.xml".into(), manifest),
-        ("README.nova-target".into(), "This Android application contains NOVA source only. Build with the NOVA native Android compiler.".into()),
+        ("README.nova-target".into(), "This Android application contains NOVA source only. The NOVA compiler must produce the native Android ARM64 runtime/library and package it into the APK.".into()),
     ])
 }
 
