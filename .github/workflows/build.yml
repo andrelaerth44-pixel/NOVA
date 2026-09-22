@@ -275,13 +275,21 @@ jobs:
         shell: bash
         run: |
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          set +o pipefail
+          yes | sdkmanager --licenses >/dev/null 2>&1
+          license_status=${PIPESTATUS[1]}
+          set -o pipefail
+          exit "${license_status}"
 
       - name: Install Android platform, build-tools and NDK
         shell: bash
         run: |
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
+          set +o pipefail
           yes | sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;30.0.16248370"
+          install_status=${PIPESTATUS[1]}
+          set -o pipefail
+          exit "${install_status}"
 
       - name: Native Android APK smoke test
         shell: bash
