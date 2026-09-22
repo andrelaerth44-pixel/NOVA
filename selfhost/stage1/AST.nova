@@ -1,29 +1,29 @@
 fn ast_program(statements) {
-    return map { "kind": "ast_program", "body": statements }
+    return map { "kind": "program", "body": statements }
 }
 
 fn ast_number(text) {
-    return map { "kind": "ast_number", "value": text }
+    return map { "kind": "number", "value": text }
 }
 
 fn ast_string(text) {
-    return map { "kind": "ast_string", "value": text }
+    return map { "kind": "string", "value": text }
 }
 
 fn ast_variable(name) {
-    return map { "kind": "ast_variable", "name": name }
+    return map { "kind": "variable", "name": name }
 }
 
 fn ast_unary(op, value) {
-    return map { "kind": "ast_unary", "op": op, "value": value }
+    return map { "kind": "unary", "op": op, "value": value }
 }
 
-fn ast_binary(op, left, right) {
-    return map { "kind": "ast_binary", "op": op, "left": left, "right": right }
+fn ast_binary(op_value, left_value, right_value) {
+    return map { "kind": "binary", "op": op_value, "left": left_value, "right": right_value }
 }
 
 fn ast_call(name, args) {
-    return map { "kind": "ast_call", "name": name, "args": args }
+    return map { "kind": "call", "name": name, "args": args }
 }
 
 fn ast_let_stmt(name, value) {
