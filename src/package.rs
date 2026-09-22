@@ -110,6 +110,7 @@ pub fn parse_manifest(path: &Path) -> Result<Manifest, String> {
                 "name" => name = Some(unquote(value)?),
                 "version" => version = Some(unquote(value)?),
                 "entry" => entry = Some(unquote(value)?),
+                "language" => { let _ = unquote(value)?; },
                 _ => return Err(format!("{}:{}: unknown package field {}", path.display(), line_no + 1, key)),
             },
             "dependencies" => {
