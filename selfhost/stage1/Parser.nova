@@ -1,5 +1,10 @@
 fn parser_state(tokens) {
-    return map { "tokens": tokens, "pos": 0 }
+    return map { "tokens": tokens, "pos": 0, "errors": [] }
+}
+
+fn parser_add_error(p, message) {
+    errors = map_get(p, "errors")
+    map_set(p, "errors", array_push(errors, message))
 }
 
 fn parser_peek(p) {
@@ -34,7 +39,9 @@ fn parser_expect(p, wanted) {
     if parser_accept(p, wanted) {
         return ""
     }
-    return "expected " + wanted + ", got " + parser_kind(p)
+    message = "expected " + wanted + ", got " + parser_kind(p)
+    parser_add_error(p, message)
+    return message
 }
 
 fn parser_primary(p) {
@@ -81,6 +88,8 @@ fn parser_primary(p) {
     if parser_accept(p, "bang") {
         return ast_unary("!", parser_primary(p))
     }
+    bad = parser_advance(p)
+    parser_add_error(p, "unexpected token " + map_get(bad, "kind"))
     return ast_string("ERROR:unexpected " + k)
 }
 
@@ -177,6 +186,11 @@ fn parser_stmt(p) {
         parser_advance(p)
         return ast_return_stmt(parser_expr(p))
     }
+    if k == "if" or k == "while" or k == "for" or k == "match" {
+        bad = parser_advance(p)
+        parser_add_error(p, "statement " + map_get(bad, "kind") + " is not yet lowered by NOVA Stage 1 core")
+        return ast_string("ERROR:unsupported statement " + map_get(bad, "kind"))
+    }
     if k == "ident" {
         name = parser_text(p)
         parser_advance(p)
@@ -198,6 +212,10 @@ fn parser_source(source) {
     while parser_kind(p) != "eof" {
         statements = array_push(statements, parser_stmt(p))
         parser_accept(p, "semi")
+    }
+    errors = map_get(p, "errors")
+    if len(errors) > 0 {
+        return map { "ok": false, "errors": errors, "ast": ast_program(statements) }
     }
     return map { "ok": true, "errors": [], "ast": ast_program(statements) }
 }
