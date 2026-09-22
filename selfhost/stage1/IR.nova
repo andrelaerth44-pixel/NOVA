@@ -100,10 +100,9 @@ fn ir_lower(ast) {
     ir = map { "code": [], "next": 0 }
     body = map_get(ast, "body")
     for node in body {
-        if map_get(node, "kind") == "fn" {
-            continue
+        if map_get(node, "kind") != "fn" {
+            ir_stmt(ir, node)
         }
-        ir_stmt(ir, node)
     }
     return ir
 }
