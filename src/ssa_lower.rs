@@ -163,6 +163,7 @@ impl Builder {
             Value::Array(_) | Value::Map(_) | Value::Set(_) => SsaValue::Null,
             Value::Closure { .. } => SsaValue::Null,
             Value::Iterator(_) => SsaValue::Null,
+            Value::Channel(_) | Value::Process(_) => SsaValue::Null,
         };
         self.emit(SsaInstr::Const(sv))
     }
