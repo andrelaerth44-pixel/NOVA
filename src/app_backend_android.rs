@@ -121,7 +121,6 @@ dependencies {{
         ("gradle.properties".into(),gradle_properties),
         ("app/build.gradle.kts".into(),app_gradle),
         ("app/src/main/AndroidManifest.xml".into(),manifest),
-        ("app/src/main/java/".into(),String::new()),
         (format!("app/src/main/java/{}/MainActivity.kt",package.replace('.','/')),activity),
         (values_dir,strings),
     ])
