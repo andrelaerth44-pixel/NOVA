@@ -106,7 +106,7 @@ fn parser_factor(p) {
     while parser_kind(p) == "star" or parser_kind(p) == "slash" or parser_kind(p) == "percent" {
         op = map_get(parser_advance(p), "text")
         right = parser_primary(p)
-        left = ast_binary(op, left, right)
+        left = map { "kind": "binary", "op": op, "left": left, "right": right }
     }
     return left
 }
