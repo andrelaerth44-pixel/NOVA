@@ -1,0 +1,55 @@
+fn emit(out, item) {
+    code = map_get(out, "code")
+    map_set(out, "code", code + [item])
+}
+
+fn add_diag(out, message) {
+    errors = map_get(out, "errors")
+    map_set(out, "errors", errors + [message])
+}
+
+fn run(ir) {
+    out = map { "code": [], "errors": [], "env": map {} }
+
+    for item in map_get(ir, "code") {
+        kind = map_get(item, "kind")
+
+        if kind == "const" {
+            ssa = map { "kind": "const", "value": map_get(item, "value") }
+            map_set(item, "ssa", "true")
+            emit(out, ssa)
+        } else if kind == "string" {
+            add_diag(out, "native core backend currently accepts numeric values only")
+        } else if kind == "store" {
+            map_set(map_get(out, "env"), map_get(item, "name"), map_get(item, "value"))
+        } else if kind == "load" {
+            name = map_get(item, "name")
+            env = map_get(out, "env")
+            if not map_has(env, name) {
+                add_diag(out, "undefined variable " + name)
+            } else {
+                map_set(item, "resolved", map_get(env, name))
+                emit(out, map { "kind": "alias", "value": map_get(env, name) })
+            }
+        } else if kind == "binary" {
+            emit(out, map {
+                "kind": "binary",
+                "op": map_get(item, "op"),
+                "left": map_get(item, "left"),
+                "right": map_get(item, "right")
+            })
+        } else if kind == "unary" {
+            emit(out, map {
+                "kind": "unary",
+                "op": map_get(item, "op"),
+                "value": map_get(item, "value")
+            })
+        } else if kind == "print" {
+            emit(out, map { "kind": "print", "value": map_get(item, "value") })
+        } else if kind == "return" {
+            emit(out, map { "kind": "return", "value": map_get(item, "value") })
+        }
+    }
+
+    return out
+}
