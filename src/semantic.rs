@@ -371,7 +371,8 @@ impl Checker {
                     _ => {}
                 };
                 let builtin = match name.as_str() {
-                    "range" => Some((vec![crate::types::Type::Number], crate::types::Type::Array(Box::new(crate::types::Type::Number)))),
+                    "range" => Some((vec![crate::types::Type::Number, crate::types::Type::Number], crate::types::Type::Array(Box::new(crate::types::Type::Number)))),
+                    "array_push" => Some((vec![crate::types::Type::Array(Box::new(crate::types::Type::Any)), crate::types::Type::Any], crate::types::Type::Array(Box::new(crate::types::Type::Any)))),
                     "str" => Some((vec![crate::types::Type::Any], crate::types::Type::String)),
                     "len" => Some((vec![crate::types::Type::Any], crate::types::Type::Number)),
                     "abs" | "sqrt" => Some((vec![crate::types::Type::Number], crate::types::Type::Number)),
