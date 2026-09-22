@@ -10,3 +10,9 @@ parsed = parser_source(source)
 ir = ir_lower(map_get(parsed, "ast"))
 ssa = ssa_run(ir)
 print json_stringify(map { "lexed": lexed, "parsed": parsed, "ir": ir, "ssa": ssa })
+
+print json_stringify(map {
+    "variable_a": ast_variable("a"),
+    "variable_b": ast_variable("b"),
+    "expression": parser_source("a + b")
+})
