@@ -3,15 +3,15 @@ fn lex_token(kind, text) {
 }
 
 fn lex_is_space(c) {
-    return c == " " or c == "\n" or c == "\r" or c == "\t"
+    return char_is_space(c)
 }
 
 fn lex_is_digit(c) {
-    return c >= "0" and c <= "9"
+    return char_is_digit(c)
 }
 
 fn lex_is_alpha(c) {
-    return (c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or c == "_"
+    return char_is_alpha(c)
 }
 
 fn lex_is_alnum(c) {
