@@ -197,7 +197,7 @@ fn main(){
         let output=if a.len()>3 { &a[3] } else { "target/nova-stage1-output.s" };
         std::env::set_var("NOVA_STAGE1_INPUT", input);
         std::env::set_var("NOVA_STAGE1_OUTPUT", output);
-        let program=match load_program(std::path::Path::new("selfhost/stage1/Main.nova")){
+        let program=match load_program("selfhost/stage1/Main.nova"){
             Ok(x)=>x,
             Err(e)=>{eprintln!("selfhost stage1 load error: {}",e);std::process::exit(1)}
         };
