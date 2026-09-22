@@ -11,6 +11,7 @@ pub struct Dependency {
 pub struct Manifest {
     pub name: String,
     pub version: String,
+    pub entry: String,
     pub dependencies: BTreeMap<String, Dependency>,
     pub path: PathBuf,
 }
@@ -85,6 +86,7 @@ pub fn parse_manifest(path: &Path) -> Result<Manifest, String> {
     let mut section = String::new();
     let mut name = None;
     let mut version = None;
+    let mut entry = None;
     let mut dependencies = BTreeMap::new();
 
     for (line_no, raw) in text.lines().enumerate() {
@@ -107,6 +109,7 @@ pub fn parse_manifest(path: &Path) -> Result<Manifest, String> {
             "package" => match key {
                 "name" => name = Some(unquote(value)?),
                 "version" => version = Some(unquote(value)?),
+                "entry" => entry = Some(unquote(value)?),
                 _ => return Err(format!("{}:{}: unknown package field {}", path.display(), line_no + 1, key)),
             },
             "dependencies" => {
@@ -119,8 +122,9 @@ pub fn parse_manifest(path: &Path) -> Result<Manifest, String> {
     let name = name.ok_or_else(|| format!("{}: missing [package] name", path.display()))?;
     let version = version.ok_or_else(|| format!("{}: missing [package] version", path.display()))?;
     validate_version(&version)?;
+    let entry = entry.unwrap_or_else(|| "Main.nova".into());
 
-    Ok(Manifest { name, version, dependencies, path })
+    Ok(Manifest { name, version, entry, dependencies, path })
 }
 
 fn validate_version(version: &str) -> Result<(), String> {
