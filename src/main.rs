@@ -49,7 +49,7 @@ fn load_program(path: &str) -> Result<Vec<Stmt>, String> {
 fn main(){
     let a:Vec<String>=env::args().collect();
     if a.len()<2 {
-        eprintln!("NOVA 2.0.0-dev\nusage: nova run <file> | nova check <file> | nova ir <file> | nova ssa <file> | nova abi <file> | nova build-c <file> [output.c] | nova build-native <file> [output] | nova app-check <file> | nova build-android <file> [MainActivity.kt] | nova package-check <manifest-or-dir> | nova package-lock <manifest-or-dir> | nova ai-train-xor [epochs] | nova concurrency-demo | nova gpu-kernels | nova media-demo <dir> | nova selfhost-check | nova build-x86 <file> [output.s] | nova build-arm64 <file> [output.s] | nova build-wasm <file> [output.wat] | nova version");
+        eprintln!("NOVA 2.0.0-dev\nusage: nova run <file> | nova check <file> | nova ir <file> | nova ssa <file> | nova abi <file> | nova build-c <file> [output.c] | nova build-native <file> [output] | nova app-check <file> | nova build-android <file> [MainActivity.kt] | nova build-android-project <file> [output-dir] | nova package-check <manifest-or-dir> | nova package-lock <manifest-or-dir> | nova ai-train-xor [epochs] | nova concurrency-demo | nova gpu-kernels | nova media-demo <dir> | nova selfhost-check | nova build-x86 <file> [output.s] | nova build-arm64 <file> [output.s] | nova build-wasm <file> [output.wat] | nova version");
         return
     }
     if a[1]=="version"{println!("NOVA 1.7.0");return}
@@ -78,6 +78,20 @@ fn main(){
         let app=match app_parser::AppParser::new(&src).parse(){Ok(x)=>x,Err(e)=>{eprintln!("app parse error: {}",e);std::process::exit(1)}};
         if let Err(e)=app_backend_android::validate_android_target(&app){eprintln!("Android target error: {}",e);std::process::exit(1)}
         println!("ok: Android application target {}", app.name);
+        return
+    }
+
+    if a[1]=="build-android-project" {
+        let src=match fs::read_to_string(&a[2]){Ok(x)=>x,Err(e)=>{eprintln!("{}",e);std::process::exit(1)}};
+        let app=match app_parser::AppParser::new(&src).parse(){Ok(x)=>x,Err(e)=>{eprintln!("app parse error: {}",e);std::process::exit(1)}};
+        let files=match app_backend_android::emit_android_project_files(&app){Ok(x)=>x,Err(e)=>{eprintln!("Android backend error: {}",e);std::process::exit(1)}};
+        let dir=std::path::Path::new(a.get(3).map(String::as_str).unwrap_or("android-project"));
+        for (path,text) in files {
+            let target=dir.join(path);
+            if let Some(parent)=target.parent(){if let Err(e)=fs::create_dir_all(parent){eprintln!("{}",e);std::process::exit(1)}}
+            if let Err(e)=fs::write(&target,text){eprintln!("cannot write {}: {}",target.display(),e);std::process::exit(1)}
+        }
+        println!("{}",dir.display());
         return
     }
 
